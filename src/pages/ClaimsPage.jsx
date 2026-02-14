@@ -13,6 +13,7 @@ import {
   XCircle,
   Loader2,
   X,
+  Trash2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import StatusBadge from '../components/StatusBadge';
@@ -75,7 +76,7 @@ function formatDate(dateStr) {
 function ShimmerRow() {
   return (
     <tr>
-      {Array.from({ length: 9 }).map((_, i) => (
+      {Array.from({ length: 10 }).map((_, i) => (
         <td key={i} className="px-4 py-3">
           <div className="shimmer rounded h-4 w-full" />
         </td>
@@ -529,7 +530,11 @@ export default function ClaimsPage() {
   const patients = useQuery(api.patients.list);
   const insuranceContacts = useQuery(api.insuranceContacts.list);
 
+  const bulkRemove = useMutation(api.claims.bulkRemove);
+
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
@@ -562,6 +567,36 @@ export default function ClaimsPage() {
     return true;
   });
 
+  const allSelected = filteredClaims.length > 0 && filteredClaims.every((c) => selected.has(c._id));
+
+  function toggleOne(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filteredClaims.map((c) => c._id)));
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Delete ${selected.size} claim${selected.size !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await bulkRemove({ ids: [...selected] });
+      setSelected(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -572,13 +607,25 @@ export default function ClaimsPage() {
             {!isLoading && `${filteredClaims.length} claim${filteredClaims.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <button
-          onClick={() => setUploadModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-        >
-          <Upload className="w-4 h-4" />
-          Upload Claims
-        </button>
+        <div className="flex items-center gap-3">
+          {selected.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={deleting}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-danger hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+              {deleting ? 'Deleting...' : `Delete ${selected.size}`}
+            </button>
+          )}
+          <button
+            onClick={() => setUploadModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+          >
+            <Upload className="w-4 h-4" />
+            Upload Claims
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -619,6 +666,14 @@ export default function ClaimsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-white sticky top-0 z-10">
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    className="w-4 h-4 rounded border-border-light text-accent focus:ring-accent cursor-pointer"
+                  />
+                </th>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Claim #</th>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Patient</th>
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Insurance</th>
@@ -635,7 +690,7 @@ export default function ClaimsPage() {
                 Array.from({ length: 8 }).map((_, i) => <ShimmerRow key={i} />)
               ) : filteredClaims.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <EmptyState
                       icon={FileText}
                       title="No claims found"
@@ -665,6 +720,14 @@ export default function ClaimsPage() {
                     onClick={() => navigate(`/claims/${claim._id}`)}
                     className="table-row-hover cursor-pointer"
                   >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(claim._id)}
+                        onChange={() => toggleOne(claim._id)}
+                        className="w-4 h-4 rounded border-border-light text-accent focus:ring-accent cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-3 font-data text-accent whitespace-nowrap">{claim.claimNumber}</td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{patientMap[claim.patientId] ?? '---'}</td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{insuranceMap[claim.insuranceContactId] ?? '---'}</td>

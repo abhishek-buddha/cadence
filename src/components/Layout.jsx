@@ -69,7 +69,7 @@ export default function Layout() {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="shrink-0 h-14 bg-panel/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-4">
+        <header className="shrink-0 h-14 bg-panel/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-4 relative z-20">
           {/* Hospital selector */}
           <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider font-medium">

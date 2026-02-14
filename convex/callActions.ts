@@ -137,7 +137,7 @@ export const analyzeTranscript = action({
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4.1',
+        model: 'gpt-5.2-chat-latest',
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [

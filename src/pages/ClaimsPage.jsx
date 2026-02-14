@@ -131,6 +131,12 @@ export default function ClaimsPage() {
 
   const isLoading = claims === undefined;
 
+  // Build lookup maps for display
+  const patientMap = {};
+  (patients ?? []).forEach((p) => { patientMap[p._id] = `${p.firstName} ${p.lastName}`; });
+  const insuranceMap = {};
+  (insuranceContacts ?? []).forEach((c) => { insuranceMap[c._id] = c.name; });
+
   // Apply filters
   const filteredClaims = (claims ?? []).filter((claim) => {
     if (statusFilter && claim.status !== statusFilter) return false;
@@ -139,8 +145,10 @@ export default function ClaimsPage() {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchesClaimNum = claim.claimNumber?.toLowerCase().includes(q);
-      const matchesPatient = claim.patientName?.toLowerCase().includes(q);
-      const matchesInsurance = claim.insuranceName?.toLowerCase().includes(q);
+      const patientName = patientMap[claim.patientId] || '';
+      const insuranceName = insuranceMap[claim.insuranceContactId] || '';
+      const matchesPatient = patientName.toLowerCase().includes(q);
+      const matchesInsurance = insuranceName.toLowerCase().includes(q);
       if (!matchesClaimNum && !matchesPatient && !matchesInsurance) return false;
     }
     return true;
@@ -309,10 +317,10 @@ export default function ClaimsPage() {
                       {claim.claimNumber}
                     </td>
                     <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      {claim.patientName ?? '---'}
+                      {patientMap[claim.patientId] ?? '---'}
                     </td>
                     <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                      {claim.insuranceName ?? '---'}
+                      {insuranceMap[claim.insuranceContactId] ?? '---'}
                     </td>
                     <td className="px-4 py-3 font-data text-white text-right whitespace-nowrap">
                       {formatCurrency(claim.amount)}
@@ -397,7 +405,7 @@ export default function ClaimsPage() {
                   <option value="">Select patient...</option>
                   {(patients ?? []).map((p) => (
                     <option key={p._id} value={p._id}>
-                      {p.name}
+                      {p.firstName} {p.lastName}
                     </option>
                   ))}
                 </select>
@@ -437,7 +445,7 @@ export default function ClaimsPage() {
                   <option value="">Select provider...</option>
                   {(providers ?? []).map((p) => (
                     <option key={p._id} value={p._id}>
-                      {p.name}
+                      {p.practiceName}
                     </option>
                   ))}
                 </select>

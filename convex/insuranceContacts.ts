@@ -15,11 +15,11 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error('Not authenticated');
+    const userId = identity?.subject || 'default';
     const now = new Date().toISOString();
     return await ctx.db.insert('insuranceContacts', {
       ...args,
-      userId: identity.subject,
+      userId,
       createdAt: now,
       updatedAt: now,
     });
@@ -29,10 +29,10 @@ export const create = mutation({
 export const list = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
+    const userId = identity?.subject || 'default';
     return await ctx.db
       .query('insuranceContacts')
-      .withIndex('by_userId', (q) => q.eq('userId', identity.subject))
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
       .collect();
   },
 });

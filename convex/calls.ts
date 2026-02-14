@@ -10,10 +10,10 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error('Not authenticated');
+    const userId = identity?.subject || 'default';
     return await ctx.db.insert('calls', {
       ...args,
-      userId: identity.subject,
+      userId,
     });
   },
 });
@@ -54,11 +54,11 @@ export const listRecent = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
+    const userId = identity?.subject || 'default';
     const limit = args.limit ?? 20;
     return await ctx.db
       .query('calls')
-      .withIndex('by_userId', (q) => q.eq('userId', identity.subject))
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
       .order('desc')
       .take(limit);
   },

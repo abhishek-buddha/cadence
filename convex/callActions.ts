@@ -8,7 +8,6 @@ export const initiateCall = action({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error('Not authenticated');
 
     // 1. Fetch claim with all related data
     const data = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });

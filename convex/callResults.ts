@@ -23,10 +23,10 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error('Not authenticated');
+    const userId = identity?.subject || 'default';
     return await ctx.db.insert('callResults', {
       ...args,
-      userId: identity.subject,
+      userId,
       createdAt: new Date().toISOString(),
     });
   },

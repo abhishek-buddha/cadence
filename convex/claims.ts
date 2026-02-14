@@ -19,11 +19,11 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error('Not authenticated');
+    const userId = identity?.subject || 'default';
     const now = new Date().toISOString();
     return await ctx.db.insert('claims', {
       ...args,
-      userId: identity.subject,
+      userId,
       createdAt: now,
       updatedAt: now,
     });
@@ -33,10 +33,10 @@ export const create = mutation({
 export const list = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
+    const userId = identity?.subject || 'default';
     return await ctx.db
       .query('claims')
-      .withIndex('by_userId', (q) => q.eq('userId', identity.subject))
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
       .order('desc')
       .collect();
   },
@@ -46,10 +46,10 @@ export const listByStatus = query({
   args: { status: v.string() },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
+    const userId = identity?.subject || 'default';
     const all = await ctx.db
       .query('claims')
-      .withIndex('by_userId', (q) => q.eq('userId', identity.subject))
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
       .collect();
     return all.filter((c) => c.status === args.status);
   },

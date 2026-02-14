@@ -3,8 +3,7 @@ import { query } from './_generated/server';
 export const getStats = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-    const userId = identity.subject;
+    const userId = identity?.subject || 'default';
 
     const allClaims = await ctx.db
       .query('claims')

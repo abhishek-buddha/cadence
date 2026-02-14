@@ -44,14 +44,6 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* System status indicator */}
-      <div className="mx-4 mb-4 px-3 py-2 rounded-lg bg-surface/80 border border-border">
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-success status-dot-pulse" />
-          <span className="text-xs text-muted">System Online</span>
-        </div>
-      </div>
-
       {/* Navigation */}
       <nav className="flex-1 px-3 space-y-0.5">
         <p className="px-3 pt-2 pb-2 text-[10px] uppercase tracking-[0.15em] text-muted/60 font-semibold">

@@ -35,7 +35,7 @@ function HospitalDropdown() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-full min-w-[200px] bg-panel border border-border-light rounded-lg shadow-xl shadow-black/40 py-1 z-50 animate-fade-in">
+        <div className="absolute right-0 top-full mt-1.5 min-w-full w-max bg-panel border border-border-light rounded-lg shadow-xl shadow-black/40 py-1 z-50 animate-fade-in">
           {options.map((opt) => {
             const isActive = opt.id === selectedProviderId;
             return (
@@ -52,7 +52,7 @@ function HospitalDropdown() {
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5 shrink-0 opacity-50" />
-                <span className="flex-1 truncate">{opt.label}</span>
+                <span className="flex-1 whitespace-nowrap">{opt.label}</span>
                 {isActive && <Check className="w-3.5 h-3.5 text-accent shrink-0" />}
               </button>
             );

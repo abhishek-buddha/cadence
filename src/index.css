@@ -121,6 +121,17 @@
   font-family: 'JetBrains Mono', monospace;
 }
 
+/* Kill native select appearance across all browsers */
+select.custom-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: none;
+}
+select.custom-select::-ms-expand {
+  display: none;
+}
+
 /* Status dot pulse */
 @keyframes status-pulse {
   0%, 100% { opacity: 1; }

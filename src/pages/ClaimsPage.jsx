@@ -91,7 +91,7 @@ function FilterSelect({ value, onChange, options, className = '' }) {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`${SELECT_CLASS} pr-8 w-full`}
+        className={`${SELECT_CLASS} custom-select pr-8 w-full`}
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>

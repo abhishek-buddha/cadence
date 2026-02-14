@@ -225,17 +225,20 @@ export default function CallHistory() {
         </div>
         <div className="flex items-center gap-3">
           <Clock className="w-4 h-4 text-muted" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className={`${inputClass} w-44`}
-          >
-            <option value="all">All Statuses</option>
-            <option value="initiating">Initiating</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-          </select>
+          <div className="relative">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={`${inputClass} custom-select appearance-none pr-8 w-44 cursor-pointer`}
+            >
+              <option value="all">All Statuses</option>
+              <option value="initiating">Initiating</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
+          </div>
         </div>
       </div>
 

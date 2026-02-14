@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { Users, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, ChevronDown } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 import { useProviderFilter } from '../context/ProviderFilterContext';
@@ -244,16 +244,19 @@ export default function PatientsPage() {
             </div>
             <div>
               <label className={labelClass}>Relationship</label>
-              <select
-                value={form.relationship}
-                onChange={(e) => setField('relationship', e.target.value)}
-                className={inputClass}
-              >
-                <option value="self">Self</option>
-                <option value="spouse">Spouse</option>
-                <option value="child">Child</option>
-                <option value="other">Other</option>
-              </select>
+              <div className="relative">
+                <select
+                  value={form.relationship}
+                  onChange={(e) => setField('relationship', e.target.value)}
+                  className={`${inputClass} custom-select appearance-none pr-8 cursor-pointer`}
+                >
+                  <option value="self">Self</option>
+                  <option value="spouse">Spouse</option>
+                  <option value="child">Child</option>
+                  <option value="other">Other</option>
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
+              </div>
             </div>
           </div>
 

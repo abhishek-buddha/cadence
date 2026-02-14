@@ -30,7 +30,7 @@ export const initiateCall = action({
     // 3. Call ElevenLabs API to initiate outbound call
     const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
     const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
-    const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
+    const AGENT_PHONE_NUMBER_ID = process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID;
 
     if (!ELEVENLABS_API_KEY || !AGENT_ID) {
       await ctx.runMutation(api.calls.updateStatus, {
@@ -52,7 +52,7 @@ export const initiateCall = action({
           },
           body: JSON.stringify({
             agent_id: AGENT_ID,
-            agent_phone_number_id: TWILIO_PHONE_NUMBER,
+            agent_phone_number_id: AGENT_PHONE_NUMBER_ID,
             to_number: insurance.phone,
             conversation_initiation_client_data: {
               dynamic_variables: {

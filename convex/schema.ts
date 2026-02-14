@@ -126,5 +126,6 @@ export default defineSchema({
     createdAt: v.string(),
   })
     .index('by_callId', ['callId'])
-    .index('by_claimId', ['claimId']),
+    .index('by_claimId', ['claimId'])
+    .index('by_userId', ['userId']),
 });

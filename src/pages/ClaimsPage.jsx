@@ -14,6 +14,7 @@ import {
   Loader2,
   X,
   Trash2,
+  Download,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import StatusBadge from '../components/StatusBadge';
@@ -30,28 +31,6 @@ const STATUS_OPTIONS = [
   { value: 'appealing', label: 'Appealing' },
   { value: 'write_off', label: 'Write Off' },
 ];
-
-const PRIORITY_OPTIONS = [
-  { value: '', label: 'All Priorities' },
-  { value: 'high', label: 'High' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'low', label: 'Low' },
-];
-
-const AGING_BUCKET_OPTIONS = [
-  { value: '', label: 'All Ages' },
-  { value: '0-30', label: '0-30 days' },
-  { value: '31-60', label: '31-60 days' },
-  { value: '61-90', label: '61-90 days' },
-  { value: '91-120', label: '91-120 days' },
-  { value: '120+', label: '120+ days' },
-];
-
-const PRIORITY_DOT_COLORS = {
-  high: 'bg-danger',
-  medium: 'bg-warn',
-  low: 'bg-success',
-};
 
 const INPUT_CLASS =
   'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none w-full';
@@ -76,7 +55,7 @@ function formatDate(dateStr) {
 function ShimmerRow() {
   return (
     <tr>
-      {Array.from({ length: 10 }).map((_, i) => (
+      {Array.from({ length: 7 }).map((_, i) => (
         <td key={i} className="px-4 py-3">
           <div className="shimmer rounded h-4 w-full" />
         </td>
@@ -529,6 +508,7 @@ export default function ClaimsPage() {
     : allClaims;
   const patients = useQuery(api.patients.list);
   const insuranceContacts = useQuery(api.insuranceContacts.list);
+  const latestResults = useQuery(api.callResults.listLatestByUser);
 
   const bulkRemove = useMutation(api.claims.bulkRemove);
 
@@ -538,8 +518,6 @@ export default function ClaimsPage() {
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('');
-  const [agingFilter, setAgingFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   const isLoading = allClaims === undefined;
@@ -553,8 +531,6 @@ export default function ClaimsPage() {
   // Apply filters
   const filteredClaims = (claims ?? []).filter((claim) => {
     if (statusFilter && claim.status !== statusFilter) return false;
-    if (priorityFilter && claim.priority !== priorityFilter) return false;
-    if (agingFilter && claim.agingBucket !== agingFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchesClaimNum = claim.claimNumber?.toLowerCase().includes(q);
@@ -597,6 +573,64 @@ export default function ClaimsPage() {
     }
   }
 
+  // Download filtered claims as Excel
+  function handleDownloadExcel() {
+    const rows = filteredClaims.map((claim) => {
+      const result = latestResults?.[claim._id];
+      return {
+        'Claim #': claim.claimNumber,
+        'Patient': patientMap[claim.patientId] ?? '',
+        'Insurance': insuranceMap[claim.insuranceContactId] ?? '',
+        'Amount': claim.amount != null ? (claim.amount / 100) : 0,
+        'Status': (claim.status ?? '').replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        'Latest Update': result?.nextSteps || result?.denialReason || '',
+        'Date of Service': claim.dateOfService ?? '',
+        'Priority': claim.priority ?? '',
+        'Aging Bucket': claim.agingBucket ?? '',
+        'Denial Code': claim.denialCode ?? '',
+        'Denial Reason': claim.denialReason ?? '',
+        'Reference #': claim.referenceNumber ?? '',
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // Column widths
+    ws['!cols'] = [
+      { wch: 18 }, // Claim #
+      { wch: 20 }, // Patient
+      { wch: 22 }, // Insurance
+      { wch: 12 }, // Amount
+      { wch: 14 }, // Status
+      { wch: 40 }, // Latest Update
+      { wch: 14 }, // DOS
+      { wch: 10 }, // Priority
+      { wch: 12 }, // Aging
+      { wch: 12 }, // Denial Code
+      { wch: 30 }, // Denial Reason
+      { wch: 16 }, // Reference #
+    ];
+
+    // Format Amount column as currency
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let r = range.s.r + 1; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c: 3 })];
+      if (cell) cell.z = '$#,##0.00';
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Claims');
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `cadence-claims-${dateStr}.xlsx`);
+  }
+
+  function getLatestUpdate(claimId) {
+    const result = latestResults?.[claimId];
+    if (!result) return null;
+    return result.nextSteps || result.denialReason || result.claimStatus || null;
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -619,6 +653,14 @@ export default function ClaimsPage() {
             </button>
           )}
           <button
+            onClick={handleDownloadExcel}
+            disabled={isLoading || filteredClaims.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-border-light hover:border-accent hover:text-accent text-gray-700 text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4" />
+            Download
+          </button>
+          <button
             onClick={() => setUploadModalOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
           >
@@ -636,18 +678,6 @@ export default function ClaimsPage() {
           options={STATUS_OPTIONS}
           className="w-40"
         />
-        <FilterSelect
-          value={priorityFilter}
-          onChange={setPriorityFilter}
-          options={PRIORITY_OPTIONS}
-          className="w-36"
-        />
-        <FilterSelect
-          value={agingFilter}
-          onChange={setAgingFilter}
-          options={AGING_BUCKET_OPTIONS}
-          className="w-36"
-        />
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
           <input
@@ -662,59 +692,57 @@ export default function ClaimsPage() {
 
       {/* Table */}
       <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-white sticky top-0 z-10">
-                <th className="px-4 py-3 w-10">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleAll}
-                    className="w-4 h-4 rounded border-border-light text-accent focus:ring-accent cursor-pointer"
+        <table className="w-full text-sm table-fixed">
+          <thead>
+            <tr className="border-b border-border bg-white sticky top-0 z-10">
+              <th className="px-4 py-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="w-4 h-4 rounded border-border-light text-accent focus:ring-accent cursor-pointer"
+                />
+              </th>
+              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[14%]">Claim #</th>
+              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[13%]">Patient</th>
+              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[13%]">Insurance</th>
+              <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[10%]">Amount</th>
+              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[10%]">Status</th>
+              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Latest Update</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/50">
+            {isLoading ? (
+              Array.from({ length: 8 }).map((_, i) => <ShimmerRow key={i} />)
+            ) : filteredClaims.length === 0 ? (
+              <tr>
+                <td colSpan={7}>
+                  <EmptyState
+                    icon={FileText}
+                    title="No claims found"
+                    description={
+                      statusFilter || searchQuery
+                        ? 'Try adjusting your filters to find what you are looking for.'
+                        : 'Upload an Excel file to import your claims.'
+                    }
+                    action={
+                      !statusFilter && !searchQuery ? (
+                        <button
+                          onClick={() => setUploadModalOpen(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          <Upload className="w-4 h-4" />
+                          Upload Claims
+                        </button>
+                      ) : undefined
+                    }
                   />
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Claim #</th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Patient</th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Insurance</th>
-                <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Amount</th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">DOS</th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Status</th>
-                <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Priority</th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Age</th>
-                <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Actions</th>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {isLoading ? (
-                Array.from({ length: 8 }).map((_, i) => <ShimmerRow key={i} />)
-              ) : filteredClaims.length === 0 ? (
-                <tr>
-                  <td colSpan={10}>
-                    <EmptyState
-                      icon={FileText}
-                      title="No claims found"
-                      description={
-                        statusFilter || priorityFilter || agingFilter || searchQuery
-                          ? 'Try adjusting your filters to find what you are looking for.'
-                          : 'Upload an Excel file to import your claims.'
-                      }
-                      action={
-                        !statusFilter && !priorityFilter && !agingFilter && !searchQuery ? (
-                          <button
-                            onClick={() => setUploadModalOpen(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
-                          >
-                            <Upload className="w-4 h-4" />
-                            Upload Claims
-                          </button>
-                        ) : undefined
-                      }
-                    />
-                  </td>
-                </tr>
-              ) : (
-                filteredClaims.map((claim) => (
+            ) : (
+              filteredClaims.map((claim) => {
+                const latestUpdate = getLatestUpdate(claim._id);
+                return (
                   <tr
                     key={claim._id}
                     onClick={() => navigate(`/claims/${claim._id}`)}
@@ -728,33 +756,24 @@ export default function ClaimsPage() {
                         className="w-4 h-4 rounded border-border-light text-accent focus:ring-accent cursor-pointer"
                       />
                     </td>
-                    <td className="px-4 py-3 font-data text-accent whitespace-nowrap">{claim.claimNumber}</td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{patientMap[claim.patientId] ?? '---'}</td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{insuranceMap[claim.insuranceContactId] ?? '---'}</td>
-                    <td className="px-4 py-3 font-data text-gray-900 text-right whitespace-nowrap">{formatCurrency(claim.amount)}</td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatDate(claim.dateOfService)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={claim.status ?? 'unknown'} /></td>
-                    <td className="px-4 py-3 text-center whitespace-nowrap">
-                      <div className="inline-flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${PRIORITY_DOT_COLORS[claim.priority] ?? 'bg-gray-400'}`} />
-                        <span className="text-gray-600 capitalize text-xs">{claim.priority ?? '---'}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap font-data text-xs">{claim.agingBucket ?? '---'}</td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); navigate(`/claims/${claim._id}`); }}
-                        className="text-xs text-accent hover:text-accent-hover font-medium transition-colors"
-                      >
-                        View
-                      </button>
+                    <td className="px-4 py-3 font-data text-accent truncate">{claim.claimNumber}</td>
+                    <td className="px-4 py-3 text-gray-600 truncate">{patientMap[claim.patientId] ?? '---'}</td>
+                    <td className="px-4 py-3 text-gray-600 truncate">{insuranceMap[claim.insuranceContactId] ?? '---'}</td>
+                    <td className="px-4 py-3 font-data text-gray-900 text-right">{formatCurrency(claim.amount)}</td>
+                    <td className="px-4 py-3"><StatusBadge status={claim.status ?? 'unknown'} /></td>
+                    <td className="px-4 py-3 text-xs text-gray-500 truncate">
+                      {latestUpdate ? (
+                        <span className="text-gray-600">{latestUpdate}</span>
+                      ) : (
+                        <span className="text-muted italic">No calls yet</span>
+                      )}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
 
       {/* Upload Claims Modal */}

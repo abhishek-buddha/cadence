@@ -52,3 +52,20 @@ export const getByClaim = query({
       .collect();
   },
 });
+
+export const listLatestByUser = query({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject || 'default';
+    const all = await ctx.db
+      .query('callResults')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .order('desc')
+      .collect();
+    const map: Record<string, typeof all[0]> = {};
+    for (const r of all) {
+      if (!map[r.claimId]) map[r.claimId] = r;
+    }
+    return map;
+  },
+});

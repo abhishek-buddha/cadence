@@ -4,6 +4,7 @@ import { api } from '../../convex/_generated/api';
 import { Users, Plus, Pencil, Trash2 } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import { useProviderFilter } from '../context/ProviderFilterContext';
 
 const EMPTY_FORM = {
   firstName: '',
@@ -17,7 +18,9 @@ const EMPTY_FORM = {
 };
 
 export default function PatientsPage() {
-  const patients = useQuery(api.patients.list);
+  const { selectedProviderId } = useProviderFilter();
+  const allPatients = useQuery(api.patients.list);
+  const allClaims = useQuery(api.claims.list);
   const createPatient = useMutation(api.patients.create);
   const updatePatient = useMutation(api.patients.update);
   const removePatient = useMutation(api.patients.remove);
@@ -27,7 +30,15 @@ export default function PatientsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
-  const isLoading = patients === undefined;
+  const isLoading = allPatients === undefined;
+
+  // Filter patients by provider: show patients who have claims at the selected hospital
+  const providerPatientIds = selectedProviderId && allClaims
+    ? new Set(allClaims.filter((c) => c.providerId === selectedProviderId).map((c) => c.patientId))
+    : null;
+  const patients = selectedProviderId
+    ? (allPatients ?? []).filter((p) => providerPatientIds?.has(p._id))
+    : allPatients;
 
   function openCreate() {
     setEditing(null);

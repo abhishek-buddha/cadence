@@ -11,6 +11,7 @@ import {
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import { useProviderFilter } from '../context/ProviderFilterContext';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -113,7 +114,11 @@ const INITIAL_FORM = {
 
 export default function ClaimsPage() {
   const navigate = useNavigate();
-  const claims = useQuery(api.claims.list);
+  const { selectedProviderId } = useProviderFilter();
+  const allClaims = useQuery(api.claims.list);
+  const claims = selectedProviderId
+    ? (allClaims ?? []).filter((c) => c.providerId === selectedProviderId)
+    : allClaims;
   const patients = useQuery(api.patients.list);
   const insuranceContacts = useQuery(api.insuranceContacts.list);
   const providers = useQuery(api.providers.list);
@@ -129,7 +134,7 @@ export default function ClaimsPage() {
   const [agingFilter, setAgingFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const isLoading = claims === undefined;
+  const isLoading = allClaims === undefined;
 
   // Build lookup maps for display
   const patientMap = {};

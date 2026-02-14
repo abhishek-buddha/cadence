@@ -1,14 +1,25 @@
 import { query } from './_generated/server';
+import { v } from 'convex/values';
 
 export const getStats = query({
-  handler: async (ctx) => {
+  args: {
+    providerId: v.optional(v.id('providers')),
+  },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject || 'default';
 
-    const allClaims = await ctx.db
+    let allClaims = await ctx.db
       .query('claims')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .collect();
+
+    // Filter by provider if specified
+    if (args.providerId) {
+      allClaims = allClaims.filter((c) => c.providerId === args.providerId);
+    }
+
+    const claimIds = new Set(allClaims.map((c) => c._id));
 
     const pendingClaims = allClaims.filter((c) => c.status === 'pending').length;
     const inProgressClaims = allClaims.filter((c) => c.status === 'in_progress').length;
@@ -16,10 +27,16 @@ export const getStats = query({
     const deniedClaims = allClaims.filter((c) => c.status === 'denied').length;
 
     const today = new Date().toISOString().split('T')[0];
-    const allCalls = await ctx.db
+    let allCalls = await ctx.db
       .query('calls')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .collect();
+
+    // Filter calls to only those belonging to filtered claims
+    if (args.providerId) {
+      allCalls = allCalls.filter((c) => claimIds.has(c.claimId));
+    }
+
     const callsToday = allCalls.filter((c) => c.startedAt.startsWith(today)).length;
     const completedCalls = allCalls.filter((c) => c.status === 'completed').length;
 

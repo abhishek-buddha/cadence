@@ -4,6 +4,7 @@ import { api } from '../../convex/_generated/api';
 import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
+import { useProviderFilter } from '../context/ProviderFilterContext';
 
 function formatDuration(seconds) {
   if (seconds == null) return '--:--';
@@ -188,10 +189,22 @@ function CallRow({ call }) {
 }
 
 export default function CallHistory() {
-  const calls = useQuery(api.calls.listRecent, { limit: 50 });
+  const { selectedProviderId } = useProviderFilter();
+  const allCalls = useQuery(api.calls.listRecent, { limit: 50 });
+  const allClaims = useQuery(api.claims.list);
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const isLoading = calls === undefined;
+  const isLoading = allCalls === undefined;
+
+  // Build set of claim IDs belonging to the selected provider
+  const providerClaimIds = selectedProviderId && allClaims
+    ? new Set(allClaims.filter((c) => c.providerId === selectedProviderId).map((c) => c._id))
+    : null;
+
+  // Filter calls by provider (through claims) and status
+  const calls = selectedProviderId
+    ? (allCalls ?? []).filter((c) => providerClaimIds?.has(c.claimId))
+    : allCalls;
 
   const filteredCalls = calls
     ? statusFilter === 'all'

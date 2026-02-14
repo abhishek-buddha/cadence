@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
+import { useProviderFilter } from '../context/ProviderFilterContext';
 
 const AGING_BUCKETS = [
   { key: '0-30', label: '0-30 days', color: 'bg-success' },
@@ -58,11 +59,22 @@ function StatCardSkeleton() {
 }
 
 export default function Dashboard() {
-  const stats = useQuery(api.dashboard.getStats);
-  const recentCalls = useQuery(api.calls.listRecent, { limit: 5 });
+  const { selectedProviderId } = useProviderFilter();
+  const statsArgs = selectedProviderId ? { providerId: selectedProviderId } : {};
+  const stats = useQuery(api.dashboard.getStats, statsArgs);
+  const allRecentCalls = useQuery(api.calls.listRecent, { limit: 20 });
+  const allClaims = useQuery(api.claims.list);
 
   const isLoading = stats === undefined;
-  const callsLoading = recentCalls === undefined;
+
+  // Filter recent calls by provider
+  const providerClaimIds = selectedProviderId && allClaims
+    ? new Set(allClaims.filter((c) => c.providerId === selectedProviderId).map((c) => c._id))
+    : null;
+  const recentCalls = selectedProviderId
+    ? (allRecentCalls ?? []).filter((c) => providerClaimIds?.has(c.claimId)).slice(0, 5)
+    : (allRecentCalls ?? []).slice(0, 5);
+  const callsLoading = allRecentCalls === undefined;
 
   // Calculate total claims in aging buckets for bar chart proportions
   const bucketTotal =

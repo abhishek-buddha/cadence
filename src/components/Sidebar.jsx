@@ -8,7 +8,9 @@ import {
   PhoneCall,
   Settings,
   Activity,
+  ChevronDown,
 } from 'lucide-react';
+import { useProviderFilter } from '../context/ProviderFilterContext';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -21,6 +23,7 @@ const navItems = [
 
 export default function Sidebar() {
   const location = useLocation();
+  const { selectedProviderId, setSelectedProviderId, providers } = useProviderFilter();
 
   return (
     <aside className="w-64 bg-panel border-r border-border flex flex-col relative shrink-0">
@@ -49,6 +52,28 @@ export default function Sidebar() {
         <div className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-success status-dot-pulse" />
           <span className="text-xs text-muted">System Online</span>
+        </div>
+      </div>
+
+      {/* Hospital / Provider Filter */}
+      <div className="mx-4 mb-4">
+        <p className="px-1 pb-1.5 text-[10px] uppercase tracking-[0.15em] text-muted/60 font-semibold">
+          Hospital
+        </p>
+        <div className="relative">
+          <select
+            value={selectedProviderId ?? ''}
+            onChange={(e) => setSelectedProviderId(e.target.value || null)}
+            className="w-full bg-surface border border-border-light rounded-lg pl-3 pr-7 py-2 text-sm text-white appearance-none cursor-pointer focus:border-accent focus:ring-1 focus:ring-accent outline-none truncate"
+          >
+            <option value="">All Hospitals</option>
+            {providers.map((p) => (
+              <option key={p._id} value={p._id}>
+                {p.practiceName}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
         </div>
       </div>
 

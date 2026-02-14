@@ -302,7 +302,7 @@ export default function ClaimDetailPage() {
 
     try {
       await initiateCall({ claimId: id });
-      setCallState('in_progress');
+      setCallState('idle'); // Reset to idle; real-time Convex data drives the button state
     } catch (err) {
       setCallState('error');
       setCallError(err.message || 'An unexpected error occurred while initiating the call.');

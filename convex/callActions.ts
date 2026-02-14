@@ -123,6 +123,13 @@ export const analyzeTranscript = action({
       throw new Error('Missing OpenAI API key');
     }
 
+    // Get claim details for context
+    const claimData = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
+    const claimContext = claimData?.claim
+      ? `Claim Number: ${claimData.claim.claimNumber}, Patient: ${claimData.patient?.firstName} ${claimData.patient?.lastName}, Insurance: ${claimData.insurance?.name}, Billed Amount: $${(claimData.claim.amount / 100).toFixed(2)}, Date of Service: ${claimData.claim.dateOfService}`
+      : '';
+    const today = new Date().toISOString().split('T')[0];
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -130,33 +137,46 @@ export const analyzeTranscript = action({
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-4.1',
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
-            content: `You are a medical billing data extraction specialist. Analyze the following phone call transcript between a billing agent and an insurance company representative.
+            content: `You are a medical billing data extraction specialist. You analyze phone call transcripts between healthcare billing agents and insurance company representatives to extract structured claim status data.
 
-Extract structured data and return a JSON object with these fields:
+Today's date is ${today}.
+Claim context: ${claimContext}
+
+IMPORTANT RULES:
+- Only extract information that was EXPLICITLY stated in the transcript. Never guess or infer.
+- For relative dates like "tomorrow", "next week", "in 3 days", calculate the actual date based on today (${today}).
+- If the insurance rep gave a clear status (paid, denied, pending, processing), use it. If they were vague or non-committal, use "pending_review".
+- If the rep said something like "it will be ready by [date/time]" without giving a definitive status, that means the claim is still being processed — use "processing" and set expectedDecisionDate.
+- For paidAmount, convert dollar amounts to cents (e.g., $500.00 = 50000). Only set this if a specific payment amount was confirmed.
+- For denial codes, only use official CARC codes (e.g., CO-45, PR-96). Don't invent codes.
+- referenceNumber should be a call reference number given by the rep, NOT the claim number itself.
+- repName should be the name or ID of the insurance representative who handled the call.
+- nextSteps should be a concise, actionable recommendation based on what was discussed.
+
+Return a JSON object with ONLY these fields:
 {
   "claimStatus": "processing|paid|denied|pending_review|no_record|unknown",
-  "paidAmount": number_in_cents_or_null,
-  "paidDate": "YYYY-MM-DD_or_null",
-  "checkOrEftNumber": "string_or_null",
-  "denialCode": "CARC_code_or_null",
-  "remarkCode": "RARC_code_or_null",
-  "denialReason": "string_or_null",
-  "appealDeadline": "YYYY-MM-DD_or_null",
-  "missingDocuments": "string_or_null",
-  "expectedDecisionDate": "YYYY-MM-DD_or_null",
-  "referenceNumber": "string_or_null",
-  "repName": "string_or_null",
-  "nextSteps": "string summarizing recommended next steps",
-  "confidence": 0.0_to_1.0
+  "paidAmount": null,
+  "paidDate": null,
+  "checkOrEftNumber": null,
+  "denialCode": null,
+  "remarkCode": null,
+  "denialReason": null,
+  "appealDeadline": null,
+  "missingDocuments": null,
+  "expectedDecisionDate": null,
+  "referenceNumber": null,
+  "repName": null,
+  "nextSteps": "string"
 }
 
-If information was not discussed or is unclear, use null. For paidAmount, convert dollar amounts to cents (e.g., $500.00 = 50000).`,
+Use null for any field where the information was NOT explicitly provided in the call.`,
           },
           {
             role: 'user',
@@ -182,25 +202,25 @@ If information was not discussed or is unclear, use null. For paidAmount, conver
       };
     }
 
-    // Store the extraction result
+    // Store the extraction result — use ?? undefined so falsy values like 0 still pass through
     await ctx.runMutation(api.callResults.create, {
       callId: args.callId,
       claimId: args.claimId,
-      claimStatus: extraction.claimStatus || undefined,
-      paidAmount: extraction.paidAmount || undefined,
-      paidDate: extraction.paidDate || undefined,
-      checkOrEftNumber: extraction.checkOrEftNumber || undefined,
-      denialCode: extraction.denialCode || undefined,
-      remarkCode: extraction.remarkCode || undefined,
-      denialReason: extraction.denialReason || undefined,
-      appealDeadline: extraction.appealDeadline || undefined,
-      missingDocuments: extraction.missingDocuments || undefined,
-      expectedDecisionDate: extraction.expectedDecisionDate || undefined,
-      referenceNumber: extraction.referenceNumber || undefined,
-      repName: extraction.repName || undefined,
-      nextSteps: extraction.nextSteps || undefined,
+      claimStatus: extraction.claimStatus ?? undefined,
+      paidAmount: extraction.paidAmount != null ? extraction.paidAmount : undefined,
+      paidDate: extraction.paidDate ?? undefined,
+      checkOrEftNumber: extraction.checkOrEftNumber ?? undefined,
+      denialCode: extraction.denialCode ?? undefined,
+      remarkCode: extraction.remarkCode ?? undefined,
+      denialReason: extraction.denialReason ?? undefined,
+      appealDeadline: extraction.appealDeadline ?? undefined,
+      missingDocuments: extraction.missingDocuments ?? undefined,
+      expectedDecisionDate: extraction.expectedDecisionDate ?? undefined,
+      referenceNumber: extraction.referenceNumber ?? undefined,
+      repName: extraction.repName ?? undefined,
+      nextSteps: extraction.nextSteps ?? undefined,
       rawExtraction: JSON.stringify(extraction),
-      confidence: extraction.confidence || undefined,
+      confidence: extraction.confidence != null ? extraction.confidence : undefined,
     });
 
     // Auto-update claim status

@@ -470,32 +470,25 @@ export default function ClaimDetailPage() {
               <h3 className="text-sm font-display font-semibold text-white">Latest Call Result</h3>
             </div>
             <div className="px-5 py-5 space-y-5">
-              {/* Top row: status + confidence */}
-              <div className="flex items-start justify-between flex-wrap gap-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted uppercase tracking-wider font-medium">Claim Status</span>
-                  <StatusBadge status={latestResult.claimStatus || 'unknown'} size="lg" />
-                </div>
-                <div className="w-48">
-                  <ConfidenceBar value={latestResult.confidence} />
-                </div>
+              {/* Claim status */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted uppercase tracking-wider font-medium">Claim Status</span>
+                <StatusBadge status={latestResult.claimStatus || 'unknown'} size="lg" />
               </div>
 
-              {/* Details grid */}
+              {/* Details grid - only show fields that have values */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
-                <InfoField label="Paid Amount" value={latestResult.paidAmount != null ? formatAmount(latestResult.paidAmount) : null} mono />
-                <InfoField label="Paid Date" value={formatDate(latestResult.paidDate)} />
-                <InfoField label="Check / EFT #" value={latestResult.checkOrEftNumber} mono />
-                <InfoField label="Denial Code (CARC)" value={latestResult.denialCode} mono />
-                <InfoField label="Denial Reason" value={latestResult.denialReason} />
-                <InfoField label="RARC Code" value={latestResult.remarkCode} mono />
-                <InfoField label="Appeal Deadline" value={formatDate(latestResult.appealDeadline)} />
-                <InfoField label="Expected Decision" value={formatDate(latestResult.expectedDecisionDate)} />
-                <InfoField label="Reference #" value={latestResult.referenceNumber} mono />
-                <InfoField label="Rep Name" value={latestResult.repName} />
-                {latestResult.missingDocuments && (
-                  <InfoField label="Missing Documents" value={latestResult.missingDocuments} />
-                )}
+                {latestResult.paidAmount != null && <InfoField label="Paid Amount" value={formatAmount(latestResult.paidAmount)} mono />}
+                {latestResult.paidDate && <InfoField label="Paid Date" value={formatDate(latestResult.paidDate)} />}
+                {latestResult.checkOrEftNumber && <InfoField label="Check / EFT #" value={latestResult.checkOrEftNumber} mono />}
+                {latestResult.denialCode && <InfoField label="Denial Code (CARC)" value={latestResult.denialCode} mono />}
+                {latestResult.denialReason && <InfoField label="Denial Reason" value={latestResult.denialReason} />}
+                {latestResult.remarkCode && <InfoField label="RARC Code" value={latestResult.remarkCode} mono />}
+                {latestResult.appealDeadline && <InfoField label="Appeal Deadline" value={formatDate(latestResult.appealDeadline)} />}
+                {latestResult.expectedDecisionDate && <InfoField label="Expected Decision" value={formatDate(latestResult.expectedDecisionDate)} />}
+                {latestResult.referenceNumber && <InfoField label="Reference #" value={latestResult.referenceNumber} mono />}
+                {latestResult.repName && <InfoField label="Rep Name" value={latestResult.repName} />}
+                {latestResult.missingDocuments && <InfoField label="Missing Documents" value={latestResult.missingDocuments} />}
               </div>
 
               {/* Next steps */}

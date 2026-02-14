@@ -484,10 +484,13 @@ export default function ClaimDetailPage() {
               {/* Details grid */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                 <InfoField label="Paid Amount" value={latestResult.paidAmount != null ? formatAmount(latestResult.paidAmount) : null} mono />
+                <InfoField label="Paid Date" value={formatDate(latestResult.paidDate)} />
+                <InfoField label="Check / EFT #" value={latestResult.checkOrEftNumber} mono />
                 <InfoField label="Denial Code (CARC)" value={latestResult.denialCode} mono />
                 <InfoField label="Denial Reason" value={latestResult.denialReason} />
                 <InfoField label="RARC Code" value={latestResult.remarkCode} mono />
                 <InfoField label="Appeal Deadline" value={formatDate(latestResult.appealDeadline)} />
+                <InfoField label="Expected Decision" value={formatDate(latestResult.expectedDecisionDate)} />
                 <InfoField label="Reference #" value={latestResult.referenceNumber} mono />
                 <InfoField label="Rep Name" value={latestResult.repName} />
                 {latestResult.missingDocuments && (

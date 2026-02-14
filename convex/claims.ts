@@ -78,13 +78,12 @@ export const getWithDetails = query({
       .order('desc')
       .collect();
 
-    let latestResult = null;
-    if (calls.length > 0) {
-      latestResult = await ctx.db
-        .query('callResults')
-        .withIndex('by_callId', (q) => q.eq('callId', calls[0]._id))
-        .first();
-    }
+    // Get the most recent call result for this claim (not just the latest call)
+    const latestResult = await ctx.db
+      .query('callResults')
+      .withIndex('by_claimId', (q) => q.eq('claimId', args.id))
+      .order('desc')
+      .first();
 
     return { claim, patient, insurance, provider, calls, latestResult };
   },

@@ -49,13 +49,13 @@ function PriorityBadge({ priority }) {
 // ---------------------------------------------------------------------------
 function Shimmer({ className = '' }) {
   return (
-    <div className={`animate-pulse rounded bg-panel-light ${className}`} />
+    <div className={`animate-pulse rounded bg-surface ${className}`} />
   );
 }
 
 function ShimmerCard() {
   return (
-    <div className="bg-panel border border-border rounded-xl overflow-hidden">
+    <div className="bg-white border border-border rounded-xl overflow-hidden">
       <div className="border-b border-border px-5 py-3">
         <Shimmer className="h-4 w-32" />
       </div>
@@ -80,7 +80,7 @@ function LoadingSkeleton() {
       </div>
 
       {/* Call button shimmer */}
-      <div className="bg-panel border border-border rounded-xl p-8 flex justify-center">
+      <div className="bg-white border border-border rounded-xl p-8 flex justify-center">
         <Shimmer className="h-14 w-64 rounded-xl" />
       </div>
 
@@ -108,7 +108,7 @@ function InfoField({ label, value, mono = false }) {
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted uppercase tracking-wider font-medium">{label}</p>
-      <p className={`text-sm text-white ${mono ? 'font-data' : ''}`}>
+      <p className={`text-sm text-gray-900 ${mono ? 'font-data' : ''}`}>
         {value || <span className="text-muted/50 italic">--</span>}
       </p>
     </div>
@@ -128,9 +128,9 @@ function ConfidenceBar({ value }) {
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted uppercase tracking-wider font-medium">Confidence</p>
-        <span className="text-xs font-data text-white">{pct}%</span>
+        <span className="text-xs font-data text-gray-900">{pct}%</span>
       </div>
-      <div className="h-2 rounded-full bg-panel-light overflow-hidden">
+      <div className="h-2 rounded-full bg-surface overflow-hidden">
         <div
           className={`h-full rounded-full ${color} transition-all duration-500`}
           style={{ width: `${pct}%` }}
@@ -172,13 +172,13 @@ function CallTimelineEntry({ call }) {
             : 'border-accent bg-accent/20'
       }`} />
 
-      <div className="bg-panel border border-border rounded-lg overflow-hidden">
+      <div className="bg-white border border-border rounded-lg overflow-hidden shadow-sm">
         <button
           onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
         >
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-sm text-white font-medium">{formattedDate}</span>
+            <span className="text-sm text-gray-900 font-medium">{formattedDate}</span>
             <span className="text-xs text-muted font-data">{formattedTime}</span>
             <StatusBadge status={call.status} />
             <span className="text-xs text-muted font-data">
@@ -198,7 +198,7 @@ function CallTimelineEntry({ call }) {
         {expanded && call.transcript && (
           <div className="border-t border-border px-4 py-3">
             <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2">Transcript</p>
-            <pre className="text-xs text-gray-300 font-data whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed bg-surface/50 rounded-lg p-3 border border-border">
+            <pre className="text-xs text-gray-600 font-data whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed bg-surface rounded-lg p-3 border border-border">
               {call.transcript}
             </pre>
           </div>
@@ -222,10 +222,10 @@ function CallTimelineEntry({ call }) {
 // ---------------------------------------------------------------------------
 function DetailCard({ icon: Icon, title, children }) {
   return (
-    <div className="bg-panel border border-border rounded-xl overflow-hidden">
+    <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
       <div className="border-b border-border px-5 py-3 flex items-center gap-2.5">
         <Icon className="w-4 h-4 text-accent" />
-        <h3 className="text-sm font-display font-semibold text-white">{title}</h3>
+        <h3 className="text-sm font-display font-semibold text-gray-900">{title}</h3>
       </div>
       <div className="px-5 py-4">
         {children}
@@ -258,11 +258,11 @@ export default function ClaimDetailPage() {
   if (data === null || !data.claim) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
-        <div className="bg-panel border border-border rounded-xl p-10 text-center max-w-md">
+        <div className="bg-white border border-border rounded-xl p-10 text-center max-w-md shadow-sm">
           <div className="w-14 h-14 rounded-xl bg-danger/10 border border-danger/20 flex items-center justify-center mx-auto mb-5">
             <XCircle className="w-7 h-7 text-danger" />
           </div>
-          <h2 className="font-display font-bold text-xl text-white mb-2">Claim Not Found</h2>
+          <h2 className="font-display font-bold text-xl text-gray-900 mb-2">Claim Not Found</h2>
           <p className="text-sm text-muted mb-6">
             The claim you are looking for does not exist or you do not have access to it.
           </p>
@@ -325,20 +325,20 @@ export default function ClaimDetailPage() {
       <div className="flex items-center gap-4 flex-wrap">
         <button
           onClick={() => navigate('/claims')}
-          className="p-2 rounded-lg bg-panel border border-border hover:border-border-light text-muted hover:text-white transition-all"
+          className="p-2 rounded-lg bg-white border border-border hover:border-border-light text-muted hover:text-gray-900 transition-all shadow-sm"
           aria-label="Back to claims"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
 
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="font-data text-xl text-white tracking-tight">{claim.claimNumber}</h1>
+          <h1 className="font-data text-xl text-gray-900 tracking-tight">{claim.claimNumber}</h1>
           <StatusBadge status={claim.status} size="lg" />
           <PriorityBadge priority={claim.priority} />
         </div>
 
         {claim.agingBucket && (
-          <span className="ml-auto text-xs font-data text-muted bg-panel-light px-3 py-1 rounded-full border border-border">
+          <span className="ml-auto text-xs font-data text-muted bg-surface px-3 py-1 rounded-full border border-border">
             <Clock className="w-3 h-3 inline mr-1.5" />
             {claim.agingBucket}
           </span>
@@ -348,7 +348,7 @@ export default function ClaimDetailPage() {
       {/* ------------------------------------------------------------------ */}
       {/* HERO: CALL INSURANCE BUTTON                                         */}
       {/* ------------------------------------------------------------------ */}
-      <div className="bg-gradient-to-r from-accent/10 to-cyan/5 border border-accent/20 rounded-xl p-8 text-center glow-border-strong">
+      <div className="bg-gradient-to-r from-accent/5 to-cyan/5 border border-accent/15 rounded-xl p-8 text-center glow-border-strong">
         {/* Subtitle */}
         {insurance && (
           <p className="text-sm text-muted mb-4">
@@ -367,10 +367,10 @@ export default function ClaimDetailPage() {
           className={`
             relative inline-flex items-center gap-3 px-8 py-4 text-white font-display font-semibold text-lg rounded-xl transition-all duration-200
             ${callState === 'calling'
-              ? 'bg-accent/80 cursor-wait pulse-ring shadow-lg shadow-accent/30'
+              ? 'bg-accent/80 cursor-wait pulse-ring shadow-lg shadow-accent/20'
               : callState === 'in_progress' || hasActiveCall
                 ? 'bg-accent/60 cursor-default'
-                : 'bg-accent hover:bg-accent-hover shadow-lg shadow-accent/20 hover:shadow-accent/40 hover:scale-[1.02] active:scale-[0.98]'
+                : 'bg-accent hover:bg-accent-hover shadow-lg shadow-accent/15 hover:shadow-accent/30 hover:scale-[1.02] active:scale-[0.98]'
             }
             disabled:opacity-70
           `}
@@ -464,10 +464,10 @@ export default function ClaimDetailPage() {
       {/* ------------------------------------------------------------------ */}
       {latestResult ? (
         <div className="glow-border-strong rounded-xl overflow-hidden">
-          <div className="bg-panel border border-accent/20 rounded-xl overflow-hidden">
+          <div className="bg-white border border-accent/15 rounded-xl overflow-hidden">
             <div className="border-b border-border px-5 py-3 flex items-center gap-2.5 bg-accent/5">
               <CheckCircle2 className="w-4 h-4 text-accent" />
-              <h3 className="text-sm font-display font-semibold text-white">Latest Call Result</h3>
+              <h3 className="text-sm font-display font-semibold text-gray-900">Latest Call Result</h3>
             </div>
             <div className="px-5 py-5 space-y-5">
               {/* Claim status */}
@@ -495,8 +495,8 @@ export default function ClaimDetailPage() {
               {latestResult.nextSteps && (
                 <div className="pt-4 border-t border-border">
                   <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2">Recommended Next Steps</p>
-                  <div className="bg-surface/50 rounded-lg p-3 border border-border">
-                    <p className="text-sm text-gray-300 leading-relaxed">{latestResult.nextSteps}</p>
+                  <div className="bg-surface rounded-lg p-3 border border-border">
+                    <p className="text-sm text-gray-600 leading-relaxed">{latestResult.nextSteps}</p>
                   </div>
                 </div>
               )}
@@ -504,7 +504,7 @@ export default function ClaimDetailPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-panel border border-border rounded-xl px-5 py-8 text-center">
+        <div className="bg-white border border-border rounded-xl px-5 py-8 text-center shadow-sm">
           <Info className="w-6 h-6 text-muted/40 mx-auto mb-2" />
           <p className="text-sm text-muted/60">No call results yet. Initiate a call to get AI-extracted claim data.</p>
         </div>
@@ -513,11 +513,11 @@ export default function ClaimDetailPage() {
       {/* ------------------------------------------------------------------ */}
       {/* CALL HISTORY TIMELINE                                               */}
       {/* ------------------------------------------------------------------ */}
-      <div className="bg-panel border border-border rounded-xl overflow-hidden">
+      <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
         <div className="border-b border-border px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Phone className="w-4 h-4 text-accent" />
-            <h3 className="text-sm font-display font-semibold text-white">Call History</h3>
+            <h3 className="text-sm font-display font-semibold text-gray-900">Call History</h3>
           </div>
           {calls && calls.length > 0 && (
             <span className="text-xs font-data text-muted">
@@ -549,8 +549,8 @@ export default function ClaimDetailPage() {
           <div className="flex items-start gap-3 p-3 bg-danger/5 border border-danger/20 rounded-lg">
             <XCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm text-white font-medium mb-1">Unable to initiate call</p>
-              <p className="text-xs text-gray-400 font-data leading-relaxed">{callError}</p>
+              <p className="text-sm text-gray-900 font-medium mb-1">Unable to initiate call</p>
+              <p className="text-xs text-gray-500 font-data leading-relaxed">{callError}</p>
             </div>
           </div>
           <p className="text-xs text-muted">
@@ -560,7 +560,7 @@ export default function ClaimDetailPage() {
           <div className="flex justify-end gap-3 pt-2">
             <button
               onClick={() => setErrorModalOpen(false)}
-              className="px-4 py-2 text-sm text-muted hover:text-white transition-colors"
+              className="px-4 py-2 text-sm text-muted hover:text-gray-900 transition-colors"
             >
               Dismiss
             </button>

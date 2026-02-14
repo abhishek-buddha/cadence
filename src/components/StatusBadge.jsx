@@ -3,8 +3,8 @@ const statusConfig = {
   in_progress: { bg: 'bg-accent/10', text: 'text-accent', dot: 'bg-accent', label: 'In Progress' },
   paid: { bg: 'bg-success/10', text: 'text-success', dot: 'bg-success', label: 'Paid' },
   denied: { bg: 'bg-danger/10', text: 'text-danger', dot: 'bg-danger', label: 'Denied' },
-  appealing: { bg: 'bg-purple-500/10', text: 'text-purple-400', dot: 'bg-purple-400', label: 'Appealing' },
-  write_off: { bg: 'bg-gray-500/10', text: 'text-gray-400', dot: 'bg-gray-400', label: 'Write Off' },
+  appealing: { bg: 'bg-purple-500/10', text: 'text-purple-600', dot: 'bg-purple-500', label: 'Appealing' },
+  write_off: { bg: 'bg-gray-500/10', text: 'text-gray-500', dot: 'bg-gray-400', label: 'Write Off' },
   // Call statuses
   initiating: { bg: 'bg-warn/10', text: 'text-warn', dot: 'bg-warn', label: 'Initiating' },
   ringing: { bg: 'bg-cyan/10', text: 'text-cyan', dot: 'bg-cyan', label: 'Ringing' },
@@ -13,8 +13,8 @@ const statusConfig = {
   // Claim result statuses
   processing: { bg: 'bg-accent/10', text: 'text-accent', dot: 'bg-accent', label: 'Processing' },
   pending_review: { bg: 'bg-warn/10', text: 'text-warn', dot: 'bg-warn', label: 'Pending Review' },
-  no_record: { bg: 'bg-gray-500/10', text: 'text-gray-400', dot: 'bg-gray-400', label: 'No Record' },
-  unknown: { bg: 'bg-gray-500/10', text: 'text-gray-400', dot: 'bg-gray-400', label: 'Unknown' },
+  no_record: { bg: 'bg-gray-500/10', text: 'text-gray-500', dot: 'bg-gray-400', label: 'No Record' },
+  unknown: { bg: 'bg-gray-500/10', text: 'text-gray-500', dot: 'bg-gray-400', label: 'Unknown' },
 };
 
 export default function StatusBadge({ status, size = 'sm' }) {

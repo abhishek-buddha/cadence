@@ -10,10 +10,10 @@ import {
 
 function Section({ title, icon: Icon, children }) {
   return (
-    <div className="bg-panel border border-border rounded-xl overflow-hidden">
+    <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
       <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
         <Icon className="w-4 h-4 text-accent" />
-        <h2 className="font-display font-semibold text-white">{title}</h2>
+        <h2 className="font-display font-semibold text-gray-900">{title}</h2>
       </div>
       <div className="px-6 py-5">{children}</div>
     </div>
@@ -24,7 +24,7 @@ function StatusRow({ label, description, configured = false }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-border/50 last:border-b-0">
       <div>
-        <p className="text-sm text-white font-medium">{label}</p>
+        <p className="text-sm text-gray-900 font-medium">{label}</p>
         {description && <p className="text-xs text-muted mt-0.5">{description}</p>}
       </div>
       <div className="flex items-center gap-2">
@@ -49,7 +49,7 @@ export default function SettingsPage() {
     <div className="space-y-6 animate-fade-in max-w-3xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-display font-bold text-white tracking-tight">Settings</h1>
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Settings</h1>
         <p className="text-sm text-muted mt-1">Application configuration and status</p>
       </div>
 
@@ -58,7 +58,7 @@ export default function SettingsPage() {
         <div className="flex items-center gap-3">
           <div className="w-2.5 h-2.5 rounded-full bg-success status-dot-pulse" />
           <div>
-            <p className="text-sm text-white font-medium">Connected to Convex</p>
+            <p className="text-sm text-gray-900 font-medium">Connected to Convex</p>
             <p className="text-xs text-muted mt-0.5">
               Real-time sync is active. All data updates are streamed automatically.
             </p>
@@ -95,10 +95,10 @@ export default function SettingsPage() {
       <Section title="About" icon={Info}>
         <div className="space-y-4">
           <div>
-            <h3 className="text-lg font-display font-semibold text-white">Cadence</h3>
+            <h3 className="text-lg font-display font-semibold text-gray-900">Cadence</h3>
             <p className="text-sm font-data text-accent mt-1">v0.1.0</p>
           </div>
-          <p className="text-sm text-gray-300 leading-relaxed">
+          <p className="text-sm text-gray-600 leading-relaxed">
             AI-powered claims follow-up. Cadence automates insurance verification calls using
             conversational voice agents, extracts structured data from call transcripts, and keeps
             your claims pipeline moving.

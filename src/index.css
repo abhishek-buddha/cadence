@@ -4,22 +4,22 @@
 
 @layer base {
   :root {
-    --surface: #0a0f1e;
-    --panel: #111827;
-    --panel-light: #1f2937;
-    --border: #1f2937;
-    --border-light: #374151;
-    --accent: #3b82f6;
-    --accent-cyan: #06b6d4;
-    --glow: rgba(59, 130, 246, 0.15);
-    --glow-strong: rgba(59, 130, 246, 0.3);
+    --surface: #f0f4f8;
+    --panel: #ffffff;
+    --panel-light: #f1f5f9;
+    --border: #e2e8f0;
+    --border-light: #cbd5e1;
+    --accent: #2563eb;
+    --accent-cyan: #0891b2;
+    --glow: rgba(37, 99, 235, 0.08);
+    --glow-strong: rgba(37, 99, 235, 0.15);
   }
 
   body {
     background: var(--surface);
     background-image:
-      radial-gradient(ellipse at 20% 0%, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 100%, rgba(6, 182, 212, 0.02) 0%, transparent 50%);
+      radial-gradient(ellipse at 20% 0%, rgba(37, 99, 235, 0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 100%, rgba(8, 145, 178, 0.03) 0%, transparent 50%);
     min-height: 100vh;
   }
 }
@@ -27,27 +27,27 @@
 /* Scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #374151 transparent;
+  scrollbar-color: #cbd5e1 transparent;
 }
 *::-webkit-scrollbar { width: 5px; height: 5px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
-*::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+*::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+*::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
 /* Grid background pattern */
 .grid-bg {
   background-image:
-    linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
 /* Glow effects */
 .glow-border {
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.15), 0 0 20px rgba(59, 130, 246, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.1), 0 1px 3px rgba(37, 99, 235, 0.06);
 }
 .glow-border-strong {
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.2), 0 4px 20px rgba(37, 99, 235, 0.08);
 }
 
 /* Pulse ring animation for Call button */
@@ -103,7 +103,7 @@
   100% { background-position: 200% 0; }
 }
 .shimmer {
-  background: linear-gradient(90deg, #1f2937 25%, #374151 50%, #1f2937 75%);
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
@@ -113,7 +113,7 @@
   transition: background-color 0.15s ease;
 }
 .table-row-hover:hover {
-  background-color: rgba(59, 130, 246, 0.04);
+  background-color: rgba(37, 99, 235, 0.03);
 }
 
 /* Data font */

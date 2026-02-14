@@ -103,7 +103,7 @@ export default function InsuranceDirectory() {
   }
 
   const inputClass =
-    'w-full bg-surface border border-border-light rounded-lg px-3 py-2 text-sm text-white placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
+    'w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
   const labelClass = 'block text-xs uppercase tracking-wider text-muted font-medium mb-1.5';
 
   return (
@@ -111,12 +111,12 @@ export default function InsuranceDirectory() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-white tracking-tight">Insurance Directory</h1>
+          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Insurance Directory</h1>
           <p className="text-sm text-muted mt-1">
             {contacts ? `${contacts.length} contact${contacts.length !== 1 ? 's' : ''}` : 'Loading...'}
           </p>
         </div>
-        <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
+        <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
           <Plus className="w-4 h-4" />
           Add Insurance
         </button>
@@ -124,7 +124,7 @@ export default function InsuranceDirectory() {
 
       {/* Table */}
       {isLoading ? (
-        <div className="bg-panel border border-border rounded-xl overflow-hidden">
+        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
           <div className="p-8 space-y-4">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="h-10 shimmer rounded-lg" />
@@ -132,7 +132,7 @@ export default function InsuranceDirectory() {
           </div>
         </div>
       ) : contacts.length === 0 ? (
-        <div className="bg-panel border border-border rounded-xl">
+        <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Building2}
             title="No insurance contacts yet"
@@ -146,7 +146,7 @@ export default function InsuranceDirectory() {
           />
         </div>
       ) : (
-        <div className="bg-panel border border-border rounded-xl overflow-hidden">
+        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -161,22 +161,22 @@ export default function InsuranceDirectory() {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {contacts.map((contact) => (
-                  <tr key={contact._id} className="hover:bg-panel-light/50 transition-colors">
-                    <td className="px-4 py-3 text-sm text-gray-300">
-                      <span className="font-medium text-white">{contact.name}</span>
+                  <tr key={contact._id} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <span className="font-medium text-gray-900">{contact.name}</span>
                       {contact.payerId && (
                         <span className="ml-2 text-xs font-data text-muted">({contact.payerId})</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-300">
+                    <td className="px-4 py-3 text-sm text-gray-600">
                       <span className="font-data inline-flex items-center gap-1.5">
                         <Phone className="w-3 h-3 text-muted" />
                         {contact.phone}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-300">{contact.department ?? '--'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-300">{contact.hours ?? '--'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-300">{formatHoldTime(contact.avgHoldTime)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{contact.department ?? '--'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{contact.hours ?? '--'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{formatHoldTime(contact.avgHoldTime)}</td>
                     <td className="px-4 py-3 text-sm text-right">
                       <div className="inline-flex items-center gap-1">
                         <button
@@ -316,7 +316,7 @@ export default function InsuranceDirectory() {
             <button
               type="button"
               onClick={closeModal}
-              className="px-4 py-2.5 text-sm text-muted hover:text-white transition-colors"
+              className="px-4 py-2.5 text-sm text-muted hover:text-gray-900 transition-colors"
             >
               Cancel
             </button>

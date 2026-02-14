@@ -28,14 +28,14 @@ function HospitalDropdown() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 bg-surface/80 border border-border-light rounded-lg pl-3 pr-2.5 py-1.5 text-sm text-white cursor-pointer hover:border-accent/40 focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition-colors min-w-[180px]"
+        className="flex items-center gap-2 bg-white border border-border-light rounded-lg pl-3 pr-2.5 py-1.5 text-sm text-gray-700 cursor-pointer hover:border-accent/40 focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition-colors min-w-[180px] shadow-sm"
       >
         <span className="flex-1 text-left truncate">{selectedLabel}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 min-w-full w-max bg-panel border border-border-light rounded-lg shadow-xl shadow-black/40 py-1 z-50 animate-fade-in">
+        <div className="absolute right-0 top-full mt-1.5 min-w-full w-max bg-white border border-border-light rounded-lg shadow-xl shadow-gray-200/60 py-1 z-50 animate-fade-in">
           {options.map((opt) => {
             const isActive = opt.id === selectedProviderId;
             return (
@@ -47,8 +47,8 @@ function HospitalDropdown() {
                 }}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${
                   isActive
-                    ? 'bg-accent/10 text-accent'
-                    : 'text-gray-300 hover:bg-white/[0.05] hover:text-white'
+                    ? 'bg-accent/5 text-accent'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5 shrink-0 opacity-50" />
@@ -69,7 +69,7 @@ export default function Layout() {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="shrink-0 h-14 bg-panel/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-4 relative z-20">
+        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-4 relative z-20">
           {/* Hospital selector */}
           <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider font-medium">

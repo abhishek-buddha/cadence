@@ -46,12 +46,12 @@ const PRIORITY_DOT_COLORS = {
 };
 
 const INPUT_CLASS =
-  'bg-surface border border-border-light rounded-lg px-3 py-2 text-sm text-white placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none w-full';
+  'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none w-full';
 
 const LABEL_CLASS = 'text-xs uppercase tracking-wider text-muted font-medium mb-1.5 block';
 
 const SELECT_CLASS =
-  'bg-surface border border-border-light rounded-lg px-3 py-2 text-sm text-white focus:border-accent focus:ring-1 focus:ring-accent outline-none appearance-none cursor-pointer';
+  'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-700 focus:border-accent focus:ring-1 focus:ring-accent outline-none appearance-none cursor-pointer';
 
 function formatCurrency(cents) {
   if (cents == null) return '$0.00';
@@ -202,14 +202,14 @@ export default function ClaimsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-white tracking-tight">Claims</h1>
+          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Claims</h1>
           <p className="text-sm text-muted mt-1">
             {!isLoading && `${filteredClaims.length} claim${filteredClaims.length !== 1 ? 's' : ''}`}
           </p>
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" />
           New Claim
@@ -217,7 +217,7 @@ export default function ClaimsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-panel border border-border rounded-xl p-4">
+      <div className="flex flex-wrap items-center gap-3 bg-white border border-border rounded-xl p-4 shadow-sm">
         <FilterSelect
           value={statusFilter}
           onChange={setStatusFilter}
@@ -249,11 +249,11 @@ export default function ClaimsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-panel border border-border rounded-xl overflow-hidden">
+      <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-panel sticky top-0 z-10">
+              <tr className="border-b border-border bg-white sticky top-0 z-10">
                 <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
                   Claim #
                 </th>
@@ -321,16 +321,16 @@ export default function ClaimsPage() {
                     <td className="px-4 py-3 font-data text-accent whitespace-nowrap">
                       {claim.claimNumber}
                     </td>
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                       {patientMap[claim.patientId] ?? '---'}
                     </td>
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                       {insuranceMap[claim.insuranceContactId] ?? '---'}
                     </td>
-                    <td className="px-4 py-3 font-data text-white text-right whitespace-nowrap">
+                    <td className="px-4 py-3 font-data text-gray-900 text-right whitespace-nowrap">
                       {formatCurrency(claim.amount)}
                     </td>
-                    <td className="px-4 py-3 text-gray-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                       {formatDate(claim.dateOfService)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -340,15 +340,15 @@ export default function ClaimsPage() {
                       <div className="inline-flex items-center gap-2">
                         <span
                           className={`w-2 h-2 rounded-full ${
-                            PRIORITY_DOT_COLORS[claim.priority] ?? 'bg-gray-500'
+                            PRIORITY_DOT_COLORS[claim.priority] ?? 'bg-gray-400'
                           }`}
                         />
-                        <span className="text-gray-300 capitalize text-xs">
+                        <span className="text-gray-600 capitalize text-xs">
                           {claim.priority ?? '---'}
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-400 whitespace-nowrap font-data text-xs">
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap font-data text-xs">
                       {claim.agingBucket ?? '---'}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">

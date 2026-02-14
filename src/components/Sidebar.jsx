@@ -23,9 +23,9 @@ export default function Sidebar() {
   const location = useLocation();
 
   return (
-    <aside className="w-64 bg-panel border-r border-border flex flex-col relative shrink-0">
+    <aside className="w-64 bg-white border-r border-border flex flex-col relative shrink-0">
       {/* Accent line */}
-      <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-accent/30 via-cyan/20 to-transparent" />
+      <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-accent/20 via-cyan/10 to-transparent" />
 
       {/* Logo */}
       <div className="p-6 pb-4">
@@ -34,7 +34,7 @@ export default function Sidebar() {
             <Activity className="w-5 h-5 text-accent" />
           </div>
           <div>
-            <h1 className="font-display font-bold text-lg tracking-tight text-white">
+            <h1 className="font-display font-bold text-lg tracking-tight text-gray-900">
               Cadence
             </h1>
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
@@ -45,7 +45,7 @@ export default function Sidebar() {
       </div>
 
       {/* System status indicator */}
-      <div className="mx-4 mb-4 px-3 py-2 rounded-lg bg-surface/50 border border-border">
+      <div className="mx-4 mb-4 px-3 py-2 rounded-lg bg-surface/80 border border-border">
         <div className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-success status-dot-pulse" />
           <span className="text-xs text-muted">System Online</span>
@@ -65,8 +65,8 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
                 isActive
-                  ? 'bg-accent/10 text-accent'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.03]'
+                  ? 'bg-accent/8 text-accent'
+                  : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
               }`
             }
           >
@@ -90,8 +90,8 @@ export default function Sidebar() {
           className={({ isActive }) =>
             `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
               isActive
-                ? 'bg-accent/10 text-accent'
-                : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.03]'
+                ? 'bg-accent/8 text-accent'
+                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
             }`
           }
         >

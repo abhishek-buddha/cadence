@@ -45,21 +45,21 @@ function CallRow({ call }) {
       {/* Main row */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-4 px-4 py-3 hover:bg-panel-light/50 transition-colors text-left"
+        className="w-full flex items-center gap-4 px-4 py-3 hover:bg-gray-50/80 transition-colors text-left"
       >
         <span className="text-muted">
           {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </span>
-        <span className="px-4 py-3 text-sm text-gray-300 min-w-[160px]">
+        <span className="px-4 py-3 text-sm text-gray-600 min-w-[160px]">
           {formatDate(call.startedAt)}
         </span>
         <span className="px-4 py-3 text-sm font-data text-accent min-w-[120px]">
           {claimPreview?.claimNumber ?? '...'}
         </span>
-        <span className="px-4 py-3 text-sm text-gray-300 flex-1 truncate">
+        <span className="px-4 py-3 text-sm text-gray-600 flex-1 truncate">
           {insurancePreview?.name ?? '...'}
         </span>
-        <span className="px-4 py-3 text-sm font-data text-gray-300 min-w-[70px] text-right">
+        <span className="px-4 py-3 text-sm font-data text-gray-600 min-w-[70px] text-right">
           {formatDuration(call.duration)}
         </span>
         <span className="min-w-[110px] flex justify-end">
@@ -70,12 +70,12 @@ function CallRow({ call }) {
       {/* Expanded details */}
       {expanded && (
         <div className="px-4 pb-4 pl-12 animate-fade-in">
-          <div className="bg-surface border border-border-light rounded-lg p-4 space-y-4">
+          <div className="bg-surface border border-border rounded-lg p-4 space-y-4">
             {/* Claim and Insurance Info */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1">Claim</h4>
-                <p className="text-sm text-white font-data">
+                <p className="text-sm text-gray-900 font-data">
                   {claim?.claimNumber ?? '--'}
                 </p>
                 {claim && (
@@ -86,7 +86,7 @@ function CallRow({ call }) {
               </div>
               <div>
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1">Insurance</h4>
-                <p className="text-sm text-white">{insurance?.name ?? '--'}</p>
+                <p className="text-sm text-gray-900">{insurance?.name ?? '--'}</p>
                 {insurance?.phone && (
                   <p className="text-xs text-muted font-data mt-0.5">{insurance.phone}</p>
                 )}
@@ -100,8 +100,8 @@ function CallRow({ call }) {
                   <FileText className="w-3 h-3" />
                   Transcript
                 </h4>
-                <div className="bg-panel border border-border rounded-lg p-3 max-h-48 overflow-y-auto">
-                  <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">
+                <div className="bg-white border border-border rounded-lg p-3 max-h-48 overflow-y-auto">
+                  <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
                     {call.transcript}
                   </p>
                 </div>
@@ -114,12 +114,12 @@ function CallRow({ call }) {
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5">
                   Extracted Results
                 </h4>
-                <div className="bg-panel border border-border rounded-lg p-3">
+                <div className="bg-white border border-border rounded-lg p-3">
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                     {callResult.claimStatus && (
                       <div className="flex justify-between">
                         <span className="text-xs text-muted">Claim Status</span>
-                        <span className="text-xs text-white font-medium">{callResult.claimStatus}</span>
+                        <span className="text-xs text-gray-900 font-medium">{callResult.claimStatus}</span>
                       </div>
                     )}
                     {callResult.paidAmount != null && (
@@ -133,19 +133,19 @@ function CallRow({ call }) {
                     {callResult.paidDate && (
                       <div className="flex justify-between">
                         <span className="text-xs text-muted">Paid Date</span>
-                        <span className="text-xs text-white font-data">{callResult.paidDate}</span>
+                        <span className="text-xs text-gray-900 font-data">{callResult.paidDate}</span>
                       </div>
                     )}
                     {callResult.referenceNumber && (
                       <div className="flex justify-between">
                         <span className="text-xs text-muted">Reference #</span>
-                        <span className="text-xs text-white font-data">{callResult.referenceNumber}</span>
+                        <span className="text-xs text-gray-900 font-data">{callResult.referenceNumber}</span>
                       </div>
                     )}
                     {callResult.repName && (
                       <div className="flex justify-between">
                         <span className="text-xs text-muted">Rep Name</span>
-                        <span className="text-xs text-white">{callResult.repName}</span>
+                        <span className="text-xs text-gray-900">{callResult.repName}</span>
                       </div>
                     )}
                     {callResult.denialCode && (
@@ -157,13 +157,13 @@ function CallRow({ call }) {
                     {callResult.denialReason && (
                       <div className="flex justify-between col-span-2">
                         <span className="text-xs text-muted">Denial Reason</span>
-                        <span className="text-xs text-gray-300 text-right max-w-[60%]">{callResult.denialReason}</span>
+                        <span className="text-xs text-gray-600 text-right max-w-[60%]">{callResult.denialReason}</span>
                       </div>
                     )}
                     {callResult.nextSteps && (
                       <div className="flex justify-between col-span-2">
                         <span className="text-xs text-muted">Next Steps</span>
-                        <span className="text-xs text-gray-300 text-right max-w-[60%]">{callResult.nextSteps}</span>
+                        <span className="text-xs text-gray-600 text-right max-w-[60%]">{callResult.nextSteps}</span>
                       </div>
                     )}
                     {callResult.confidence != null && (
@@ -213,14 +213,14 @@ export default function CallHistory() {
     : [];
 
   const inputClass =
-    'w-full bg-surface border border-border-light rounded-lg px-3 py-2 text-sm text-white placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
+    'w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-700 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-white tracking-tight">Call History</h1>
+          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Call History</h1>
           <p className="text-sm text-muted mt-1">All voice agent calls</p>
         </div>
         <div className="flex items-center gap-3">
@@ -243,7 +243,7 @@ export default function CallHistory() {
       {!isLoading && calls.length > 0 && (
         <div className="flex items-center gap-4 text-sm">
           <span className="text-muted">
-            Showing <span className="text-white font-medium">{filteredCalls.length}</span>
+            Showing <span className="text-gray-900 font-medium">{filteredCalls.length}</span>
             {statusFilter !== 'all' && ` ${statusFilter}`} call{filteredCalls.length !== 1 ? 's' : ''}
             {statusFilter !== 'all' && (
               <span className="text-muted"> of {calls.length} total</span>
@@ -254,7 +254,7 @@ export default function CallHistory() {
 
       {/* Call List */}
       {isLoading ? (
-        <div className="bg-panel border border-border rounded-xl overflow-hidden">
+        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
           <div className="p-8 space-y-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="h-10 shimmer rounded-lg" />
@@ -262,7 +262,7 @@ export default function CallHistory() {
           </div>
         </div>
       ) : filteredCalls.length === 0 ? (
-        <div className="bg-panel border border-border rounded-xl">
+        <div className="bg-white border border-border rounded-xl shadow-sm">
           {calls.length === 0 ? (
             <EmptyState
               icon={PhoneCall}
@@ -286,7 +286,7 @@ export default function CallHistory() {
           )}
         </div>
       ) : (
-        <div className="bg-panel border border-border rounded-xl overflow-hidden">
+        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
           {/* Table header */}
           <div className="flex items-center gap-4 px-4 py-3 border-b border-border">
             <span className="w-4" /> {/* Chevron spacer */}

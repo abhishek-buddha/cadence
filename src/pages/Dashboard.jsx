@@ -45,7 +45,7 @@ function ShimmerBlock({ className = '' }) {
 
 function StatCardSkeleton() {
   return (
-    <div className="rounded-xl border border-border bg-panel p-5">
+    <div className="rounded-xl border border-border bg-white p-5">
       <div className="flex items-start justify-between">
         <div className="space-y-3 flex-1">
           <ShimmerBlock className="h-3 w-20" />
@@ -86,7 +86,7 @@ export default function Dashboard() {
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-display font-bold text-white tracking-tight">
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">
           Dashboard
         </h1>
         <p className="text-sm text-muted mt-1">Real-time claims overview</p>
@@ -148,8 +148,8 @@ export default function Dashboard() {
       {/* Two-column layout for charts and recent calls */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Aging Bucket Distribution */}
-        <div className="bg-panel border border-border rounded-xl p-6">
-          <h2 className="font-display font-semibold text-white mb-1">Aging Buckets</h2>
+        <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
+          <h2 className="font-display font-semibold text-gray-900 mb-1">Aging Buckets</h2>
           <p className="text-xs text-muted mb-6">Claims distribution by age</p>
 
           {isLoading ? (
@@ -170,7 +170,7 @@ export default function Dashboard() {
                 return (
                   <div key={key}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-sm text-gray-300">{label}</span>
+                      <span className="text-sm text-gray-600">{label}</span>
                       <span className="text-sm font-data text-muted">
                         {count} <span className="text-muted/50">({pct.toFixed(0)}%)</span>
                       </span>
@@ -193,9 +193,9 @@ export default function Dashboard() {
         </div>
 
         {/* Recent Calls */}
-        <div className="bg-panel border border-border rounded-xl p-6">
+        <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-1">
-            <h2 className="font-display font-semibold text-white">Recent Calls</h2>
+            <h2 className="font-display font-semibold text-gray-900">Recent Calls</h2>
             <Phone className="w-4 h-4 text-muted" />
           </div>
           <p className="text-xs text-muted mb-6">Last 5 call activities</p>
@@ -226,7 +226,7 @@ export default function Dashboard() {
                   <span className="font-data text-sm text-accent min-w-[90px]">
                     {call.claimNumber ?? '---'}
                   </span>
-                  <span className="text-sm text-gray-300 truncate flex-1">
+                  <span className="text-sm text-gray-600 truncate flex-1">
                     {call.insuranceCompany ?? 'Unknown'}
                   </span>
                   <StatusBadge status={call.status ?? 'unknown'} />

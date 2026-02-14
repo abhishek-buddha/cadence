@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 export default function Modal({ open, onClose, title, children, wide = false }) {
@@ -24,19 +25,17 @@ export default function Modal({ open, onClose, title, children, wide = false }) 
 
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-50">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] overflow-y-auto" ref={scrollRef}
+      onClick={(e) => { if (e.target === scrollRef.current || e.target.dataset.backdrop) onClose(); }}
+    >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div data-backdrop="true" className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
 
-      {/* Scrollable container — keeps modal centered when short, scrollable when tall */}
-      <div
-        ref={scrollRef}
-        className="relative z-10 overflow-y-auto h-full flex items-center justify-center p-4"
-        onClick={(e) => { if (e.target === scrollRef.current) onClose(); }}
-      >
+      {/* Centering wrapper: min-h-full so flex centering works for short modals, expands for tall ones */}
+      <div className="flex min-h-full items-center justify-center p-4 relative z-10 pointer-events-none">
         {/* Modal */}
-        <div className={`relative bg-panel border border-border rounded-xl shadow-2xl animate-fade-in my-auto ${
+        <div className={`pointer-events-auto relative bg-panel border border-border rounded-xl shadow-2xl animate-fade-in ${
           wide ? 'w-full max-w-2xl' : 'w-full max-w-lg'
         }`}>
           {/* Header */}
@@ -56,6 +55,7 @@ export default function Modal({ open, onClose, title, children, wide = false }) 
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

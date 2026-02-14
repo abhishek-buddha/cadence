@@ -137,7 +137,7 @@ export const analyzeTranscript = action({
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.2-chat-latest',
+        model: 'gpt-4.1',
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
@@ -187,7 +187,9 @@ Use null for any field where the information was NOT explicitly provided in the 
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      const errBody = await response.text();
+      console.error('OpenAI error:', response.status, errBody);
+      throw new Error(`OpenAI API error ${response.status}: ${errBody}`);
     }
 
     const result = await response.json();
@@ -201,6 +203,11 @@ Use null for any field where the information was NOT explicitly provided in the 
         confidence: 0,
       };
     }
+
+    // Auto-generate a reference number for this call
+    const now = new Date();
+    const autoRef = `REF-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const referenceNumber = extraction.referenceNumber || autoRef;
 
     // Store the extraction result — use ?? undefined so falsy values like 0 still pass through
     await ctx.runMutation(api.callResults.create, {
@@ -216,7 +223,7 @@ Use null for any field where the information was NOT explicitly provided in the 
       appealDeadline: extraction.appealDeadline ?? undefined,
       missingDocuments: extraction.missingDocuments ?? undefined,
       expectedDecisionDate: extraction.expectedDecisionDate ?? undefined,
-      referenceNumber: extraction.referenceNumber ?? undefined,
+      referenceNumber,
       repName: extraction.repName ?? undefined,
       nextSteps: extraction.nextSteps ?? undefined,
       rawExtraction: JSON.stringify(extraction),
@@ -239,9 +246,7 @@ Use null for any field where the information was NOT explicitly provided in the 
       if (extraction.appealDeadline) statusUpdate.appealDeadline = extraction.appealDeadline;
     }
 
-    if (extraction.referenceNumber) {
-      statusUpdate.referenceNumber = extraction.referenceNumber;
-    }
+    statusUpdate.referenceNumber = referenceNumber;
     if (extraction.expectedDecisionDate) {
       statusUpdate.nextFollowUpDate = extraction.expectedDecisionDate;
     }

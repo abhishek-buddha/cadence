@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
-  Plus,
+  Upload,
   Search,
   FileText,
   ChevronDown,
+  FileSpreadsheet,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  X,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
@@ -47,8 +54,6 @@ const PRIORITY_DOT_COLORS = {
 
 const INPUT_CLASS =
   'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none w-full';
-
-const LABEL_CLASS = 'text-xs uppercase tracking-wider text-muted font-medium mb-1.5 block';
 
 const SELECT_CLASS =
   'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-700 focus:border-accent focus:ring-1 focus:ring-accent outline-none appearance-none cursor-pointer';
@@ -98,20 +103,422 @@ function FilterSelect({ value, onChange, options, className = '' }) {
   );
 }
 
-const INITIAL_FORM = {
-  claimNumber: '',
-  patientId: '',
-  insuranceContactId: '',
-  providerId: '',
-  amount: '',
-  dateOfService: '',
-  status: 'pending',
-  priority: 'medium',
-  agingBucket: '0-30',
-  cptCodes: '',
-  notes: '',
-};
+// ---------------------------------------------------------------------------
+// Flag severity helpers
+// ---------------------------------------------------------------------------
+function getFlagSeverity(flag) {
+  const errors = ['missing_claim_number', 'missing_amount', 'missing_dos', 'invalid_date', 'invalid_amount'];
+  const warnings = ['missing_patient', 'missing_insurance', 'new_patient', 'new_insurance', 'duplicate_claim', 'format_warning'];
+  if (errors.includes(flag)) return 'error';
+  if (warnings.includes(flag)) return 'warning';
+  return 'info';
+}
 
+// ---------------------------------------------------------------------------
+// Upload Modal Component
+// ---------------------------------------------------------------------------
+function UploadClaimsModal({ open, onClose }) {
+  const processExcelData = useAction(api.claimImport.processExcelData);
+  const bulkImportClaims = useMutation(api.claimImport.bulkImportClaims);
+  const fileInputRef = useRef(null);
+
+  // States: idle → parsing → ai_processing → preview → importing → done
+  const [stage, setStage] = useState('idle');
+  const [fileName, setFileName] = useState('');
+  const [rawData, setRawData] = useState(null);
+  const [aiResult, setAiResult] = useState(null);
+  const [importResult, setImportResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  function reset() {
+    setStage('idle');
+    setFileName('');
+    setRawData(null);
+    setAiResult(null);
+    setImportResult(null);
+    setError(null);
+    setDragOver(false);
+  }
+
+  function handleClose() {
+    reset();
+    onClose();
+  }
+
+  // Parse Excel file client-side
+  const parseFile = useCallback(async (file) => {
+    if (!file) return;
+    setFileName(file.name);
+    setStage('parsing');
+    setError(null);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+
+      // Convert to JSON with headers
+      const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      if (jsonData.length === 0) {
+        throw new Error('The spreadsheet is empty or has no data rows.');
+      }
+
+      const headers = Object.keys(jsonData[0]);
+      // Clean up row data: convert dates to strings, handle numbers
+      const rows = jsonData.map((row) => {
+        const cleaned = {};
+        for (const [key, val] of Object.entries(row)) {
+          if (val instanceof Date) {
+            cleaned[key] = val.toISOString().split('T')[0];
+          } else {
+            cleaned[key] = val;
+          }
+        }
+        return cleaned;
+      });
+
+      setRawData({ headers, rows, sheetName });
+      setStage('ai_processing');
+
+      // Send to AI for processing
+      const result = await processExcelData({ headers, rows, sheetName });
+      setAiResult(result);
+      setStage('preview');
+    } catch (err) {
+      setError(err.message || 'Failed to process file');
+      setStage('idle');
+    }
+  }, [processExcelData]);
+
+  const handleFileInput = (e) => {
+    const file = e.target.files?.[0];
+    if (file) parseFile(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) parseFile(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => setDragOver(false);
+
+  // Import confirmed claims
+  const handleImport = async () => {
+    if (!aiResult?.claims) return;
+    setStage('importing');
+    setError(null);
+
+    try {
+      // Filter out claims with critical errors
+      const validClaims = aiResult.claims.filter((c) => {
+        const hasErrors = (c.flags || []).some((f) => getFlagSeverity(f) === 'error');
+        return !hasErrors;
+      });
+
+      if (validClaims.length === 0) {
+        setError('No valid claims to import. Fix the flagged errors and try again.');
+        setStage('preview');
+        return;
+      }
+
+      const result = await bulkImportClaims({
+        claims: validClaims.map((c) => ({
+          claimNumber: c.claimNumber || `AUTO-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          patientFirstName: c.patientFirstName || 'Unknown',
+          patientLastName: c.patientLastName || 'Patient',
+          patientDOB: c.patientDOB || '1900-01-01',
+          memberId: c.memberId || `MBR-${Date.now()}`,
+          groupNumber: c.groupNumber || undefined,
+          insuranceName: c.insuranceName || 'Unknown Insurance',
+          matchedPatientId: c.matchedPatientId || undefined,
+          matchedInsuranceId: c.matchedInsuranceId || undefined,
+          matchedProviderId: c.matchedProviderId || undefined,
+          amount: typeof c.amount === 'number' ? c.amount : 0,
+          dateOfService: c.dateOfService || new Date().toISOString().split('T')[0],
+          dateSubmitted: c.dateSubmitted || undefined,
+          cptCodes: c.cptCodes || undefined,
+          diagnosisCodes: c.diagnosisCodes || undefined,
+          status: c.status || 'pending',
+          priority: c.priority || 'medium',
+          agingBucket: c.agingBucket || '0-30',
+          notes: c.notes || undefined,
+        })),
+      });
+
+      setImportResult(result);
+      setStage('done');
+    } catch (err) {
+      setError(err.message || 'Import failed');
+      setStage('preview');
+    }
+  };
+
+  // Count flags by severity
+  const errorCount = aiResult?.claims?.filter((c) =>
+    (c.flags || []).some((f) => getFlagSeverity(f) === 'error')
+  ).length || 0;
+  const warningCount = aiResult?.claims?.filter((c) =>
+    (c.flags || []).some((f) => getFlagSeverity(f) === 'warning') &&
+    !(c.flags || []).some((f) => getFlagSeverity(f) === 'error')
+  ).length || 0;
+  const cleanCount = (aiResult?.claims?.length || 0) - errorCount - warningCount;
+
+  return (
+    <Modal open={open} onClose={handleClose} title="Upload Claims" wide>
+      <div className="space-y-5">
+        {/* IDLE: File upload area */}
+        {stage === 'idle' && (
+          <>
+            <div
+              className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors cursor-pointer ${
+                dragOver
+                  ? 'border-accent bg-accent/5'
+                  : 'border-border-light hover:border-accent/40 hover:bg-gray-50'
+              }`}
+              onClick={() => fileInputRef.current?.click()}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+            >
+              <FileSpreadsheet className="w-10 h-10 text-accent/50 mx-auto mb-3" />
+              <p className="text-sm text-gray-900 font-medium mb-1">
+                Drop your Excel file here or click to browse
+              </p>
+              <p className="text-xs text-muted">
+                Supports .xlsx, .xls, .csv — any column structure
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileInput}
+                className="hidden"
+              />
+            </div>
+
+            <div className="bg-accent/5 border border-accent/10 rounded-lg p-3">
+              <p className="text-xs text-gray-600 leading-relaxed">
+                <strong className="text-accent">AI-Powered Import:</strong> Our AI will automatically
+                detect your column structure, map fields to our system, match existing patients and
+                insurance companies, calculate aging buckets, and flag any data quality issues.
+                No fixed format required.
+              </p>
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 p-3 bg-danger/5 border border-danger/20 rounded-lg">
+                <XCircle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+                <p className="text-xs text-danger">{error}</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* PARSING: Reading file */}
+        {stage === 'parsing' && (
+          <div className="py-10 text-center">
+            <Loader2 className="w-8 h-8 text-accent animate-spin mx-auto mb-3" />
+            <p className="text-sm text-gray-900 font-medium">Reading {fileName}...</p>
+            <p className="text-xs text-muted mt-1">Parsing spreadsheet data</p>
+          </div>
+        )}
+
+        {/* AI PROCESSING: Sending to OpenAI */}
+        {stage === 'ai_processing' && (
+          <div className="py-10 text-center">
+            <Loader2 className="w-8 h-8 text-accent animate-spin mx-auto mb-3" />
+            <p className="text-sm text-gray-900 font-medium">AI is analyzing your data...</p>
+            <p className="text-xs text-muted mt-1">
+              Mapping columns, matching entities, validating {rawData?.rows?.length} rows
+            </p>
+          </div>
+        )}
+
+        {/* PREVIEW: Show AI results */}
+        {stage === 'preview' && aiResult && (
+          <>
+            {/* Summary bar */}
+            <div className="flex items-center gap-4 p-3 bg-surface rounded-lg border border-border">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-success" />
+                <span className="text-sm font-medium text-gray-900">{cleanCount} valid</span>
+              </div>
+              {warningCount > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-warn" />
+                  <span className="text-sm font-medium text-warn">{warningCount} warnings</span>
+                </div>
+              )}
+              {errorCount > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <XCircle className="w-4 h-4 text-danger" />
+                  <span className="text-sm font-medium text-danger">{errorCount} errors</span>
+                </div>
+              )}
+              <span className="text-xs text-muted ml-auto">{aiResult.claims?.length} total rows</span>
+            </div>
+
+            {/* Column mapping info */}
+            {aiResult.columnMapping && (
+              <details className="group">
+                <summary className="text-xs text-accent cursor-pointer hover:text-accent-hover font-medium">
+                  View column mapping
+                </summary>
+                <div className="mt-2 bg-surface rounded-lg p-3 border border-border">
+                  <div className="grid grid-cols-2 gap-1">
+                    {Object.entries(aiResult.columnMapping).map(([orig, mapped]) => (
+                      <div key={orig} className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-500 truncate">{orig}</span>
+                        <span className="text-muted">→</span>
+                        <span className="text-gray-900 font-data">{String(mapped)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </details>
+            )}
+
+            {/* Claims preview table */}
+            <div className="max-h-[350px] overflow-y-auto border border-border rounded-lg">
+              <table className="w-full text-xs">
+                <thead className="bg-surface sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-muted font-medium">Status</th>
+                    <th className="px-3 py-2 text-left text-muted font-medium">Claim #</th>
+                    <th className="px-3 py-2 text-left text-muted font-medium">Patient</th>
+                    <th className="px-3 py-2 text-left text-muted font-medium">Insurance</th>
+                    <th className="px-3 py-2 text-right text-muted font-medium">Amount</th>
+                    <th className="px-3 py-2 text-left text-muted font-medium">Issues</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {(aiResult.claims || []).map((claim, i) => {
+                    const hasError = (claim.flags || []).some((f) => getFlagSeverity(f) === 'error');
+                    const hasWarning = (claim.flags || []).some((f) => getFlagSeverity(f) === 'warning');
+                    return (
+                      <tr key={i} className={hasError ? 'bg-danger/5' : hasWarning ? 'bg-warn/5' : ''}>
+                        <td className="px-3 py-2">
+                          {hasError ? (
+                            <XCircle className="w-3.5 h-3.5 text-danger" />
+                          ) : hasWarning ? (
+                            <AlertTriangle className="w-3.5 h-3.5 text-warn" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                          )}
+                        </td>
+                        <td className="px-3 py-2 font-data text-accent">{claim.claimNumber || '--'}</td>
+                        <td className="px-3 py-2 text-gray-700">
+                          {claim.patientName || `${claim.patientFirstName} ${claim.patientLastName}` || '--'}
+                        </td>
+                        <td className="px-3 py-2 text-gray-700">{claim.insuranceName || '--'}</td>
+                        <td className="px-3 py-2 text-right font-data text-gray-900">
+                          {claim.amount != null ? formatCurrency(claim.amount) : '--'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {(claim.flagDetails || claim.flags || []).length > 0 && (
+                            <span className={`text-xs ${hasError ? 'text-danger' : 'text-warn'}`}>
+                              {(claim.flagDetails || claim.flags || []).join('; ')}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 p-3 bg-danger/5 border border-danger/20 rounded-lg">
+                <XCircle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+                <p className="text-xs text-danger">{error}</p>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-between pt-2 border-t border-border">
+              <button
+                onClick={reset}
+                className="px-4 py-2 text-sm text-muted hover:text-gray-900 transition-colors"
+              >
+                Upload Different File
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={cleanCount + warningCount === 0}
+                className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                Import {cleanCount + warningCount} Claim{cleanCount + warningCount !== 1 ? 's' : ''}
+                {errorCount > 0 && <span className="text-white/70">({errorCount} skipped)</span>}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* IMPORTING */}
+        {stage === 'importing' && (
+          <div className="py-10 text-center">
+            <Loader2 className="w-8 h-8 text-accent animate-spin mx-auto mb-3" />
+            <p className="text-sm text-gray-900 font-medium">Importing claims...</p>
+            <p className="text-xs text-muted mt-1">Creating records in the database</p>
+          </div>
+        )}
+
+        {/* DONE */}
+        {stage === 'done' && importResult && (
+          <div className="py-6 text-center">
+            <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-4" />
+            <h3 className="text-lg font-display font-semibold text-gray-900 mb-2">
+              Import Complete
+            </h3>
+            <p className="text-sm text-muted mb-4">
+              Successfully imported {importResult.importedCount} of {importResult.totalAttempted} claims
+            </p>
+
+            <div className="flex items-center justify-center gap-6 text-xs text-muted mb-6">
+              {importResult.newPatientsCreated > 0 && (
+                <span>{importResult.newPatientsCreated} new patients created</span>
+              )}
+              {importResult.newInsuranceCreated > 0 && (
+                <span>{importResult.newInsuranceCreated} new insurance contacts created</span>
+              )}
+            </div>
+
+            {importResult.errors?.length > 0 && (
+              <div className="text-left bg-danger/5 border border-danger/20 rounded-lg p-3 mb-4 max-h-32 overflow-y-auto">
+                <p className="text-xs font-medium text-danger mb-1">Errors:</p>
+                {importResult.errors.map((err, i) => (
+                  <p key={i} className="text-xs text-danger/80">{err}</p>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={handleClose}
+              className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// ===========================================================================
+// MAIN COMPONENT
+// ===========================================================================
 export default function ClaimsPage() {
   const navigate = useNavigate();
   const { selectedProviderId } = useProviderFilter();
@@ -121,12 +528,8 @@ export default function ClaimsPage() {
     : allClaims;
   const patients = useQuery(api.patients.list);
   const insuranceContacts = useQuery(api.insuranceContacts.list);
-  const providers = useQuery(api.providers.list);
-  const createClaim = useMutation(api.claims.create);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState(INITIAL_FORM);
-  const [submitting, setSubmitting] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
@@ -159,44 +562,6 @@ export default function ClaimsPage() {
     return true;
   });
 
-  function updateForm(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (submitting) return;
-
-    setSubmitting(true);
-    try {
-      const amountCents = Math.round(parseFloat(form.amount || '0') * 100);
-      const cptCodes = form.cptCodes
-        ? form.cptCodes.split(',').map((s) => s.trim()).filter(Boolean)
-        : [];
-
-      await createClaim({
-        claimNumber: form.claimNumber,
-        patientId: form.patientId || undefined,
-        insuranceContactId: form.insuranceContactId || undefined,
-        providerId: form.providerId || undefined,
-        amount: amountCents,
-        dateOfService: form.dateOfService || undefined,
-        status: form.status,
-        priority: form.priority,
-        agingBucket: form.agingBucket,
-        cptCodes,
-        notes: form.notes || undefined,
-      });
-
-      setForm(INITIAL_FORM);
-      setModalOpen(false);
-    } catch (err) {
-      console.error('Failed to create claim:', err);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -208,11 +573,11 @@ export default function ClaimsPage() {
           </p>
         </div>
         <button
-          onClick={() => setModalOpen(true)}
+          onClick={() => setUploadModalOpen(true)}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
         >
-          <Plus className="w-4 h-4" />
-          New Claim
+          <Upload className="w-4 h-4" />
+          Upload Claims
         </button>
       </div>
 
@@ -254,33 +619,15 @@ export default function ClaimsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-white sticky top-0 z-10">
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
-                  Claim #
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
-                  Patient
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
-                  Insurance
-                </th>
-                <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
-                  Amount
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
-                  DOS
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
-                  Status
-                </th>
-                <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
-                  Priority
-                </th>
-                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
-                  Age
-                </th>
-                <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">
-                  Actions
-                </th>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Claim #</th>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Patient</th>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Insurance</th>
+                <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Amount</th>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">DOS</th>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Status</th>
+                <th className="text-center px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Priority</th>
+                <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Age</th>
+                <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
@@ -295,16 +642,16 @@ export default function ClaimsPage() {
                       description={
                         statusFilter || priorityFilter || agingFilter || searchQuery
                           ? 'Try adjusting your filters to find what you are looking for.'
-                          : 'Create your first claim to get started.'
+                          : 'Upload an Excel file to import your claims.'
                       }
                       action={
                         !statusFilter && !priorityFilter && !agingFilter && !searchQuery ? (
                           <button
-                            onClick={() => setModalOpen(true)}
+                            onClick={() => setUploadModalOpen(true)}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
                           >
-                            <Plus className="w-4 h-4" />
-                            New Claim
+                            <Upload className="w-4 h-4" />
+                            Upload Claims
                           </button>
                         ) : undefined
                       }
@@ -318,45 +665,22 @@ export default function ClaimsPage() {
                     onClick={() => navigate(`/claims/${claim._id}`)}
                     className="table-row-hover cursor-pointer"
                   >
-                    <td className="px-4 py-3 font-data text-accent whitespace-nowrap">
-                      {claim.claimNumber}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                      {patientMap[claim.patientId] ?? '---'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                      {insuranceMap[claim.insuranceContactId] ?? '---'}
-                    </td>
-                    <td className="px-4 py-3 font-data text-gray-900 text-right whitespace-nowrap">
-                      {formatCurrency(claim.amount)}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                      {formatDate(claim.dateOfService)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <StatusBadge status={claim.status ?? 'unknown'} />
-                    </td>
+                    <td className="px-4 py-3 font-data text-accent whitespace-nowrap">{claim.claimNumber}</td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{patientMap[claim.patientId] ?? '---'}</td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{insuranceMap[claim.insuranceContactId] ?? '---'}</td>
+                    <td className="px-4 py-3 font-data text-gray-900 text-right whitespace-nowrap">{formatCurrency(claim.amount)}</td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatDate(claim.dateOfService)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={claim.status ?? 'unknown'} /></td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">
                       <div className="inline-flex items-center gap-2">
-                        <span
-                          className={`w-2 h-2 rounded-full ${
-                            PRIORITY_DOT_COLORS[claim.priority] ?? 'bg-gray-400'
-                          }`}
-                        />
-                        <span className="text-gray-600 capitalize text-xs">
-                          {claim.priority ?? '---'}
-                        </span>
+                        <span className={`w-2 h-2 rounded-full ${PRIORITY_DOT_COLORS[claim.priority] ?? 'bg-gray-400'}`} />
+                        <span className="text-gray-600 capitalize text-xs">{claim.priority ?? '---'}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap font-data text-xs">
-                      {claim.agingBucket ?? '---'}
-                    </td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap font-data text-xs">{claim.agingBucket ?? '---'}</td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/claims/${claim._id}`);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); navigate(`/claims/${claim._id}`); }}
                         className="text-xs text-accent hover:text-accent-hover font-medium transition-colors"
                       >
                         View
@@ -370,197 +694,8 @@ export default function ClaimsPage() {
         </div>
       </div>
 
-      {/* New Claim Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="New Claim" wide>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Row 1: Claim Number + Date of Service */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={LABEL_CLASS}>Claim Number</label>
-              <input
-                type="text"
-                placeholder="CLM-00001"
-                value={form.claimNumber}
-                onChange={(e) => updateForm('claimNumber', e.target.value)}
-                className={INPUT_CLASS}
-                required
-              />
-            </div>
-            <div>
-              <label className={LABEL_CLASS}>Date of Service</label>
-              <input
-                type="date"
-                value={form.dateOfService}
-                onChange={(e) => updateForm('dateOfService', e.target.value)}
-                className={INPUT_CLASS}
-              />
-            </div>
-          </div>
-
-          {/* Row 2: Patient + Insurance Contact */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={LABEL_CLASS}>Patient</label>
-              <div className="relative">
-                <select
-                  value={form.patientId}
-                  onChange={(e) => updateForm('patientId', e.target.value)}
-                  className={`${INPUT_CLASS} appearance-none pr-8`}
-                >
-                  <option value="">Select patient...</option>
-                  {(patients ?? []).map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.firstName} {p.lastName}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className={LABEL_CLASS}>Insurance Contact</label>
-              <div className="relative">
-                <select
-                  value={form.insuranceContactId}
-                  onChange={(e) => updateForm('insuranceContactId', e.target.value)}
-                  className={`${INPUT_CLASS} appearance-none pr-8`}
-                >
-                  <option value="">Select insurance...</option>
-                  {(insuranceContacts ?? []).map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.company ?? c.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          {/* Row 3: Provider + Amount */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={LABEL_CLASS}>Provider</label>
-              <div className="relative">
-                <select
-                  value={form.providerId}
-                  onChange={(e) => updateForm('providerId', e.target.value)}
-                  className={`${INPUT_CLASS} appearance-none pr-8`}
-                >
-                  <option value="">Select provider...</option>
-                  {(providers ?? []).map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.practiceName}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className={LABEL_CLASS}>Amount ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={form.amount}
-                onChange={(e) => updateForm('amount', e.target.value)}
-                className={INPUT_CLASS}
-              />
-            </div>
-          </div>
-
-          {/* Row 4: Status + Priority + Aging Bucket */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className={LABEL_CLASS}>Status</label>
-              <div className="relative">
-                <select
-                  value={form.status}
-                  onChange={(e) => updateForm('status', e.target.value)}
-                  className={`${INPUT_CLASS} appearance-none pr-8`}
-                >
-                  {STATUS_OPTIONS.filter((o) => o.value).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className={LABEL_CLASS}>Priority</label>
-              <div className="relative">
-                <select
-                  value={form.priority}
-                  onChange={(e) => updateForm('priority', e.target.value)}
-                  className={`${INPUT_CLASS} appearance-none pr-8`}
-                >
-                  {PRIORITY_OPTIONS.filter((o) => o.value).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className={LABEL_CLASS}>Aging Bucket</label>
-              <div className="relative">
-                <select
-                  value={form.agingBucket}
-                  onChange={(e) => updateForm('agingBucket', e.target.value)}
-                  className={`${INPUT_CLASS} appearance-none pr-8`}
-                >
-                  {AGING_BUCKET_OPTIONS.filter((o) => o.value).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          {/* CPT Codes */}
-          <div>
-            <label className={LABEL_CLASS}>CPT Codes</label>
-            <input
-              type="text"
-              placeholder="99213, 99214, 99215"
-              value={form.cptCodes}
-              onChange={(e) => updateForm('cptCodes', e.target.value)}
-              className={INPUT_CLASS}
-            />
-            <p className="text-xs text-muted/60 mt-1">Comma-separated CPT codes</p>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className={LABEL_CLASS}>Notes</label>
-            <textarea
-              placeholder="Additional notes..."
-              value={form.notes}
-              onChange={(e) => updateForm('notes', e.target.value)}
-              rows={3}
-              className={`${INPUT_CLASS} resize-none`}
-            />
-          </div>
-
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={submitting || !form.claimNumber}
-            className="w-full py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? 'Creating...' : 'Create Claim'}
-          </button>
-        </form>
-      </Modal>
+      {/* Upload Claims Modal */}
+      <UploadClaimsModal open={uploadModalOpen} onClose={() => setUploadModalOpen(false)} />
     </div>
   );
 }

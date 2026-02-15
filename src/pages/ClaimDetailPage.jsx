@@ -21,6 +21,8 @@ import {
   DollarSign,
   MessageSquare,
   Info,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
@@ -249,6 +251,7 @@ export default function ClaimDetailPage() {
   const [callState, setCallState] = useState('idle'); // idle | calling | in_progress | error
   const [callError, setCallError] = useState(null);
   const [errorModalOpen, setErrorModalOpen] = useState(false);
+  const [piiVisible, setPiiVisible] = useState(false);
 
   // ---- Loading / Error states ---------------------------------------------
   if (data === undefined) {
@@ -309,6 +312,19 @@ export default function ClaimDetailPage() {
       setErrorModalOpen(true);
     }
   };
+
+  // ---- PII masking --------------------------------------------------------
+  function maskValue(value) {
+    if (piiVisible || !value) return value;
+    if (value.length <= 2) return '***';
+    return value[0] + '*'.repeat(Math.min(value.length - 2, 8)) + value[value.length - 1];
+  }
+
+  function maskDOB(dateStr) {
+    if (piiVisible) return formatDate(dateStr);
+    if (!dateStr) return '--';
+    return '*** **, ****';
+  }
 
   // ---- Derived values -----------------------------------------------------
   const hasActiveCall = callState === 'calling' || callState === 'in_progress' ||
@@ -426,18 +442,31 @@ export default function ClaimDetailPage() {
           )}
         </DetailCard>
 
-        {/* Patient Info */}
-        <DetailCard icon={User} title="Patient Information">
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-            <InfoField
-              label="Full Name"
-              value={patient ? `${patient.firstName} ${patient.lastName}` : '--'}
-            />
-            <InfoField label="Date of Birth" value={patient ? formatDate(patient.dateOfBirth) : '--'} />
-            <InfoField label="Member ID" value={patient?.memberId} mono />
-            <InfoField label="Group Number" value={patient?.groupNumber} mono />
+        {/* Patient Info (with PII masking) */}
+        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="border-b border-border px-5 py-3 flex items-center gap-2.5">
+            <User className="w-4 h-4 text-accent" />
+            <h3 className="text-sm font-display font-semibold text-gray-900">Patient Information</h3>
+            <button
+              onClick={() => setPiiVisible((v) => !v)}
+              className={`ml-auto p-1.5 rounded-lg transition-colors ${piiVisible ? 'text-accent bg-accent/10' : 'text-muted hover:text-gray-700 hover:bg-gray-100'}`}
+              title={piiVisible ? 'Hide patient data' : 'Reveal patient data'}
+            >
+              {piiVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            </button>
           </div>
-        </DetailCard>
+          <div className="px-5 py-4">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+              <InfoField
+                label="Full Name"
+                value={patient ? `${maskValue(patient.firstName)} ${maskValue(patient.lastName)}` : '--'}
+              />
+              <InfoField label="Date of Birth" value={patient ? maskDOB(patient.dateOfBirth) : '--'} />
+              <InfoField label="Member ID" value={maskValue(patient?.memberId)} mono />
+              <InfoField label="Group Number" value={maskValue(patient?.groupNumber)} mono />
+            </div>
+          </div>
+        </div>
 
         {/* Insurance Info */}
         <DetailCard icon={Building2} title="Insurance Information">

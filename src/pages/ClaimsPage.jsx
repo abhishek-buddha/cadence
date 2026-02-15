@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -15,6 +15,8 @@ import {
   X,
   Trash2,
   Download,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import StatusBadge from '../components/StatusBadge';
@@ -498,6 +500,80 @@ function UploadClaimsModal({ open, onClose }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// PII Masking
+// ---------------------------------------------------------------------------
+function maskPii(value) {
+  if (!value) return value;
+  if (value.length <= 2) return '***';
+  return value[0] + '*'.repeat(Math.min(value.length - 2, 8)) + value[value.length - 1];
+}
+
+// ---------------------------------------------------------------------------
+// Inline Status Dropdown
+// ---------------------------------------------------------------------------
+const CLAIM_STATUSES = [
+  { value: 'pending', label: 'Pending', dot: 'bg-warn' },
+  { value: 'in_progress', label: 'In Progress', dot: 'bg-accent' },
+  { value: 'paid', label: 'Paid', dot: 'bg-success' },
+  { value: 'denied', label: 'Denied', dot: 'bg-danger' },
+  { value: 'appealing', label: 'Appealing', dot: 'bg-purple-500' },
+  { value: 'write_off', label: 'Write Off', dot: 'bg-gray-400' },
+];
+
+function StatusDropdown({ claimId, currentStatus }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const updateStatus = useMutation(api.claims.updateStatus);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  async function handleSelect(status) {
+    setOpen(false);
+    if (status !== currentStatus) {
+      await updateStatus({ id: claimId, status });
+    }
+  }
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="cursor-pointer"
+      >
+        <StatusBadge status={currentStatus ?? 'unknown'} />
+      </button>
+      {open && (
+        <div
+          className="absolute z-50 right-1/2 translate-x-1/2 top-full mt-1.5 bg-white border border-border-light rounded-lg shadow-xl shadow-gray-200/60 py-1 min-w-[150px] animate-fade-in"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {CLAIM_STATUSES.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => handleSelect(s.value)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${
+                s.value === currentStatus
+                  ? 'bg-accent/5 text-accent font-medium'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${s.dot} shrink-0`} />
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===========================================================================
 // MAIN COMPONENT
 // ===========================================================================
@@ -517,6 +593,7 @@ export default function ClaimsPage() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [piiVisible, setPiiVisible] = useState(false);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
@@ -638,7 +715,16 @@ export default function ClaimsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Claims</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Claims</h1>
+            <button
+              onClick={() => setPiiVisible((v) => !v)}
+              className={`p-1.5 rounded-lg transition-colors ${piiVisible ? 'text-accent bg-accent/10' : 'text-muted hover:text-gray-700 hover:bg-gray-100'}`}
+              title={piiVisible ? 'Hide patient data' : 'Reveal patient data'}
+            >
+              {piiVisible ? <Eye className="w-4.5 h-4.5" /> : <EyeOff className="w-4.5 h-4.5" />}
+            </button>
+          </div>
           <p className="text-sm text-muted mt-1">
             {!isLoading && `${filteredClaims.length} claim${filteredClaims.length !== 1 ? 's' : ''}`}
           </p>
@@ -759,10 +845,10 @@ export default function ClaimsPage() {
                       />
                     </td>
                     <td className="px-4 py-3.5 font-data text-accent whitespace-nowrap">{claim.claimNumber}</td>
-                    <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{patientMap[claim.patientId] ?? '---'}</td>
+                    <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{piiVisible ? (patientMap[claim.patientId] ?? '---') : maskPii(patientMap[claim.patientId]) || '---'}</td>
                     <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{insuranceMap[claim.insuranceContactId] ?? '---'}</td>
                     <td className="px-4 py-3.5 font-data text-gray-900 text-right whitespace-nowrap">{formatCurrency(claim.amount)}</td>
-                    <td className="px-4 py-3.5 text-center whitespace-nowrap"><StatusBadge status={claim.status ?? 'unknown'} /></td>
+                    <td className="px-4 py-3.5 text-center whitespace-nowrap"><StatusDropdown claimId={claim._id} currentStatus={claim.status} /></td>
                     <td className="px-5 py-3.5 text-[13px] leading-snug text-gray-500">
                       {latestUpdate ? (
                         <span className="text-gray-700">{latestUpdate}</span>

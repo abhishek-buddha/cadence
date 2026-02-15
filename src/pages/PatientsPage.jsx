@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { Users, Plus, Pencil, Trash2, ChevronDown } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 import { useProviderFilter } from '../context/ProviderFilterContext';
@@ -29,6 +29,7 @@ export default function PatientsPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [piiVisible, setPiiVisible] = useState(false);
 
   const isLoading = allPatients === undefined;
 
@@ -108,6 +109,17 @@ export default function PatientsPage() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  function mask(value) {
+    if (piiVisible || !value) return value;
+    if (value.length <= 2) return '***';
+    return value[0] + '*'.repeat(Math.min(value.length - 2, 8)) + value[value.length - 1];
+  }
+
+  function maskDOB(dateStr) {
+    if (piiVisible) return formatDOB(dateStr);
+    return '*** **, ****';
+  }
+
   const inputClass =
     'w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
   const labelClass = 'block text-xs uppercase tracking-wider text-muted font-medium mb-1.5';
@@ -117,7 +129,16 @@ export default function PatientsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Patients</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Patient Information</h1>
+            <button
+              onClick={() => setPiiVisible((v) => !v)}
+              className={`p-1.5 rounded-lg transition-colors ${piiVisible ? 'text-accent bg-accent/10' : 'text-muted hover:text-gray-700 hover:bg-gray-100'}`}
+              title={piiVisible ? 'Hide patient data' : 'Reveal patient data'}
+            >
+              {piiVisible ? <Eye className="w-4.5 h-4.5" /> : <EyeOff className="w-4.5 h-4.5" />}
+            </button>
+          </div>
           <p className="text-sm text-muted mt-1">
             {patients ? `${patients.length} patient${patients.length !== 1 ? 's' : ''}` : 'Loading...'}
           </p>
@@ -169,13 +190,13 @@ export default function PatientsPage() {
                 {patients.map((patient) => (
                   <tr key={patient._id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      <span className="font-medium text-gray-900">{patient.firstName} {patient.lastName}</span>
+                      <span className="font-medium text-gray-900">{mask(patient.firstName)} {mask(patient.lastName)}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{formatDOB(patient.dateOfBirth)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{maskDOB(patient.dateOfBirth)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      <span className="font-data text-accent">{patient.memberId}</span>
+                      <span className="font-data text-accent">{mask(patient.memberId)}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{patient.groupNumber ?? '--'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{mask(patient.groupNumber) ?? '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 capitalize">{patient.relationship ?? '--'}</td>
                     <td className="px-4 py-3 text-sm text-right">
                       <div className="inline-flex items-center gap-1">

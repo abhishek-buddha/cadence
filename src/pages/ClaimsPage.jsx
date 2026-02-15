@@ -55,11 +55,13 @@ function formatDate(dateStr) {
 function ShimmerRow() {
   return (
     <tr>
-      {Array.from({ length: 7 }).map((_, i) => (
-        <td key={i} className="px-5 py-3.5">
+      <td className="pl-5 pr-2 py-3.5"><div className="shimmer rounded h-4 w-4" /></td>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <td key={i} className="px-4 py-3.5">
           <div className="shimmer rounded h-4 w-full" />
         </td>
       ))}
+      <td className="px-5 py-3.5"><div className="shimmer rounded h-4 w-full" /></td>
     </tr>
   );
 }
@@ -692,19 +694,10 @@ export default function ClaimsPage() {
 
       {/* Table */}
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
-        <table className="w-full text-sm">
-          <colgroup>
-            <col className="w-12" />
-            <col style={{ width: '14%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '12%' }} />
-            <col />
-          </colgroup>
+        <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
           <thead>
             <tr className="border-b border-border bg-white sticky top-0 z-10">
-              <th className="pl-5 pr-2 py-3.5">
+              <th className="pl-5 pr-2 py-3.5 w-10">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -712,12 +705,12 @@ export default function ClaimsPage() {
                   className="w-4 h-4 rounded border-border-light text-accent focus:ring-accent cursor-pointer"
                 />
               </th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Claim #</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Patient</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Insurance</th>
-              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Amount</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Status</th>
-              <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Latest Update</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Claim #</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Patient</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Insurance</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Amount</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Status</th>
+              <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold" style={{ minWidth: '250px', width: '99%' }}>Latest Update</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ProviderFilterProvider } from './context/ProviderFilterContext';
 import Layout from './components/Layout';
@@ -9,8 +10,22 @@ import InsuranceDirectory from './pages/InsuranceDirectory';
 import ProvidersPage from './pages/ProvidersPage';
 import CallHistory from './pages/CallHistory';
 import SettingsPage from './pages/SettingsPage';
+import AccessCodePage from './pages/AccessCodePage';
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(
+    () => sessionStorage.getItem('cadence_auth') === '1'
+  );
+
+  function handleAccessGranted() {
+    sessionStorage.setItem('cadence_auth', '1');
+    setAuthenticated(true);
+  }
+
+  if (!authenticated) {
+    return <AccessCodePage onSuccess={handleAccessGranted} />;
+  }
+
   return (
     <BrowserRouter>
       <ProviderFilterProvider>

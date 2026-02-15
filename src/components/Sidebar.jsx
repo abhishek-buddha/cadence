@@ -26,7 +26,7 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   return (
     <aside
-      className={`bg-white border-r border-border flex flex-col relative shrink-0 transition-all duration-300 ease-in-out ${
+      className={`bg-white border-r border-border flex flex-col relative shrink-0 transition-[width] duration-300 ease-in-out ${
         collapsed ? 'w-[68px]' : 'w-64'
       }`}
     >

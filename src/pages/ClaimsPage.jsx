@@ -691,7 +691,7 @@ export default function ClaimsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <colgroup>
             <col className="w-12" />

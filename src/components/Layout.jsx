@@ -18,11 +18,11 @@ function HospitalDropdown() {
   }, [open]);
 
   const options = [
-    { id: null, label: 'All Hospitals' },
+    { id: null, label: 'All Providers' },
     ...providers.map((p) => ({ id: p._id, label: p.practiceName })),
   ];
 
-  const selectedLabel = selectedProvider ? selectedProvider.practiceName : 'All Hospitals';
+  const selectedLabel = selectedProvider ? selectedProvider.practiceName : 'All Providers';
 
   return (
     <div className="relative" ref={ref}>
@@ -86,7 +86,7 @@ export default function Layout() {
           <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider font-medium">
               <Building2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Hospital</span>
+              <span className="hidden sm:inline">Provider</span>
             </div>
             <HospitalDropdown />
           </div>

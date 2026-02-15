@@ -11,6 +11,7 @@
 import type * as callActions from "../callActions.js";
 import type * as callResults from "../callResults.js";
 import type * as calls from "../calls.js";
+import type * as claimImport from "../claimImport.js";
 import type * as claims from "../claims.js";
 import type * as dashboard from "../dashboard.js";
 import type * as http from "../http.js";
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   callActions: typeof callActions;
   callResults: typeof callResults;
   calls: typeof calls;
+  claimImport: typeof claimImport;
   claims: typeof claims;
   dashboard: typeof dashboard;
   http: typeof http;

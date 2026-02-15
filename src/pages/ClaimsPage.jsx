@@ -56,7 +56,7 @@ function ShimmerRow() {
   return (
     <tr>
       {Array.from({ length: 7 }).map((_, i) => (
-        <td key={i} className="px-4 py-3">
+        <td key={i} className="px-5 py-3.5">
           <div className="shimmer rounded h-4 w-full" />
         </td>
       ))}
@@ -692,10 +692,19 @@ export default function ClaimsPage() {
 
       {/* Table */}
       <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-        <table className="w-full text-sm table-fixed">
+        <table className="w-full text-sm">
+          <colgroup>
+            <col className="w-12" />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '12%' }} />
+            <col />
+          </colgroup>
           <thead>
             <tr className="border-b border-border bg-white sticky top-0 z-10">
-              <th className="px-4 py-3 w-10">
+              <th className="pl-5 pr-2 py-3.5">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -703,12 +712,12 @@ export default function ClaimsPage() {
                   className="w-4 h-4 rounded border-border-light text-accent focus:ring-accent cursor-pointer"
                 />
               </th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[14%]">Claim #</th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[13%]">Patient</th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[13%]">Insurance</th>
-              <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[10%]">Amount</th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium w-[10%]">Status</th>
-              <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-muted font-medium">Latest Update</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Claim #</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Patient</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Insurance</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Amount</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Status</th>
+              <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Latest Update</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -748,7 +757,7 @@ export default function ClaimsPage() {
                     onClick={() => navigate(`/claims/${claim._id}`)}
                     className="table-row-hover cursor-pointer"
                   >
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="pl-5 pr-2 py-3.5" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selected.has(claim._id)}
@@ -756,14 +765,14 @@ export default function ClaimsPage() {
                         className="w-4 h-4 rounded border-border-light text-accent focus:ring-accent cursor-pointer"
                       />
                     </td>
-                    <td className="px-4 py-3 font-data text-accent truncate">{claim.claimNumber}</td>
-                    <td className="px-4 py-3 text-gray-600 truncate">{patientMap[claim.patientId] ?? '---'}</td>
-                    <td className="px-4 py-3 text-gray-600 truncate">{insuranceMap[claim.insuranceContactId] ?? '---'}</td>
-                    <td className="px-4 py-3 font-data text-gray-900 text-right">{formatCurrency(claim.amount)}</td>
-                    <td className="px-4 py-3"><StatusBadge status={claim.status ?? 'unknown'} /></td>
-                    <td className="px-4 py-3 text-xs text-gray-500 truncate">
+                    <td className="px-4 py-3.5 font-data text-accent whitespace-nowrap">{claim.claimNumber}</td>
+                    <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{patientMap[claim.patientId] ?? '---'}</td>
+                    <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{insuranceMap[claim.insuranceContactId] ?? '---'}</td>
+                    <td className="px-4 py-3.5 font-data text-gray-900 text-right whitespace-nowrap">{formatCurrency(claim.amount)}</td>
+                    <td className="px-4 py-3.5 text-center whitespace-nowrap"><StatusBadge status={claim.status ?? 'unknown'} /></td>
+                    <td className="px-5 py-3.5 text-[13px] leading-snug text-gray-500">
                       {latestUpdate ? (
-                        <span className="text-gray-600">{latestUpdate}</span>
+                        <span className="text-gray-700">{latestUpdate}</span>
                       ) : (
                         <span className="text-muted italic">No calls yet</span>
                       )}

@@ -137,6 +137,7 @@ export default function ProvidersPage() {
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Practice Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">NPI</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Tax ID</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Address</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Phone</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Specialty</th>
                   <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted font-semibold">Actions</th>
@@ -154,6 +155,7 @@ export default function ProvidersPage() {
                     <td className="px-4 py-3 text-sm text-gray-600">
                       <span className="font-data">{provider.taxId}</span>
                     </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 max-w-[200px] truncate" title={provider.address}>{provider.address || '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 font-data">{provider.phone}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{provider.specialty ?? '--'}</td>
                     <td className="px-4 py-3 text-sm text-right">

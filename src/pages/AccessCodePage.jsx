@@ -1,14 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
-import { Activity, Lock, ArrowRight } from 'lucide-react';
+import { useAction } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import { Activity, Lock, ArrowRight, Loader2 } from 'lucide-react';
 
 const CODE_LENGTH = 6;
-const VALID_CODE = '472394';
 
 export default function AccessCodePage({ onSuccess }) {
   const [digits, setDigits] = useState(Array(CODE_LENGTH).fill(''));
   const [error, setError] = useState(false);
   const [shaking, setShaking] = useState(false);
+  const [validating, setValidating] = useState(false);
   const inputRefs = useRef([]);
+  const validateAccessCode = useAction(api.dashboard.validateAccessCode);
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
@@ -60,16 +63,29 @@ export default function AccessCodePage({ onSuccess }) {
     }
   }
 
-  function submit(code) {
-    if (code === VALID_CODE) {
-      onSuccess();
-    } else {
-      setError(true);
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      setDigits(Array(CODE_LENGTH).fill(''));
-      setTimeout(() => inputRefs.current[0]?.focus(), 100);
+  async function submit(code) {
+    if (validating || code.length !== CODE_LENGTH) return;
+    setValidating(true);
+    try {
+      const result = await validateAccessCode({ code });
+      if (result.valid) {
+        onSuccess();
+      } else {
+        showError();
+      }
+    } catch {
+      showError();
+    } finally {
+      setValidating(false);
     }
+  }
+
+  function showError() {
+    setError(true);
+    setShaking(true);
+    setTimeout(() => setShaking(false), 500);
+    setDigits(Array(CODE_LENGTH).fill(''));
+    setTimeout(() => inputRefs.current[0]?.focus(), 100);
   }
 
   return (
@@ -132,13 +148,14 @@ export default function AccessCodePage({ onSuccess }) {
                 value={d}
                 onChange={(e) => handleChange(i, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(i, e)}
+                disabled={validating}
                 className={`w-12 h-14 text-center text-xl font-data font-semibold rounded-lg border-2 outline-none transition-all duration-200 ${
                   error
                     ? 'border-red-400 bg-red-500/20 text-red-200'
                     : d
                       ? 'border-white/50 bg-white/15 text-white'
                       : 'border-white/20 bg-white/5 text-white focus:border-white/50 focus:bg-white/15'
-                }`}
+                } disabled:opacity-50`}
               />
             ))}
           </div>
@@ -153,11 +170,20 @@ export default function AccessCodePage({ onSuccess }) {
           {/* Submit button */}
           <button
             onClick={() => submit(digits.join(''))}
-            disabled={digits.some((d) => !d)}
+            disabled={digits.some((d) => !d) || validating}
             className="w-full flex items-center justify-center gap-2 h-11 rounded-lg bg-white text-gray-900 font-display font-semibold text-sm hover:bg-white/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            Continue
-            <ArrowRight className="w-4 h-4" />
+            {validating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Verifying...
+              </>
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </div>
 

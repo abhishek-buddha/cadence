@@ -1,3 +1,6 @@
+import { useState, useEffect } from 'react';
+import { useAction } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import {
   Settings,
   Database,
@@ -6,6 +9,7 @@ import {
   Mic,
   CheckCircle2,
   Info,
+  Loader2,
 } from 'lucide-react';
 
 function Section({ title, icon: Icon, children }) {
@@ -20,7 +24,7 @@ function Section({ title, icon: Icon, children }) {
   );
 }
 
-function StatusRow({ label, description, configured = false }) {
+function StatusRow({ label, description, configured = false, loading = false }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-border/50 last:border-b-0">
       <div>
@@ -28,7 +32,12 @@ function StatusRow({ label, description, configured = false }) {
         {description && <p className="text-xs text-muted mt-0.5">{description}</p>}
       </div>
       <div className="flex items-center gap-2">
-        {configured ? (
+        {loading ? (
+          <>
+            <Loader2 className="w-4 h-4 text-muted animate-spin" />
+            <span className="text-xs font-medium text-muted">Checking...</span>
+          </>
+        ) : configured ? (
           <>
             <CheckCircle2 className="w-4 h-4 text-success" />
             <span className="text-xs font-medium text-success">Configured</span>
@@ -45,6 +54,17 @@ function StatusRow({ label, description, configured = false }) {
 }
 
 export default function SettingsPage() {
+  const checkApiConfig = useAction(api.dashboard.checkApiConfig);
+  const [apiStatus, setApiStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkApiConfig()
+      .then(setApiStatus)
+      .catch(() => setApiStatus({ openai: false, elevenlabs: false, twilio: false }))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl">
       {/* Header */}
@@ -69,24 +89,27 @@ export default function SettingsPage() {
       {/* API Configuration */}
       <Section title="API Configuration" icon={Key}>
         <p className="text-xs text-muted mb-4">
-          API keys are managed via environment variables on the server. These indicators show whether
-          each service is expected to be available.
+          API keys are managed via environment variables on the server. These indicators reflect
+          actual configuration status from the backend.
         </p>
         <div className="divide-y divide-border/50">
           <StatusRow
             label="OpenAI"
-            description="GPT-4 for transcript analysis and data extraction"
-            configured={true}
+            description="GPT-5.2 for transcript analysis and data extraction"
+            configured={apiStatus?.openai ?? false}
+            loading={loading}
           />
           <StatusRow
             label="ElevenLabs"
             description="Conversational AI voice agent for insurance calls"
-            configured={true}
+            configured={apiStatus?.elevenlabs ?? false}
+            loading={loading}
           />
           <StatusRow
             label="Twilio"
             description="Phone connectivity for outbound voice calls"
-            configured={true}
+            configured={apiStatus?.twilio ?? false}
+            loading={loading}
           />
         </div>
       </Section>

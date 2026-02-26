@@ -100,8 +100,8 @@ http.route({
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (error: any) {
-      console.error('Webhook processing error:', error);
-      return new Response(JSON.stringify({ error: 'Processing failed' }), {
+      console.error('Webhook processing error:', error.message, error.stack);
+      return new Response(JSON.stringify({ error: 'Processing failed', detail: error.message }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });

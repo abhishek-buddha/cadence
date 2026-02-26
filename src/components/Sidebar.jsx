@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   FileText,
-
+  Users,
   Building2,
   Stethoscope,
   PhoneCall,
@@ -15,7 +15,7 @@ import {
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/claims', icon: FileText, label: 'Claims' },
-
+  { to: '/patients', icon: Users, label: 'Patients' },
   { to: '/insurance', icon: Building2, label: 'Insurance' },
   { to: '/providers', icon: Stethoscope, label: 'Providers' },
   { to: '/calls', icon: PhoneCall, label: 'Call History' },

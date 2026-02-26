@@ -5,7 +5,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import ClaimsPage from './pages/ClaimsPage';
 import ClaimDetailPage from './pages/ClaimDetailPage';
-
+import PatientsPage from './pages/PatientsPage';
 import InsuranceDirectory from './pages/InsuranceDirectory';
 import ProvidersPage from './pages/ProvidersPage';
 import CallHistory from './pages/CallHistory';
@@ -35,6 +35,7 @@ export default function App() {
             <Route path="claims" element={<ClaimsPage />} />
             <Route path="claims/:id" element={<ClaimDetailPage />} />
 
+            <Route path="patients" element={<PatientsPage />} />
             <Route path="insurance" element={<InsuranceDirectory />} />
             <Route path="providers" element={<ProvidersPage />} />
             <Route path="calls" element={<CallHistory />} />

@@ -54,7 +54,7 @@ export const processExcelData = action({
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4.1',
+        model: 'gpt-5.2',
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
@@ -255,7 +255,7 @@ export const bulkImportClaims = mutation({
         let patientId = claim.matchedPatientId as any;
         if (!patientId) {
           // Check if we already created this patient in this batch
-          const patientKey = `${claim.patientFirstName}_${claim.patientLastName}_${claim.memberId}`;
+          const patientKey = `${claim.patientFirstName}_${claim.patientLastName}_${claim.memberId}_${claim.patientDOB}`;
           if (createdPatients.has(patientKey)) {
             patientId = createdPatients.get(patientKey);
           } else {

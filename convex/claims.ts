@@ -119,6 +119,17 @@ export const update = mutation({
   },
 });
 
+const VALID_STATUSES = ['pending', 'in_progress', 'paid', 'denied', 'appealing', 'write_off'];
+
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  pending: ['in_progress', 'paid', 'denied', 'write_off'],
+  in_progress: ['paid', 'denied', 'appealing', 'pending', 'write_off'],
+  paid: ['in_progress', 'appealing'],
+  denied: ['appealing', 'in_progress', 'write_off'],
+  appealing: ['in_progress', 'paid', 'denied', 'write_off'],
+  write_off: ['pending', 'in_progress'],
+};
+
 export const updateStatus = mutation({
   args: {
     id: v.id('claims'),
@@ -131,11 +142,24 @@ export const updateStatus = mutation({
     nextFollowUpDate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
+    const { id, status, ...rest } = args;
+
+    if (!VALID_STATUSES.includes(status)) {
+      throw new Error(`Invalid status: ${status}`);
+    }
+
+    const claim = await ctx.db.get(id);
+    if (!claim) throw new Error('Claim not found');
+
+    const allowed = ALLOWED_TRANSITIONS[claim.status] || VALID_STATUSES;
+    if (claim.status !== status && !allowed.includes(status)) {
+      throw new Error(`Cannot transition from "${claim.status}" to "${status}"`);
+    }
+
     const filtered = Object.fromEntries(
-      Object.entries(updates).filter(([, v]) => v !== undefined)
+      Object.entries(rest).filter(([, v]) => v !== undefined)
     );
-    await ctx.db.patch(id, { ...filtered, updatedAt: new Date().toISOString() });
+    await ctx.db.patch(id, { ...filtered, status, updatedAt: new Date().toISOString() });
   },
 });
 

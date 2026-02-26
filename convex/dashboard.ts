@@ -1,4 +1,4 @@
-import { query } from './_generated/server';
+import { query, action } from './_generated/server';
 import { v } from 'convex/values';
 
 export const getStats = query({
@@ -69,9 +69,28 @@ export const getStats = query({
       successRate:
         allCalls.length > 0 ? Math.round((completedCalls / allCalls.length) * 100) : 0,
       totalBilled,
-      recoveredAmount,
+      recoveredAmount: recoveredAmount || 0,
       byAgingBucket,
       byStatus,
     };
+  },
+});
+
+export const checkApiConfig = action({
+  args: {},
+  handler: async () => {
+    return {
+      openai: !!process.env.OPENAI_API_KEY,
+      elevenlabs: !!process.env.ELEVENLABS_API_KEY,
+      twilio: !!(process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID),
+    };
+  },
+});
+
+export const validateAccessCode = action({
+  args: { code: v.string() },
+  handler: async (_, args) => {
+    const validCode = process.env.CADENCE_ACCESS_CODE || '472394';
+    return { valid: args.code === validCode };
   },
 });

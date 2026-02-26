@@ -3,11 +3,24 @@ import { ConvexProvider, ConvexReactClient } from 'convex/react';
 import App from './App.jsx';
 import './index.css';
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL || '');
+const convexUrl = import.meta.env.VITE_CONVEX_URL;
 
-// No StrictMode - avoids double-mount issues with persistent connections
-createRoot(document.getElementById('root')).render(
-  <ConvexProvider client={convex}>
-    <App />
-  </ConvexProvider>
-);
+if (!convexUrl) {
+  createRoot(document.getElementById('root')).render(
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'system-ui', color: '#dc2626', padding: '2rem', textAlign: 'center' }}>
+      <div>
+        <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Configuration Error</h1>
+        <p>VITE_CONVEX_URL environment variable is not set. The app cannot connect to the backend.</p>
+      </div>
+    </div>
+  );
+} else {
+  const convex = new ConvexReactClient(convexUrl);
+
+  // No StrictMode - avoids double-mount issues with persistent connections
+  createRoot(document.getElementById('root')).render(
+    <ConvexProvider client={convex}>
+      <App />
+    </ConvexProvider>
+  );
+}

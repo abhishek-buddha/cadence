@@ -36,9 +36,9 @@ function CallRow({ call }) {
   );
   const callResult = useQuery(api.callResults.getByCall, expanded ? { callId: call._id } : 'skip');
 
-  // For the table row, also fetch claim/insurance for display
-  const claimPreview = useQuery(api.claims.getById, { id: call.claimId });
-  const insurancePreview = useQuery(api.insuranceContacts.getById, { id: call.insuranceContactId });
+  // For the table row, reuse the expanded data or fetch only when needed
+  const claimPreview = useQuery(api.claims.getById, call.claimId ? { id: call.claimId } : 'skip');
+  const insurancePreview = useQuery(api.insuranceContacts.getById, call.insuranceContactId ? { id: call.insuranceContactId } : 'skip');
 
   return (
     <div className="border-b border-border/50 last:border-b-0">

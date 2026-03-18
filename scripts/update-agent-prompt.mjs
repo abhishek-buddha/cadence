@@ -2,7 +2,8 @@
 // Run: node scripts/update-agent-prompt.mjs
 
 const AGENT_ID = 'agent_4201khe51edkerfsyg6kfg8x75h6';
-const API_KEY = 'sk_a746e1ef3eed8ad91ca97bbb811192dd4db0164b47159a6b';
+const apiKey = process.env.ELEVENLABS_API_KEY;
+if (!apiKey) { console.error('ELEVENLABS_API_KEY not set'); process.exit(1); }
 
 const SYSTEM_PROMPT = `You are Thomas, an AR follow-up specialist at {{practice_name}}. You're calling an insurance company to check on a claim. You sound like a real, friendly human — not a robot reading a script.
 
@@ -114,7 +115,7 @@ async function updateAgent() {
   console.log('Fetching current agent config...');
 
   const getRes = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${AGENT_ID}`, {
-    headers: { 'xi-api-key': API_KEY }
+    headers: { 'xi-api-key': apiKey }
   });
   const current = await getRes.json();
   console.log('Current agent name:', current.name);
@@ -144,7 +145,7 @@ async function updateAgent() {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      'xi-api-key': API_KEY
+      'xi-api-key': apiKey
     },
     body: JSON.stringify(patchBody)
   });
@@ -162,7 +163,7 @@ async function updateAgent() {
   // Verify
   console.log('\nVerifying update...');
   const verifyRes = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${AGENT_ID}`, {
-    headers: { 'xi-api-key': API_KEY }
+    headers: { 'xi-api-key': apiKey }
   });
   const verified = await verifyRes.json();
   console.log('First message:', verified.conversation_config?.agent?.first_message?.substring(0, 100) + '...');

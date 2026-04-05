@@ -501,7 +501,8 @@ http.route({
     const digits = params.get('Digits') || '';
     const speech = (params.get('SpeechResult') || '').toLowerCase();
 
-    if (digits === '1' || speech.includes('claim') || speech.includes('billing')) {
+    // Accept ANY input to move to claims submenu (production IVRs route by digit)
+    if (digits || speech) {
       return twimlResponse(`
         <Response>
           <Gather input="speech dtmf" numDigits="1" timeout="15" speechTimeout="3" action="${siteUrl}/test-ivr-hold${fwdParam}" method="POST">
@@ -519,7 +520,7 @@ http.route({
 
     return twimlResponse(`
       <Response>
-        <Say voice="Polly.Joanna">That option is not available. Goodbye.</Say>
+        <Say voice="Polly.Joanna">We did not receive a response. Goodbye.</Say>
         <Hangup/>
       </Response>
     `);

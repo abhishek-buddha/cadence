@@ -113,31 +113,9 @@ export const initiateCall = action({
         }
       }
 
-      // Step 3: Attach a passive Twilio monitor stream for browser listening
-      // This uses the Twilio Streams REST API on the call SID that ElevenLabs created
-      if (callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
-        try {
-          const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
-          const streamUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}/Streams.json`;
-          const streamParams = new URLSearchParams();
-          streamParams.append('Url', `${BRIDGE_URL}/monitor`);
-          streamParams.append('Track', 'both_tracks');
-          streamParams.append('Name', `monitor-${callId}`);
-          streamParams.append('Parameter1.Name', 'callId');
-          streamParams.append('Parameter1.Value', callId);
-
-          await fetch(streamUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`),
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: streamParams.toString(),
-          });
-        } catch (streamErr: any) {
-          console.error('Failed to attach monitor stream (non-fatal):', streamErr.message);
-        }
-      }
+      // Note: Twilio Streams REST API removed — call SID belongs to ElevenLabs'
+      // Twilio subaccount, not ours, so stream attachment always fails silently.
+      // Audio monitoring relies on ElevenLabs monitor WebSocket via bridge /start-monitor.
 
       // 5. Update claim
       await ctx.runMutation(api.claims.update, {
@@ -315,7 +293,7 @@ IMPORTANT RULES:
 
 Return a JSON object with ONLY these fields:
 {
-  "claimStatus": "processing|paid|denied|pending_review|no_record|unknown",
+  "claimStatus": "processing|paid|denied|pending_review|no_record|voicemail|ivr_only|no_answer|unknown",
   "paidAmount": null,
   "paidDate": null,
   "checkOrEftNumber": null,
@@ -330,7 +308,13 @@ Return a JSON object with ONLY these fields:
   "nextSteps": "string"
 }
 
-Use null for any field where the information was NOT explicitly provided in the call.`,
+Use null for any field where the information was NOT explicitly provided in the call.
+
+SPECIAL STATUSES:
+- Use "voicemail" if the call went to voicemail or an answering machine
+- Use "ivr_only" if the agent only reached an automated IVR system and never spoke to a human
+- Use "no_answer" if the call rang but nobody answered
+- Use "unknown" ONLY as a last resort when none of the above apply`,
           },
           {
             role: 'user',
@@ -437,19 +421,26 @@ export const getCallStatus = action({
         try {
           const call = await ctx.runQuery(api.calls.getById, { id: args.callId });
           if (call && call.status === 'in_progress') {
-            // Mark call completed
-            await ctx.runMutation(api.calls.updateStatus, {
-              id: args.callId,
-              status: 'completed',
-              completedAt: new Date().toISOString(),
-              duration: data.metadata?.call_duration_secs || undefined,
-            });
-
-            // Build transcript string for analysis
+            // Build transcript string
             const transcriptStr = (data.transcript || [])
               .filter((t: any) => t.message)
               .map((t: any) => `${t.role}: ${t.message}`)
               .join('\n');
+
+            // Calculate duration — use ElevenLabs metadata or compute from startedAt
+            const elDuration = data.metadata?.call_duration_secs;
+            const computedDuration = call.startedAt
+              ? Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000)
+              : undefined;
+
+            // Mark call completed WITH transcript and duration
+            await ctx.runMutation(api.calls.updateStatus, {
+              id: args.callId,
+              status: 'completed',
+              completedAt: new Date().toISOString(),
+              duration: elDuration || computedDuration || undefined,
+              transcript: transcriptStr || undefined,
+            });
 
             // Trigger transcript analysis if we have transcript + claimId
             if (transcriptStr && args.claimId) {

@@ -86,7 +86,7 @@ export default function LiveCallMonitor({ call, insurance }) {
               return;
             }
           }
-        } catch {}
+        } catch (err) { console.warn('Call status poll error:', err); }
         if (!cancelled) pollRef.current = setTimeout(poll, 3000);
       }
       poll();
@@ -118,18 +118,14 @@ export default function LiveCallMonitor({ call, insurance }) {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [effectiveTranscript.length]);
 
-  // Audio player — batched playback
+  // Audio player — batched playback (AudioContext created on user click via ensureAudioContext)
   useEffect(() => {
     playIntervalRef.current = setInterval(() => {
       if (mutedRef.current) return;
+      const ctx = audioCtxRef.current;
+      if (!ctx || ctx.state !== 'running') return;
       const queue = audioQueueRef.current;
       if (queue.length < 2000) return;
-
-      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-        audioCtxRef.current = new AudioContext();
-      }
-      const ctx = audioCtxRef.current;
-      if (ctx.state === 'suspended') ctx.resume();
 
       const samples = new Float32Array(queue.splice(0, queue.length));
       const buffer = ctx.createBuffer(1, samples.length, 8000);
@@ -179,7 +175,7 @@ export default function LiveCallMonitor({ call, insurance }) {
               audioQueueRef.current.splice(0, audioQueueRef.current.length - 24000);
             }
           }
-        } catch {}
+        } catch (err) { console.warn('Audio WS parse error:', err); }
       };
 
       ws.onclose = () => {
@@ -202,9 +198,18 @@ export default function LiveCallMonitor({ call, insurance }) {
     };
   }, [call?._id, isCompleted]);
 
+  function ensureAudioContext() {
+    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+      audioCtxRef.current = new AudioContext();
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume();
+    }
+  }
+
   function handleUnmute() {
     setMuted(false);
-    if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
+    ensureAudioContext();
   }
 
   function formatEntry(entry) {
@@ -261,9 +266,17 @@ export default function LiveCallMonitor({ call, insurance }) {
           </div>
           <button
             type="button"
-            onClick={() => muted ? handleUnmute() : setMuted(true)}
+            onClick={() => {
+              if (muted) {
+                handleUnmute();
+              } else {
+                setMuted(true);
+              }
+              // Always ensure AudioContext is initialized on any click (user gesture)
+              ensureAudioContext();
+            }}
             className={`p-2 rounded-lg transition-colors ${muted ? 'text-muted hover:text-gray-900 hover:bg-gray-100' : 'text-accent hover:bg-accent/10'}`}
-            title={muted ? 'Unmute' : 'Mute'}
+            title={muted ? 'Click to listen' : 'Mute'}
           >
             {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>

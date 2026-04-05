@@ -61,11 +61,25 @@ export const listRecent = query({
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject || 'default';
     const limit = args.limit ?? 20;
-    return await ctx.db
+    const calls = await ctx.db
       .query('calls')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .order('desc')
       .take(limit);
+
+    // Join claim and insurance data for dashboard display
+    const enriched = await Promise.all(
+      calls.map(async (call) => {
+        const claim = await ctx.db.get(call.claimId);
+        const insurance = claim ? await ctx.db.get(claim.insuranceContactId) : null;
+        return {
+          ...call,
+          claimNumber: claim?.claimNumber ?? null,
+          insuranceCompany: insurance?.name ?? null,
+        };
+      })
+    );
+    return enriched;
   },
 });
 

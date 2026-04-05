@@ -838,9 +838,9 @@ export default function ClaimsPage() {
                     <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{insuranceMap[claim.insuranceContactId] ?? '---'}</td>
                     <td className="px-4 py-3.5 font-data text-gray-900 text-right whitespace-nowrap">{formatCurrency(claim.amount)}</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap"><StatusDropdown claimId={claim._id} currentStatus={claim.status} /></td>
-                    <td className="px-5 py-3.5 text-[13px] leading-snug text-gray-500">
+                    <td className="px-5 py-3.5 text-[13px] leading-snug text-gray-500 max-w-[300px]">
                       {latestUpdate ? (
-                        <span className="text-gray-700">{latestUpdate}</span>
+                        <span className="text-gray-700 line-clamp-2" title={latestUpdate}>{latestUpdate}</span>
                       ) : (
                         <span className="text-muted italic">No calls yet</span>
                       )}

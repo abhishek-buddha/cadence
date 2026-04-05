@@ -335,12 +335,20 @@ export default function ClaimDetailPage() {
     return elapsed > 30 * 60 * 1000; // 30 minutes
   };
 
+  // Also show LiveCallMonitor for recently completed calls (30s grace period)
+  // so the user can see the "Call Completed" summary and transcript
+  const isRecentlyCompleted = (call) => {
+    if (call?.status !== 'completed' || !call?.completedAt) return false;
+    return Date.now() - new Date(call.completedAt).getTime() < 30000;
+  };
+
   const hasActiveCall = callState === 'calling' || callState === 'in_progress' ||
-    (calls && calls.length > 0 && ['initiating', 'ringing', 'in_progress'].includes(calls[0].status) && !isCallStale(calls[0]));
+    (calls && calls.length > 0 && ['initiating', 'ringing', 'in_progress'].includes(calls[0].status) && !isCallStale(calls[0])) ||
+    (calls && calls.length > 0 && isRecentlyCompleted(calls[0]));
 
   const activeCall = calls?.find((c) =>
     ['initiating', 'ringing', 'in_progress'].includes(c.status) && !isCallStale(c)
-  );
+  ) || calls?.find((c) => isRecentlyCompleted(c));
 
   // =========================================================================
   // RENDER

@@ -437,10 +437,9 @@ export const getCallStatus = action({
       if (!res.ok) return null;
       const data = await res.json();
 
-      const isDone = data.status === 'done';
+      const isDone = data.status === 'done' || data.status === 'failed';
 
-      // When ElevenLabs reports "done", auto-complete the call in Convex
-      // This fixes: stuck in_progress, timer keeps running, no transcript analysis
+      // When ElevenLabs reports "done" or "failed", auto-complete the call in Convex
       if (isDone && args.callId) {
         try {
           const call = await ctx.runQuery(api.calls.getById, { id: args.callId });

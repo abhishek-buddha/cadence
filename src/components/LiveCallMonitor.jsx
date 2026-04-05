@@ -100,14 +100,15 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
           });
           if (data && !cancelled) {
             // Freeze timer SYNCHRONOUSLY before async state update
-            if (data.status === 'done' && callDoneDurationRef.current == null) {
+            const isTerminal = data.status === 'done' || data.status === 'failed';
+            if (isTerminal && callDoneDurationRef.current == null) {
               callDoneDurationRef.current = data.duration ||
                 (call?.startedAt ? Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000) : 0);
               completionTriggeredRef.current = true;
               if (onComplete) onComplete(call._id);
             }
             setPolledData(data);
-            if (data.status === 'done') {
+            if (isTerminal) {
               cancelled = true;
               return;
             }
@@ -125,7 +126,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     };
   }, [call?.elevenLabsConversationId, call?._id, call?.claimId, getCallStatus, onComplete]);
 
-  const isCompleted = polledData?.status === 'done' || call?.status === 'completed' || call?.status === 'failed';
+  const isCompleted = polledData?.status === 'done' || polledData?.status === 'failed' || call?.status === 'completed' || call?.status === 'failed';
 
   const effectiveTranscript = useMemo(() => {
     if (!polledData?.transcript) return [];

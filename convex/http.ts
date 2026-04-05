@@ -13,6 +13,64 @@ function twimlResponse(twiml: string): Response {
 
 const http = httpRouter();
 
+// ---- TwiML: Call start — sets up monitor + ElevenLabs bridge from the start ----
+http.route({
+  path: '/twiml-call-start',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const callId = url.searchParams.get('callId') || '';
+    const claimId = url.searchParams.get('claimId') || '';
+
+    const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+
+    return twimlResponse(`
+      <Response>
+        <Start>
+          <Stream url="${BRIDGE_URL}/monitor" track="both_tracks">
+            <Parameter name="callId" value="${callId}"/>
+          </Stream>
+        </Start>
+        <Connect>
+          <Stream url="${BRIDGE_URL}/media-stream">
+            <Parameter name="callId" value="${callId}"/>
+            <Parameter name="claimId" value="${claimId}"/>
+          </Stream>
+        </Connect>
+      </Response>
+    `);
+  }),
+});
+
+// Also handle GET in case Twilio sends GET for the initial TwiML fetch
+http.route({
+  path: '/twiml-call-start',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const callId = url.searchParams.get('callId') || '';
+    const claimId = url.searchParams.get('claimId') || '';
+
+    const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+
+    return twimlResponse(`
+      <Response>
+        <Start>
+          <Stream url="${BRIDGE_URL}/monitor" track="both_tracks">
+            <Parameter name="callId" value="${callId}"/>
+          </Stream>
+        </Start>
+        <Connect>
+          <Stream url="${BRIDGE_URL}/media-stream">
+            <Parameter name="callId" value="${callId}"/>
+            <Parameter name="claimId" value="${claimId}"/>
+          </Stream>
+        </Connect>
+      </Response>
+    `);
+  }),
+});
+
 // ---- TwiML: Hold loop with speech detection (Phase 2) ----
 http.route({
   path: '/twiml-hold-loop',

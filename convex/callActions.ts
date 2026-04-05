@@ -26,60 +26,98 @@ export const initiateCall = action({
       startedAt: new Date().toISOString(),
     });
 
-    // 3. Call Twilio REST API to initiate outbound call
-    // The TwiML connects BOTH a monitor stream (for browser audio) AND the
-    // ElevenLabs agent (via bridge server) from the very start.
+    // 3. Use ElevenLabs native outbound call API (proven to work with IVR)
+    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+    const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
+    const AGENT_PHONE_NUMBER_ID = process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID;
     const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
     const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-    const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
-    const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL || 'https://colorless-cardinal-959.convex.site';
 
-    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
+    if (!ELEVENLABS_API_KEY || !AGENT_ID || !AGENT_PHONE_NUMBER_ID) {
       await ctx.runMutation(api.calls.updateStatus, {
         id: callId,
         status: 'failed',
-        errorMessage: 'Missing Twilio credentials in environment variables',
+        errorMessage: 'Missing ElevenLabs credentials in environment variables',
       });
-      throw new Error('Twilio not configured');
+      throw new Error('ElevenLabs not configured');
     }
 
     try {
-      const twimlUrl = `${CONVEX_SITE_URL}/twiml-call-start?callId=${callId}&claimId=${args.claimId}`;
-      const statusCallbackUrl = `${CONVEX_SITE_URL}/twilio-status`;
-
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls.json`;
-      const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
-
-      const params = new URLSearchParams();
-      params.append('To', insurance.phone);
-      params.append('From', TWILIO_PHONE_NUMBER);
-      params.append('Url', twimlUrl);
-      params.append('StatusCallback', statusCallbackUrl);
-      params.append('StatusCallbackEvent', 'initiated ringing answered completed');
-      params.append('Timeout', '60');
-
-      const response = await fetch(twilioUrl, {
+      // Step 1: Call ElevenLabs native outbound call — handles IVR navigation natively
+      const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
         method: 'POST',
         headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
+          'xi-api-key': ELEVENLABS_API_KEY,
         },
-        body: params.toString(),
+        body: JSON.stringify({
+          agent_id: AGENT_ID,
+          agent_phone_number_id: AGENT_PHONE_NUMBER_ID,
+          to_number: insurance.phone,
+          conversation_initiation_client_data: {
+            dynamic_variables: {
+              practice_name: provider.practiceName,
+              npi: provider.npi,
+              tax_id: provider.taxId,
+              callback_number: provider.phone,
+              patient_name: `${patient.firstName} ${patient.lastName}`,
+              patient_dob: patient.dateOfBirth,
+              member_id: patient.memberId,
+              group_number: patient.groupNumber || 'N/A',
+              claim_number: claim.claimNumber,
+              date_of_service: claim.dateOfService,
+              billed_amount: (claim.amount / 100).toFixed(2),
+              cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
+              internal_call_id: callId,
+              internal_claim_id: args.claimId,
+            },
+          },
+        }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Twilio API error ${response.status}: ${errorText}`);
+        throw new Error(`ElevenLabs API error ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
+      // ElevenLabs returns { call_sid, conversation_id, ... } or similar
+      const callSid = result.call_sid || result.callSid;
+      const conversationId = result.conversation_id || result.conversationId;
 
-      // 4. Update call record with Twilio SID
+      // 4. Update call record with ElevenLabs conversation ID and Twilio SID (if returned)
       await ctx.runMutation(api.calls.updateStatus, {
         id: callId,
         status: 'in_progress',
-        twilioCallSid: result.sid,
+        twilioCallSid: callSid || undefined,
+        elevenLabsConversationId: conversationId || undefined,
       });
+
+      // Step 2: Attach a passive Twilio monitor stream for browser listening
+      // This uses the Twilio Streams REST API on the call SID that ElevenLabs created
+      if (callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+        try {
+          const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+          const streamUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}/Streams.json`;
+          const streamParams = new URLSearchParams();
+          streamParams.append('Url', `${BRIDGE_URL}/monitor`);
+          streamParams.append('Track', 'both_tracks');
+          streamParams.append('Name', `monitor-${callId}`);
+          streamParams.append('Parameter1.Name', 'callId');
+          streamParams.append('Parameter1.Value', callId);
+
+          await fetch(streamUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`),
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: streamParams.toString(),
+          });
+        } catch (streamErr: any) {
+          console.error('Failed to attach monitor stream (non-fatal):', streamErr.message);
+        }
+      }
 
       // 5. Update claim
       await ctx.runMutation(api.claims.update, {
@@ -88,7 +126,7 @@ export const initiateCall = action({
         status: claim.status === 'pending' ? 'in_progress' : claim.status,
       });
 
-      return { success: true, callId, twilioCallSid: result.sid };
+      return { success: true, callId, twilioCallSid: callSid, conversationId };
     } catch (error: any) {
       await ctx.runMutation(api.calls.updateStatus, {
         id: callId,

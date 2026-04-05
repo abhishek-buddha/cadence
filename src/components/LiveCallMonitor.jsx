@@ -109,7 +109,15 @@ export default function LiveCallMonitor({ call, insurance }) {
       nextPlayTimeRef.current = startAt + buffer.duration;
     }, 250);
 
-    return () => clearInterval(playIntervalRef.current);
+    return () => {
+      clearInterval(playIntervalRef.current);
+      audioQueueRef.current = [];
+      nextPlayTimeRef.current = 0;
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -179,6 +187,13 @@ export default function LiveCallMonitor({ call, insurance }) {
     return () => {
       clearTimeout(retryTimeout);
       if (ws) ws.close();
+      // Stop all audio immediately on unmount
+      audioQueueRef.current = [];
+      nextPlayTimeRef.current = 0;
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
       wsRef.current = null;
       audioQueueRef.current = [];
     };

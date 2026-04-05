@@ -93,7 +93,27 @@ export const initiateCall = action({
         elevenLabsConversationId: conversationId || undefined,
       });
 
-      // Step 2: Attach a passive Twilio monitor stream for browser listening
+      // Step 2: Tell bridge server to monitor this conversation for real-time events
+      const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+      const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL || 'https://colorless-cardinal-959.convex.site';
+      if (conversationId) {
+        try {
+          const bridgeHttpUrl = BRIDGE_URL.replace('wss://', 'https://').replace('ws://', 'http://');
+          await fetch(`${bridgeHttpUrl}/start-monitor`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversationId,
+              callId,
+              convexSiteUrl: CONVEX_SITE_URL,
+            }),
+          });
+        } catch (e: any) {
+          console.error('Failed to start monitor (non-fatal):', e.message);
+        }
+      }
+
+      // Step 3: Attach a passive Twilio monitor stream for browser listening
       // This uses the Twilio Streams REST API on the call SID that ElevenLabs created
       if (callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
         try {

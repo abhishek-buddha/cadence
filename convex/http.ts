@@ -4,6 +4,11 @@ import { api } from './_generated/api';
 
 const MAX_HOLD_ATTEMPTS = 30; // 30 × 60s = 30 minutes max hold
 
+const corsHeaders: Record<string, string> = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+};
+
 function twimlResponse(twiml: string): Response {
   return new Response(twiml.trim(), {
     status: 200,
@@ -345,6 +350,56 @@ http.route({
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }),
+});
+
+// ---- Real-time call events (from bridge server monitoring ElevenLabs conversations) ----
+http.route({
+  path: '/call-events',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { callId, type, message } = body;
+      if (!callId || !type) {
+        return new Response(JSON.stringify({ error: 'Missing callId or type' }), {
+          status: 400,
+          headers: corsHeaders,
+        });
+      }
+      await ctx.runMutation(api.callEvents.addEvent, {
+        callId,
+        type,
+        message: message || undefined,
+        timestamp: new Date().toISOString(),
+      });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: corsHeaders,
+      });
+    } catch (error: any) {
+      console.error('[call-events] Error:', error.message);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: corsHeaders,
+      });
+    }
+  }),
+});
+
+// CORS preflight for call-events
+http.route({
+  path: '/call-events',
+  method: 'OPTIONS',
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       },
     });

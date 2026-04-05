@@ -143,4 +143,12 @@ export default defineSchema({
     .index('by_callId', ['callId'])
     .index('by_claimId', ['claimId'])
     .index('by_userId', ['userId']),
+
+  // Real-time call events (streamed from ElevenLabs monitor WebSocket via bridge server)
+  callEvents: defineTable({
+    callId: v.id('calls'),
+    type: v.string(), // "user_transcript" | "agent_response" | "tool_call" | "status"
+    message: v.optional(v.string()),
+    timestamp: v.string(),
+  }).index('by_callId', ['callId']),
 });

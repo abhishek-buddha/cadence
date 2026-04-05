@@ -9,6 +9,7 @@
  */
 
 import type * as callActions from "../callActions.js";
+import type * as callEvents from "../callEvents.js";
 import type * as callResults from "../callResults.js";
 import type * as calls from "../calls.js";
 import type * as claimImport from "../claimImport.js";
@@ -27,6 +28,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   callActions: typeof callActions;
+  callEvents: typeof callEvents;
   callResults: typeof callResults;
   calls: typeof calls;
   claimImport: typeof claimImport;

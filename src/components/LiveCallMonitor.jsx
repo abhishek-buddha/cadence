@@ -1,28 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { useAction } from 'convex/react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Phone, Clock, CheckCircle2, Radio, Pause, Users, MessageSquare, Loader2 } from 'lucide-react';
-
-// ---------------------------------------------------------------------------
-// Phase detection from transcript
-// ---------------------------------------------------------------------------
-function detectPhase(transcript) {
-  if (!transcript || transcript.length === 0) return 'connecting';
-
-  const lastFew = transcript.slice(-5);
-  const hasHumanConversation = lastFew.some(t =>
-    t.role === 'agent' && t.message && t.message.length > 30 &&
-    !t.message.includes('still here') && !t.message.includes('checking in')
-  );
-
-  if (hasHumanConversation) return 'conversation';
-
-  const allText = transcript.map(t => (t.message || '').toLowerCase()).join(' ');
-  if (allText.includes('hold') || allText.includes('wait') || allText.includes('important')) return 'hold';
-  if (transcript.some(t => t.message === null)) return 'ivr'; // null messages = DTMF
-
-  return 'connecting';
-}
 
 // ---------------------------------------------------------------------------
 // Elapsed timer
@@ -53,59 +32,79 @@ function useElapsedTimer(startIso, frozenDuration) {
 // ---------------------------------------------------------------------------
 export default function LiveCallMonitor({ call, insurance }) {
   const getCallStatus = useAction(api.callActions.getCallStatus);
-  const [callData, setCallData] = useState(null);
-  const [phase, setPhase] = useState('connecting');
   const transcriptEndRef = useRef(null);
-  const pollRef = useRef(null);
+  const completionTriggeredRef = useRef(false);
 
-  const frozenDuration = phase === 'completed' && callData?.duration ? callData.duration : null;
-  const elapsed = useElapsedTimer(call?.startedAt, frozenDuration);
+  // Real-time subscription to call events via Convex
+  const events = useQuery(
+    api.callEvents.listByCall,
+    call?._id ? { callId: call._id } : 'skip'
+  );
 
-  // Poll ElevenLabs every 5 seconds
+  // Derive phase from real-time events
+  const phase = useMemo(() => {
+    if (!events || events.length === 0) return 'connecting';
+
+    // Check for call ended status event
+    const hasEnded = events.some(e => e.type === 'status' && e.message === 'Call ended');
+    if (hasEnded) return 'completed';
+
+    // Also check if the call record itself is completed/failed
+    if (call?.status === 'completed' || call?.status === 'failed') return 'completed';
+
+    const lastEvents = events.slice(-5);
+
+    // Check for human conversation (agent responses with substantial content)
+    const hasConversation = lastEvents.some(e =>
+      e.type === 'agent_response' && e.message && e.message.length > 30 &&
+      !e.message.includes('still here') && !e.message.includes('checking in')
+    );
+    if (hasConversation) return 'conversation';
+
+    // Check for hold indicators
+    const allText = events.map(e => (e.message || '').toLowerCase()).join(' ');
+    if (allText.includes('hold') || allText.includes('wait') || allText.includes('important')) return 'hold';
+
+    // Check for IVR (tool calls = DTMF key presses)
+    if (events.some(e => e.type === 'tool_call')) return 'ivr';
+
+    return 'connecting';
+  }, [events, call?.status]);
+
+  // Map events to transcript entries for display
+  const transcript = useMemo(() => {
+    return (events || [])
+      .filter(e => e.type !== 'status')
+      .map(e => ({
+        role: e.type === 'agent_response' ? 'agent' : e.type === 'tool_call' ? 'agent' : 'user',
+        message: e.type === 'tool_call' ? null : e.message,
+      }));
+  }, [events]);
+
+  // When phase becomes 'completed', trigger getCallStatus ONCE to finalize the call
+  // (mark as done in Convex, trigger transcript analysis)
   useEffect(() => {
+    if (phase !== 'completed') return;
+    if (completionTriggeredRef.current) return;
     if (!call?.elevenLabsConversationId) return;
 
-    let cancelled = false;
+    completionTriggeredRef.current = true;
+    getCallStatus({
+      conversationId: call.elevenLabsConversationId,
+      callId: call._id,
+      claimId: call.claimId,
+    }).catch(() => {
+      // Non-fatal: webhook or status callback may have already handled this
+    });
+  }, [phase, call?.elevenLabsConversationId, call?._id, call?.claimId, getCallStatus]);
 
-    async function poll() {
-      if (cancelled) return;
-      try {
-        const data = await getCallStatus({
-          conversationId: call.elevenLabsConversationId,
-          callId: call._id,
-          claimId: call.claimId,
-        });
-        if (data && !cancelled) {
-          setCallData(data);
-          const newPhase = data.status === 'done' ? 'completed' : detectPhase(data.transcript);
-          setPhase(newPhase);
-          // Stop polling once call is done
-          if (newPhase === 'completed') {
-            cancelled = true;
-            return;
-          }
-        }
-      } catch {
-        // ignore polling errors
-      }
-      if (!cancelled) {
-        pollRef.current = setTimeout(poll, 5000);
-      }
-    }
-
-    poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(pollRef.current);
-    };
-  }, [call?.elevenLabsConversationId, getCallStatus]);
+  const frozenDuration = phase === 'completed' && call?.duration ? call.duration : null;
+  const elapsed = useElapsedTimer(call?.startedAt, frozenDuration);
 
   // Auto-scroll transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [callData?.transcript?.length]);
-
-  const transcript = callData?.transcript || [];
+  }, [transcript.length]);
 
   // Phase definitions
   const phases = [
@@ -196,17 +195,15 @@ export default function LiveCallMonitor({ call, insurance }) {
       )}
 
       {/* Completed summary */}
-      {phase === 'completed' && callData?.analysis && (
+      {phase === 'completed' && (
         <div className="bg-white/80 border border-success/20 rounded-lg p-3 space-y-2">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-success" />
-            <span className="text-sm font-medium text-gray-900">
-              Call {callData.analysis.successful === 'success' ? 'Successful' : 'Completed'}
-            </span>
+            <span className="text-sm font-medium text-gray-900">Call Completed</span>
           </div>
-          {callData.analysis.summary && (
-            <p className="text-xs text-gray-600 leading-relaxed">{callData.analysis.summary}</p>
-          )}
+          <p className="text-xs text-gray-600 leading-relaxed">
+            Transcript analysis is processing. Results will appear in the claim details shortly.
+          </p>
         </div>
       )}
 

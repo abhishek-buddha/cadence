@@ -22,19 +22,18 @@ function useElapsedTimer(startIso) {
 }
 
 // ---------------------------------------------------------------------------
-// Mu-law decode table (standard ITU-T G.711)
+// Standard ITU-T G.711 mu-law decode table
 // ---------------------------------------------------------------------------
-const MULAW_DECODE = new Int16Array(256);
-(function buildTable() {
-  for (let i = 0; i < 256; i++) {
-    let mu = ~i & 0xff;
-    let sign = mu & 0x80 ? -1 : 1;
-    let exponent = (mu >> 4) & 0x07;
-    let mantissa = mu & 0x0f;
-    let sample = (mantissa * 2 + 33) * (1 << exponent) - 33;
-    MULAW_DECODE[i] = sign * sample;
-  }
-})();
+const MULAW_TABLE = new Int16Array(256);
+for (let i = 0; i < 256; i++) {
+  const v = ~i;
+  const sign = v & 0x80;
+  let exponent = (v >> 4) & 0x07;
+  let mantissa = v & 0x0f;
+  let magnitude = ((mantissa << 1) + 33) << (exponent + 3);
+  magnitude -= 0x84;
+  MULAW_TABLE[i] = sign ? -magnitude : magnitude;
+}
 
 // ---------------------------------------------------------------------------
 // Phase config
@@ -47,29 +46,64 @@ const PHASE_CONFIG = {
 };
 
 // ---------------------------------------------------------------------------
-// LiveCallMonitor — shows during active call with live audio + transcript
+// LiveCallMonitor
 // ---------------------------------------------------------------------------
 export default function LiveCallMonitor({ call, insurance }) {
   const elapsed = useElapsedTimer(call?.startedAt);
 
-  const [audioStatus, setAudioStatus] = useState('connecting'); // connecting | live | disconnected
+  const [audioStatus, setAudioStatus] = useState('connecting');
   const [muted, setMuted] = useState(false);
   const [transcripts, setTranscripts] = useState([]);
   const [callPhase, setCallPhase] = useState('connecting');
   const wsRef = useRef(null);
-  const audioCtxRef = useRef(null);
   const mutedRef = useRef(false);
   const transcriptEndRef = useRef(null);
 
-  // Keep muted ref in sync
+  // Audio playback refs
+  const audioCtxRef = useRef(null);
+  const audioQueueRef = useRef([]); // buffered PCM Float32 samples
+  const nextPlayTimeRef = useRef(0);
+  const playIntervalRef = useRef(null);
+
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
-  // Auto-scroll transcript
   useEffect(() => {
     if (transcriptEndRef.current) {
       transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [transcripts]);
+
+  // Audio player — accumulates samples and plays in 200ms batches
+  useEffect(() => {
+    playIntervalRef.current = setInterval(() => {
+      if (mutedRef.current) return;
+      const queue = audioQueueRef.current;
+      if (queue.length < 1600) return; // wait for at least 200ms of audio (8000 * 0.2)
+
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioContext({ sampleRate: 8000 });
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      // Take all available samples
+      const samples = new Float32Array(queue.splice(0, queue.length));
+      const buffer = ctx.createBuffer(1, samples.length, 8000);
+      buffer.getChannelData(0).set(samples);
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+
+      // Schedule sequentially to avoid gaps/overlaps
+      const now = ctx.currentTime;
+      const startAt = Math.max(now, nextPlayTimeRef.current);
+      source.start(startAt);
+      nextPlayTimeRef.current = startAt + buffer.duration;
+    }, 200);
+
+    return () => clearInterval(playIntervalRef.current);
+  }, []);
 
   useEffect(() => {
     if (!call?._id) return;
@@ -77,6 +111,15 @@ export default function LiveCallMonitor({ call, insurance }) {
     const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'wss://cadence-bridge.onrender.com';
     let ws;
     let retryTimeout;
+
+    function decodeMulaw(base64Payload) {
+      const binary = atob(base64Payload);
+      const samples = new Float32Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xff] / 32768.0;
+      }
+      return samples;
+    }
 
     function connect() {
       ws = new WebSocket(`${BRIDGE_URL}/listen/${call._id}`);
@@ -89,18 +132,17 @@ export default function LiveCallMonitor({ call, insurance }) {
           const data = JSON.parse(event.data);
 
           if (data.event === 'audio' && data.media?.payload) {
-            if (!mutedRef.current) {
-              playMulawAudio(data.media.payload);
+            // Decode mulaw and push to audio queue
+            const pcm = decodeMulaw(data.media.payload);
+            audioQueueRef.current.push(...pcm);
+            // Cap queue at 2 seconds of audio to prevent memory buildup
+            if (audioQueueRef.current.length > 16000) {
+              audioQueueRef.current.splice(0, audioQueueRef.current.length - 16000);
             }
           } else if (data.event === 'transcript') {
-            const entry = {
-              role: data.role,
-              text: data.text,
-              time: Date.now(),
-            };
+            const entry = { role: data.role, text: data.text, time: Date.now() };
             setTranscripts(prev => [...prev.slice(-50), entry]);
 
-            // Auto-detect phase from transcript content
             const text = (data.text || '').toLowerCase();
             if (text.includes('press') || text.includes('menu') || text.includes('option') || text.includes('dial')) {
               setCallPhase('ivr');
@@ -117,7 +159,6 @@ export default function LiveCallMonitor({ call, insurance }) {
 
       ws.onclose = () => {
         setAudioStatus('disconnected');
-        // Retry after 3s if call is still active
         retryTimeout = setTimeout(() => {
           if (wsRef.current === ws) connect();
         }, 3000);
@@ -126,42 +167,16 @@ export default function LiveCallMonitor({ call, insurance }) {
       ws.onerror = () => ws.close();
     }
 
-    function playMulawAudio(base64Payload) {
-      try {
-        if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-          audioCtxRef.current = new AudioContext({ sampleRate: 8000 });
-        }
-        const ctx = audioCtxRef.current;
-        if (ctx.state === 'suspended') ctx.resume();
-
-        const raw = atob(base64Payload);
-        const samples = new Float32Array(raw.length);
-        for (let i = 0; i < raw.length; i++) {
-          samples[i] = MULAW_DECODE[raw.charCodeAt(i)] / 32768;
-        }
-
-        const buffer = ctx.createBuffer(1, samples.length, 8000);
-        buffer.getChannelData(0).set(samples);
-
-        const source = ctx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(ctx.destination);
-        source.start();
-      } catch {
-        // Audio playback errors are non-fatal
-      }
-    }
-
     connect();
 
     return () => {
       clearTimeout(retryTimeout);
       if (ws) ws.close();
       wsRef.current = null;
+      audioQueueRef.current = [];
     };
   }, [call?._id]);
 
-  // Resume AudioContext on user interaction (browser autoplay policy)
   const handleUnmute = () => {
     setMuted(false);
     if (audioCtxRef.current?.state === 'suspended') {
@@ -181,15 +196,10 @@ export default function LiveCallMonitor({ call, insurance }) {
             <Phone className="w-5 h-5 text-accent animate-pulse" />
           </div>
           <div>
-            <p className="text-sm font-display font-semibold text-gray-900">
-              Call in Progress
-            </p>
-            <p className="text-xs text-muted">
-              {insurance?.name || 'Insurance'} — AI agent is handling the call
-            </p>
+            <p className="text-sm font-display font-semibold text-gray-900">Call in Progress</p>
+            <p className="text-xs text-muted">{insurance?.name || 'Insurance'} — AI agent is handling the call</p>
           </div>
         </div>
-
         <div className="flex items-center gap-2 bg-white/80 border border-border rounded-lg px-3 py-2">
           <Clock className="w-3.5 h-3.5 text-muted" />
           <span className="font-data text-sm text-gray-900">{elapsed}</span>
@@ -200,18 +210,12 @@ export default function LiveCallMonitor({ call, insurance }) {
       <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${phaseConfig.bgColor} ${phaseConfig.borderColor}`}>
         <PhaseIcon className={`w-4 h-4 ${phaseConfig.color}`} />
         <span className={`text-sm font-medium ${phaseConfig.color}`}>{phaseConfig.label}</span>
-        {callPhase === 'ivr' && (
-          <span className="text-xs text-muted ml-auto">Agent is navigating the phone menu</span>
-        )}
-        {callPhase === 'hold' && (
-          <span className="text-xs text-muted ml-auto">Waiting for a representative</span>
-        )}
-        {callPhase === 'conversation' && (
-          <span className="text-xs text-muted ml-auto">Speaking with insurance rep</span>
-        )}
+        {callPhase === 'ivr' && <span className="text-xs text-muted ml-auto">Agent is navigating the phone menu</span>}
+        {callPhase === 'hold' && <span className="text-xs text-muted ml-auto">Waiting for a representative</span>}
+        {callPhase === 'conversation' && <span className="text-xs text-muted ml-auto">Speaking with insurance rep</span>}
       </div>
 
-      {/* Live transcript log */}
+      {/* Live transcript */}
       {transcripts.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5 px-1">
@@ -256,13 +260,10 @@ export default function LiveCallMonitor({ call, insurance }) {
             </>
           )}
         </div>
-
         <button
           type="button"
           onClick={() => muted ? handleUnmute() : setMuted(true)}
-          className={`p-2 rounded-lg transition-colors ${
-            muted ? 'text-muted hover:text-gray-900 hover:bg-gray-100' : 'text-accent hover:bg-accent/10'
-          }`}
+          className={`p-2 rounded-lg transition-colors ${muted ? 'text-muted hover:text-gray-900 hover:bg-gray-100' : 'text-accent hover:bg-accent/10'}`}
           title={muted ? 'Unmute' : 'Mute'}
         >
           {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}

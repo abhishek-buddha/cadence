@@ -394,6 +394,8 @@ Use null for any field where the information was NOT explicitly provided in the 
 export const getCallStatus = action({
   args: {
     conversationId: v.string(),
+    callId: v.optional(v.id('calls')),
+    claimId: v.optional(v.id('claims')),
   },
   handler: async (ctx, args) => {
     const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
@@ -407,12 +409,53 @@ export const getCallStatus = action({
       if (!res.ok) return null;
       const data = await res.json();
 
+      const isDone = data.status === 'done';
+
+      // When ElevenLabs reports "done", auto-complete the call in Convex
+      // This fixes: stuck in_progress, timer keeps running, no transcript analysis
+      if (isDone && args.callId) {
+        try {
+          const call = await ctx.runQuery(api.calls.getById, { id: args.callId });
+          if (call && call.status === 'in_progress') {
+            // Mark call completed
+            await ctx.runMutation(api.calls.updateStatus, {
+              id: args.callId,
+              status: 'completed',
+              completedAt: new Date().toISOString(),
+              duration: data.metadata?.call_duration_secs || undefined,
+            });
+
+            // Build transcript string for analysis
+            const transcriptStr = (data.transcript || [])
+              .filter((t: any) => t.message)
+              .map((t: any) => `${t.role}: ${t.message}`)
+              .join('\n');
+
+            // Trigger transcript analysis if we have transcript + claimId
+            if (transcriptStr && args.claimId) {
+              try {
+                await ctx.runAction(api.callActions.analyzeTranscript, {
+                  callId: args.callId,
+                  claimId: args.claimId,
+                  transcript: transcriptStr,
+                  userId: call.userId,
+                });
+              } catch (analysisErr: any) {
+                console.error('Transcript analysis failed:', analysisErr.message);
+              }
+            }
+          }
+        } catch (e: any) {
+          console.error('Failed to auto-complete call:', e.message);
+        }
+      }
+
       return {
-        status: data.status, // "active" or "done"
+        status: data.status,
         duration: data.metadata?.call_duration_secs || 0,
         transcript: (data.transcript || []).map((t: any) => ({
           role: t.role,
-          message: t.message || null, // null means DTMF tool call
+          message: t.message || null,
         })),
         analysis: data.analysis ? {
           successful: data.analysis.call_successful,

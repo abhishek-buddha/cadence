@@ -27,17 +27,21 @@ function detectPhase(transcript) {
 // ---------------------------------------------------------------------------
 // Elapsed timer
 // ---------------------------------------------------------------------------
-function useElapsedTimer(startIso) {
+function useElapsedTimer(startIso, frozenDuration) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
+    if (frozenDuration != null) {
+      setElapsed(frozenDuration);
+      return;
+    }
     if (!startIso) return;
     const start = new Date(startIso).getTime();
     const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - start) / 1000)));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [startIso]);
+  }, [startIso, frozenDuration]);
 
   const m = Math.floor(elapsed / 60);
   const s = elapsed % 60;
@@ -48,12 +52,14 @@ function useElapsedTimer(startIso) {
 // LiveCallMonitor
 // ---------------------------------------------------------------------------
 export default function LiveCallMonitor({ call, insurance }) {
-  const elapsed = useElapsedTimer(call?.startedAt);
   const getCallStatus = useAction(api.callActions.getCallStatus);
   const [callData, setCallData] = useState(null);
   const [phase, setPhase] = useState('connecting');
   const transcriptEndRef = useRef(null);
   const pollRef = useRef(null);
+
+  const frozenDuration = phase === 'completed' && callData?.duration ? callData.duration : null;
+  const elapsed = useElapsedTimer(call?.startedAt, frozenDuration);
 
   // Poll ElevenLabs every 5 seconds
   useEffect(() => {
@@ -64,10 +70,20 @@ export default function LiveCallMonitor({ call, insurance }) {
     async function poll() {
       if (cancelled) return;
       try {
-        const data = await getCallStatus({ conversationId: call.elevenLabsConversationId });
+        const data = await getCallStatus({
+          conversationId: call.elevenLabsConversationId,
+          callId: call._id,
+          claimId: call.claimId,
+        });
         if (data && !cancelled) {
           setCallData(data);
-          setPhase(data.status === 'done' ? 'completed' : detectPhase(data.transcript));
+          const newPhase = data.status === 'done' ? 'completed' : detectPhase(data.transcript);
+          setPhase(newPhase);
+          // Stop polling once call is done
+          if (newPhase === 'completed') {
+            cancelled = true;
+            return;
+          }
         }
       } catch {
         // ignore polling errors

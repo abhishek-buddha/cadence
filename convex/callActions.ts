@@ -91,14 +91,42 @@ export const initiateCall = action({
         twilioCallSid: result.callSid || undefined,
       });
 
-      // 5. Update claim
-      await ctx.runMutation(api.claims.update, {
+      // 5. Attach a live audio monitor stream via Twilio Streams API
+      // This taps into the call audio without interrupting ElevenLabs
+      const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+      const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+      const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+
+      if (result.callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+        try {
+          const streamUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${result.callSid}/Streams.json`;
+          const streamParams = new URLSearchParams();
+          streamParams.append('Url', `${BRIDGE_URL}/monitor`);
+          streamParams.append('Track', 'both_tracks');
+          streamParams.append('Parameter1.Name', 'callId');
+          streamParams.append('Parameter1.Value', callId);
+
+          await fetch(streamUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`),
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: streamParams.toString(),
+          });
+        } catch (streamErr: any) {
+          console.error('Failed to attach monitor stream (non-fatal):', streamErr.message);
+        }
+      }
+
+      // 6. Update claim
+      await ctx.runMutation(api.calls.update, {
         id: args.claimId,
         lastCalledAt: new Date().toISOString(),
         status: claim.status === 'pending' ? 'in_progress' : claim.status,
       });
 
-      return { success: true, callId, conversationId: result.conversation_id };
+      return { success: true, callId, conversationId: result.conversation_id, twilioCallSid: result.callSid };
     } catch (error: any) {
       await ctx.runMutation(api.calls.updateStatus, {
         id: callId,

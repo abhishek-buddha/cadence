@@ -126,7 +126,7 @@ export const initiateCall = action({
           streamParams.append('Parameter1.Name', 'callId');
           streamParams.append('Parameter1.Value', callId);
 
-          await fetch(streamUrl, {
+          const streamRes = await fetch(streamUrl, {
             method: 'POST',
             headers: {
               'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`),
@@ -134,8 +134,10 @@ export const initiateCall = action({
             },
             body: streamParams.toString(),
           });
+          const streamBody = await streamRes.text();
+          console.log(`Twilio Streams: ${streamRes.status} for callSid=${callSid}`, streamBody.substring(0, 200));
         } catch (streamErr: any) {
-          console.error('Failed to attach monitor stream (non-fatal):', streamErr.message);
+          console.error('Failed to attach monitor stream:', streamErr.message);
         }
       }
 

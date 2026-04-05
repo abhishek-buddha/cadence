@@ -205,6 +205,7 @@ http.route({
 
       // Find call by Twilio SID
       const call = await ctx.runQuery(api.calls.getByTwilioSid, { twilioCallSid: callSid });
+      console.log(`[twilio-status] CallSid=${callSid} Status=${callStatus} Duration=${duration} Found=${!!call}`);
 
       if (call) {
         if (callStatus === 'completed') {

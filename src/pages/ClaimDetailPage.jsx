@@ -328,11 +328,18 @@ export default function ClaimDetailPage() {
   }
 
   // ---- Derived values -----------------------------------------------------
+  // Treat calls stuck as in_progress for >30 min as stale (not active)
+  const isCallStale = (call) => {
+    if (!call?.startedAt) return false;
+    const elapsed = Date.now() - new Date(call.startedAt).getTime();
+    return elapsed > 30 * 60 * 1000; // 30 minutes
+  };
+
   const hasActiveCall = callState === 'calling' || callState === 'in_progress' ||
-    (calls && calls.length > 0 && ['initiating', 'ringing', 'in_progress'].includes(calls[0].status));
+    (calls && calls.length > 0 && ['initiating', 'ringing', 'in_progress'].includes(calls[0].status) && !isCallStale(calls[0]));
 
   const activeCall = calls?.find((c) =>
-    ['initiating', 'in_progress'].includes(c.status)
+    ['initiating', 'in_progress'].includes(c.status) && !isCallStale(c)
   );
 
   // =========================================================================

@@ -552,7 +552,7 @@ http.route({
       <Response>
         <Say voice="Polly.Joanna">Please hold while we transfer you to the next available claims representative.
           Your estimated wait time is approximately 2 minutes. Your call is important to us.</Say>
-        <Pause length="5"/>
+        <Play>http://com.twilio.music.soft-rock.s3.amazonaws.com/_ghost_-_promo_2_sample_pack.mp3</Play>
         <Say voice="Polly.Joanna">Thank you for your continued patience.</Say>
         <Pause length="2"/>
         ${afterHold}

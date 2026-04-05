@@ -339,7 +339,7 @@ export default function ClaimDetailPage() {
     (calls && calls.length > 0 && ['initiating', 'ringing', 'in_progress'].includes(calls[0].status) && !isCallStale(calls[0]));
 
   const activeCall = calls?.find((c) =>
-    ['initiating', 'in_progress'].includes(c.status) && !isCallStale(c)
+    ['initiating', 'ringing', 'in_progress'].includes(c.status) && !isCallStale(c)
   );
 
   // =========================================================================

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { Phone, Clock, CheckCircle2, MessageSquare, Volume2, VolumeX } from 'lucide-react';
+import { Phone, Clock, CheckCircle2, MessageSquare, Volume2, VolumeX, Loader2 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Standard ITU-T G.711 mu-law decode table
@@ -270,12 +270,23 @@ export default function LiveCallMonitor({ call, insurance }) {
         </div>
       )}
 
-      {/* Transcript — shown after call completes */}
-      {isCompleted && effectiveTranscript.length > 0 && (
+      {/* Live Transcript — shown during AND after call */}
+      {effectiveTranscript.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5 px-1">
             <MessageSquare className="w-3.5 h-3.5 text-muted" />
-            <span className="text-xs font-medium text-muted uppercase tracking-wider">Call Transcript</span>
+            <span className="text-xs font-medium text-muted uppercase tracking-wider">
+              {isCompleted ? 'Call Transcript' : 'Live Transcript'}
+            </span>
+            {!isCompleted && (
+              <span className="flex items-center gap-1 ml-2">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-accent" />
+                </span>
+                <span className="text-xs text-accent font-medium">Live</span>
+              </span>
+            )}
           </div>
           <div className="bg-white/60 border border-border rounded-lg p-3 max-h-56 overflow-y-auto space-y-1.5">
             {effectiveTranscript.map((t, i) => (
@@ -286,6 +297,14 @@ export default function LiveCallMonitor({ call, insurance }) {
             ))}
             <div ref={transcriptEndRef} />
           </div>
+        </div>
+      )}
+
+      {/* Waiting for transcript — during call before transcript arrives */}
+      {!isCompleted && effectiveTranscript.length === 0 && (
+        <div className="bg-white/60 border border-border rounded-lg p-4 flex items-center gap-3">
+          <Loader2 className="w-4 h-4 text-accent animate-spin" />
+          <span className="text-sm text-muted">Waiting for transcript data...</span>
         </div>
       )}
 

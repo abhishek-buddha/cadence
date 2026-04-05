@@ -472,7 +472,7 @@ http.route({
     const fwdParam = forwardNumber ? `?forwardNumber=${encodeURIComponent(forwardNumber)}` : '';
     return twimlResponse(`
       <Response>
-        <Gather input="speech dtmf" numDigits="1" timeout="6" speechTimeout="2" action="${siteUrl}/test-ivr-level2${fwdParam}" method="POST">
+        <Gather input="speech dtmf" numDigits="1" timeout="15" speechTimeout="3" action="${siteUrl}/test-ivr-level2${fwdParam}" method="POST">
           <Say voice="Polly.Joanna">Thank you for calling Acme Health Insurance, a preferred provider organization.
             Please listen carefully as our menu options have recently changed.
             For claims and billing, press 1 or say claims.
@@ -504,7 +504,7 @@ http.route({
     if (digits === '1' || speech.includes('claim') || speech.includes('billing')) {
       return twimlResponse(`
         <Response>
-          <Gather input="speech dtmf" numDigits="1" timeout="6" speechTimeout="2" action="${siteUrl}/test-ivr-hold${fwdParam}" method="POST">
+          <Gather input="speech dtmf" numDigits="1" timeout="15" speechTimeout="3" action="${siteUrl}/test-ivr-hold${fwdParam}" method="POST">
             <Say voice="Polly.Joanna">You have reached the claims department.
               For claim status inquiry, press 1 or say claim status.
               To file a new claim, press 2.

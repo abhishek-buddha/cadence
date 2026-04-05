@@ -22,17 +22,16 @@ function useElapsedTimer(startIso) {
 }
 
 // ---------------------------------------------------------------------------
-// Standard ITU-T G.711 mu-law decode table
+// Standard ITU-T G.711 mu-law decode table (correct implementation)
 // ---------------------------------------------------------------------------
-const MULAW_TABLE = new Int16Array(256);
+const MULAW_TABLE = new Float32Array(256);
 for (let i = 0; i < 256; i++) {
-  const v = ~i;
-  const sign = v & 0x80;
-  let exponent = (v >> 4) & 0x07;
-  let mantissa = v & 0x0f;
-  let magnitude = ((mantissa << 1) + 33) << (exponent + 3);
-  magnitude -= 0x84;
-  MULAW_TABLE[i] = sign ? -magnitude : magnitude;
+  let mulaw = ~i & 0xFF;
+  const sign = mulaw & 0x80;
+  const exponent = (mulaw >> 4) & 0x07;
+  const mantissa = mulaw & 0x0F;
+  let magnitude = ((2 * mantissa + 33) << exponent) - 33;
+  MULAW_TABLE[i] = (sign ? -magnitude : magnitude) / 32768.0;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,9 +60,10 @@ export default function LiveCallMonitor({ call, insurance }) {
 
   // Audio playback refs
   const audioCtxRef = useRef(null);
-  const audioQueueRef = useRef([]); // buffered PCM Float32 samples
+  const audioQueueRef = useRef([]); // buffered decoded Float32 samples
   const nextPlayTimeRef = useRef(0);
   const playIntervalRef = useRef(null);
+  const MULAW_SAMPLE_RATE = 8000;
 
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
@@ -73,22 +73,29 @@ export default function LiveCallMonitor({ call, insurance }) {
     }
   }, [transcripts]);
 
-  // Audio player — accumulates samples and plays in 200ms batches
+  // Audio player — accumulates ~250ms of samples then schedules gapless playback.
+  // Key fix: AudioContext runs at the browser's native sample rate (usually 48kHz).
+  // createBuffer(1, len, 8000) tells the browser the source is 8kHz; it auto-resamples.
   useEffect(() => {
+    const BATCH_SIZE = 2000; // ~250ms at 8kHz
+
     playIntervalRef.current = setInterval(() => {
       if (mutedRef.current) return;
       const queue = audioQueueRef.current;
-      if (queue.length < 1600) return; // wait for at least 200ms of audio (8000 * 0.2)
+      if (queue.length < BATCH_SIZE) return;
 
+      // Create AudioContext at DEFAULT sample rate — never force 8kHz
       if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-        audioCtxRef.current = new AudioContext({ sampleRate: 8000 });
+        audioCtxRef.current = new AudioContext();
       }
       const ctx = audioCtxRef.current;
       if (ctx.state === 'suspended') ctx.resume();
 
       // Take all available samples
       const samples = new Float32Array(queue.splice(0, queue.length));
-      const buffer = ctx.createBuffer(1, samples.length, 8000);
+
+      // Create buffer at 8kHz — browser auto-resamples to native rate on playback
+      const buffer = ctx.createBuffer(1, samples.length, MULAW_SAMPLE_RATE);
       buffer.getChannelData(0).set(samples);
 
       const source = ctx.createBufferSource();
@@ -97,10 +104,10 @@ export default function LiveCallMonitor({ call, insurance }) {
 
       // Schedule sequentially to avoid gaps/overlaps
       const now = ctx.currentTime;
-      const startAt = Math.max(now, nextPlayTimeRef.current);
+      const startAt = Math.max(now + 0.01, nextPlayTimeRef.current);
       source.start(startAt);
       nextPlayTimeRef.current = startAt + buffer.duration;
-    }, 200);
+    }, 250);
 
     return () => clearInterval(playIntervalRef.current);
   }, []);
@@ -116,7 +123,7 @@ export default function LiveCallMonitor({ call, insurance }) {
       const binary = atob(base64Payload);
       const samples = new Float32Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
-        samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xff] / 32768.0;
+        samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xFF];
       }
       return samples;
     }
@@ -135,9 +142,9 @@ export default function LiveCallMonitor({ call, insurance }) {
             // Decode mulaw and push to audio queue
             const pcm = decodeMulaw(data.media.payload);
             audioQueueRef.current.push(...pcm);
-            // Cap queue at 2 seconds of audio to prevent memory buildup
-            if (audioQueueRef.current.length > 16000) {
-              audioQueueRef.current.splice(0, audioQueueRef.current.length - 16000);
+            // Cap queue at 3 seconds of audio (8kHz) to prevent memory buildup
+            if (audioQueueRef.current.length > 24000) {
+              audioQueueRef.current.splice(0, audioQueueRef.current.length - 24000);
             }
           } else if (data.event === 'transcript') {
             const entry = { role: data.role, text: data.text, time: Date.now() };

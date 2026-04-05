@@ -390,3 +390,37 @@ Use null for any field where the information was NOT explicitly provided in the 
     return extraction;
   },
 });
+
+export const getCallStatus = action({
+  args: {
+    conversationId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+    if (!ELEVENLABS_API_KEY) return null;
+
+    try {
+      const res = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversations/${args.conversationId}`,
+        { headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+
+      return {
+        status: data.status, // "active" or "done"
+        duration: data.metadata?.call_duration_secs || 0,
+        transcript: (data.transcript || []).map((t: any) => ({
+          role: t.role,
+          message: t.message || null, // null means DTMF tool call
+        })),
+        analysis: data.analysis ? {
+          successful: data.analysis.call_successful,
+          summary: data.analysis.transcript_summary,
+        } : null,
+      };
+    } catch {
+      return null;
+    }
+  },
+});

@@ -1,5 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
-import { Phone, Volume2, VolumeX, Clock, MessageSquare, Radio, Pause, Users } from 'lucide-react';
+import { useAction } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import { Phone, Clock, CheckCircle2, Radio, Pause, Users, MessageSquare, Loader2 } from 'lucide-react';
+
+// ---------------------------------------------------------------------------
+// Phase detection from transcript
+// ---------------------------------------------------------------------------
+function detectPhase(transcript) {
+  if (!transcript || transcript.length === 0) return 'connecting';
+
+  const lastFew = transcript.slice(-5);
+  const hasHumanConversation = lastFew.some(t =>
+    t.role === 'agent' && t.message && t.message.length > 30 &&
+    !t.message.includes('still here') && !t.message.includes('checking in')
+  );
+
+  if (hasHumanConversation) return 'conversation';
+
+  const allText = transcript.map(t => (t.message || '').toLowerCase()).join(' ');
+  if (allText.includes('hold') || allText.includes('wait') || allText.includes('important')) return 'hold';
+  if (transcript.some(t => t.message === null)) return 'ivr'; // null messages = DTMF
+
+  return 'connecting';
+}
 
 // ---------------------------------------------------------------------------
 // Elapsed timer
@@ -22,204 +45,88 @@ function useElapsedTimer(startIso) {
 }
 
 // ---------------------------------------------------------------------------
-// Standard ITU-T G.711 mu-law decode table (correct implementation)
-// ---------------------------------------------------------------------------
-const MULAW_TABLE = new Float32Array(256);
-for (let i = 0; i < 256; i++) {
-  let mulaw = ~i & 0xFF;
-  const sign = mulaw & 0x80;
-  const exponent = (mulaw >> 4) & 0x07;
-  const mantissa = mulaw & 0x0F;
-  let magnitude = ((2 * mantissa + 33) << exponent) - 33;
-  MULAW_TABLE[i] = (sign ? -magnitude : magnitude) / 32768.0;
-}
-
-// ---------------------------------------------------------------------------
-// Phase config
-// ---------------------------------------------------------------------------
-const PHASE_CONFIG = {
-  connecting: { label: 'Connecting', icon: Phone, color: 'text-warn', bgColor: 'bg-warn/10', borderColor: 'border-warn/30' },
-  ivr: { label: 'IVR Navigation', icon: Radio, color: 'text-blue-500', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/30' },
-  hold: { label: 'On Hold', icon: Pause, color: 'text-amber-500', bgColor: 'bg-amber-500/10', borderColor: 'border-amber-500/30' },
-  conversation: { label: 'Live Conversation', icon: Users, color: 'text-success', bgColor: 'bg-success/10', borderColor: 'border-success/30' },
-};
-
-// ---------------------------------------------------------------------------
 // LiveCallMonitor
 // ---------------------------------------------------------------------------
 export default function LiveCallMonitor({ call, insurance }) {
   const elapsed = useElapsedTimer(call?.startedAt);
-
-  const [audioStatus, setAudioStatus] = useState('connecting');
-  const [muted, setMuted] = useState(false);
-  const [transcripts, setTranscripts] = useState([]);
-  const [callPhase, setCallPhase] = useState('connecting');
-  const wsRef = useRef(null);
-  const mutedRef = useRef(false);
+  const getCallStatus = useAction(api.callActions.getCallStatus);
+  const [callData, setCallData] = useState(null);
+  const [phase, setPhase] = useState('connecting');
   const transcriptEndRef = useRef(null);
+  const pollRef = useRef(null);
 
-  // Audio playback refs
-  const audioCtxRef = useRef(null);
-  const audioQueueRef = useRef([]); // buffered decoded Float32 samples
-  const nextPlayTimeRef = useRef(0);
-  const playIntervalRef = useRef(null);
-  const MULAW_SAMPLE_RATE = 8000;
-
-  useEffect(() => { mutedRef.current = muted; }, [muted]);
-
+  // Poll ElevenLabs every 5 seconds
   useEffect(() => {
-    if (transcriptEndRef.current) {
-      transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [transcripts]);
+    if (!call?.elevenLabsConversationId) return;
 
-  // Audio player — accumulates ~250ms of samples then schedules gapless playback.
-  // Key fix: AudioContext runs at the browser's native sample rate (usually 48kHz).
-  // createBuffer(1, len, 8000) tells the browser the source is 8kHz; it auto-resamples.
-  useEffect(() => {
-    const BATCH_SIZE = 2000; // ~250ms at 8kHz
+    let cancelled = false;
 
-    playIntervalRef.current = setInterval(() => {
-      if (mutedRef.current) return;
-      const queue = audioQueueRef.current;
-      if (queue.length < BATCH_SIZE) return;
-
-      // Create AudioContext at DEFAULT sample rate — never force 8kHz
-      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-        audioCtxRef.current = new AudioContext();
-      }
-      const ctx = audioCtxRef.current;
-      if (ctx.state === 'suspended') ctx.resume();
-
-      // Take all available samples
-      const samples = new Float32Array(queue.splice(0, queue.length));
-
-      // Create buffer at 8kHz — browser auto-resamples to native rate on playback
-      const buffer = ctx.createBuffer(1, samples.length, MULAW_SAMPLE_RATE);
-      buffer.getChannelData(0).set(samples);
-
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-
-      // Schedule sequentially to avoid gaps/overlaps
-      const now = ctx.currentTime;
-      const startAt = Math.max(now + 0.01, nextPlayTimeRef.current);
-      source.start(startAt);
-      nextPlayTimeRef.current = startAt + buffer.duration;
-    }, 250);
-
-    return () => {
-      clearInterval(playIntervalRef.current);
-      audioQueueRef.current = [];
-      nextPlayTimeRef.current = 0;
-      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-        audioCtxRef.current.close().catch(() => {});
-        audioCtxRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!call?._id) return;
-
-    const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'wss://cadence-bridge.onrender.com';
-    let ws;
-    let retryTimeout;
-
-    function decodeMulaw(base64Payload) {
-      const binary = atob(base64Payload);
-      const samples = new Float32Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xFF];
-      }
-      return samples;
-    }
-
-    function connect() {
-      ws = new WebSocket(`${BRIDGE_URL}/listen/${call._id}`);
-      wsRef.current = ws;
-
-      ws.onopen = () => setAudioStatus('live');
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-
-          if (data.event === 'audio' && data.media?.payload) {
-            // Decode mulaw and push to audio queue
-            const pcm = decodeMulaw(data.media.payload);
-            audioQueueRef.current.push(...pcm);
-            // Cap queue at 3 seconds of audio (8kHz) to prevent memory buildup
-            if (audioQueueRef.current.length > 24000) {
-              audioQueueRef.current.splice(0, audioQueueRef.current.length - 24000);
-            }
-          } else if (data.event === 'transcript') {
-            const entry = { role: data.role, text: data.text, time: Date.now() };
-            setTranscripts(prev => [...prev.slice(-50), entry]);
-
-            const text = (data.text || '').toLowerCase();
-            if (text.includes('press') || text.includes('menu') || text.includes('option') || text.includes('dial')) {
-              setCallPhase('ivr');
-            } else if (text.includes('hold') || text.includes('wait') || text.includes('your call is important') || text.includes('please stay on the line')) {
-              setCallPhase('hold');
-            } else if (data.role === 'user' && !text.includes('press') && !text.includes('menu') && text.length > 10) {
-              setCallPhase('conversation');
-            }
-          }
-        } catch {
-          // ignore non-JSON messages
+    async function poll() {
+      if (cancelled) return;
+      try {
+        const data = await getCallStatus({ conversationId: call.elevenLabsConversationId });
+        if (data && !cancelled) {
+          setCallData(data);
+          setPhase(data.status === 'done' ? 'completed' : detectPhase(data.transcript));
         }
-      };
-
-      ws.onclose = () => {
-        setAudioStatus('disconnected');
-        retryTimeout = setTimeout(() => {
-          if (wsRef.current === ws) connect();
-        }, 3000);
-      };
-
-      ws.onerror = () => ws.close();
-    }
-
-    connect();
-
-    return () => {
-      clearTimeout(retryTimeout);
-      if (ws) ws.close();
-      // Stop all audio immediately on unmount
-      audioQueueRef.current = [];
-      nextPlayTimeRef.current = 0;
-      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-        audioCtxRef.current.close().catch(() => {});
-        audioCtxRef.current = null;
+      } catch {
+        // ignore polling errors
       }
-      wsRef.current = null;
-      audioQueueRef.current = [];
-    };
-  }, [call?._id]);
-
-  const handleUnmute = () => {
-    setMuted(false);
-    if (audioCtxRef.current?.state === 'suspended') {
-      audioCtxRef.current.resume();
+      if (!cancelled) {
+        pollRef.current = setTimeout(poll, 5000);
+      }
     }
-  };
 
-  const phaseConfig = PHASE_CONFIG[callPhase] || PHASE_CONFIG.connecting;
-  const PhaseIcon = phaseConfig.icon;
+    poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(pollRef.current);
+    };
+  }, [call?.elevenLabsConversationId, getCallStatus]);
+
+  // Auto-scroll transcript
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [callData?.transcript?.length]);
+
+  const transcript = callData?.transcript || [];
+
+  // Phase definitions
+  const phases = [
+    { key: 'connecting', label: 'Connecting', icon: Phone },
+    { key: 'ivr', label: 'IVR Navigation', icon: Radio },
+    { key: 'hold', label: 'On Hold', icon: Pause },
+    { key: 'conversation', label: 'Talking to Rep', icon: Users },
+  ];
+
+  const phaseOrder = ['connecting', 'ivr', 'hold', 'conversation', 'completed'];
+  const currentIdx = phaseOrder.indexOf(phase);
+
+  // Format transcript entry
+  function formatEntry(entry) {
+    if (entry.message === null) return '[pressed key]';
+    if (entry.message === '...') return '...';
+    return entry.message;
+  }
+
+  function getLabel(entry) {
+    if (entry.role === 'agent') return 'Thomas';
+    return 'Phone';
+  }
 
   return (
     <div className="bg-gradient-to-r from-accent/5 to-cyan/5 border border-accent/15 rounded-xl p-6 glow-border-strong space-y-4">
-      {/* Call status header */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-accent/10 border-2 border-accent flex items-center justify-center">
-            <Phone className="w-5 h-5 text-accent animate-pulse" />
+            <Phone className={`w-5 h-5 text-accent ${phase !== 'completed' ? 'animate-pulse' : ''}`} />
           </div>
           <div>
-            <p className="text-sm font-display font-semibold text-gray-900">Call in Progress</p>
-            <p className="text-xs text-muted">{insurance?.name || 'Insurance'} — AI agent is handling the call</p>
+            <p className="text-sm font-display font-semibold text-gray-900">
+              {phase === 'completed' ? 'Call Completed' : 'Call in Progress'}
+            </p>
+            <p className="text-xs text-muted">{insurance?.name || 'Insurance'}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 bg-white/80 border border-border rounded-lg px-3 py-2">
@@ -228,27 +135,43 @@ export default function LiveCallMonitor({ call, insurance }) {
         </div>
       </div>
 
-      {/* Phase indicator */}
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${phaseConfig.bgColor} ${phaseConfig.borderColor}`}>
-        <PhaseIcon className={`w-4 h-4 ${phaseConfig.color}`} />
-        <span className={`text-sm font-medium ${phaseConfig.color}`}>{phaseConfig.label}</span>
-        {callPhase === 'ivr' && <span className="text-xs text-muted ml-auto">Agent is navigating the phone menu</span>}
-        {callPhase === 'hold' && <span className="text-xs text-muted ml-auto">Waiting for a representative</span>}
-        {callPhase === 'conversation' && <span className="text-xs text-muted ml-auto">Speaking with insurance rep</span>}
+      {/* Workflow phases */}
+      <div className="flex items-center gap-1">
+        {phases.map((p) => {
+          const Icon = p.icon;
+          const idx = phaseOrder.indexOf(p.key);
+          const isDone = currentIdx > idx;
+          const isActive = currentIdx === idx;
+
+          return (
+            <div key={p.key} className={`flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              isDone ? 'bg-success/10 text-success border border-success/20' :
+              isActive ? 'bg-accent/10 text-accent border border-accent/20' :
+              'bg-gray-50 text-muted border border-border'
+            }`}>
+              {isDone ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> :
+               isActive ? <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" /> :
+               <Icon className="w-3.5 h-3.5 shrink-0" />}
+              <span className="truncate">{p.label}</span>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Live transcript */}
-      {transcripts.length > 0 && (
+      {/* Transcript */}
+      {transcript.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5 px-1">
             <MessageSquare className="w-3.5 h-3.5 text-muted" />
-            <span className="text-xs font-medium text-muted uppercase tracking-wider">Live Transcript</span>
+            <span className="text-xs font-medium text-muted uppercase tracking-wider">
+              {phase === 'completed' ? 'Call Transcript' : 'Live Transcript'}
+            </span>
           </div>
-          <div className="bg-white/60 border border-border rounded-lg p-3 max-h-48 overflow-y-auto space-y-1.5">
-            {transcripts.map((t, i) => (
+          <div className="bg-white/60 border border-border rounded-lg p-3 max-h-56 overflow-y-auto space-y-1.5">
+            {transcript.filter(t => t.message !== '...').map((t, i) => (
               <div key={i} className={`text-xs ${t.role === 'agent' ? 'text-accent' : 'text-gray-600'}`}>
-                <span className="font-data font-medium">{t.role === 'agent' ? 'Thomas' : 'Phone'}:</span>
-                <span className="ml-1.5">{t.text}</span>
+                <span className="font-data font-medium">{getLabel(t)}:</span>
+                <span className="ml-1.5">{formatEntry(t)}</span>
               </div>
             ))}
             <div ref={transcriptEndRef} />
@@ -256,46 +179,30 @@ export default function LiveCallMonitor({ call, insurance }) {
         </div>
       )}
 
-      {/* Live audio player */}
-      <div className="bg-white/60 border border-border rounded-lg px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {audioStatus === 'live' ? (
-            <>
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success" />
-              </span>
-              <span className="text-sm text-gray-900 font-medium">Live Audio</span>
-            </>
-          ) : audioStatus === 'connecting' ? (
-            <>
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warn opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-warn" />
-              </span>
-              <span className="text-sm text-warn font-medium">Connecting audio stream...</span>
-            </>
-          ) : (
-            <>
-              <span className="h-2.5 w-2.5 rounded-full bg-muted/40" />
-              <span className="text-sm text-muted">Audio stream waiting for call to connect</span>
-            </>
+      {/* Completed summary */}
+      {phase === 'completed' && callData?.analysis && (
+        <div className="bg-white/80 border border-success/20 rounded-lg p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-success" />
+            <span className="text-sm font-medium text-gray-900">
+              Call {callData.analysis.successful === 'success' ? 'Successful' : 'Completed'}
+            </span>
+          </div>
+          {callData.analysis.summary && (
+            <p className="text-xs text-gray-600 leading-relaxed">{callData.analysis.summary}</p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => muted ? handleUnmute() : setMuted(true)}
-          className={`p-2 rounded-lg transition-colors ${muted ? 'text-muted hover:text-gray-900 hover:bg-gray-100' : 'text-accent hover:bg-accent/10'}`}
-          title={muted ? 'Unmute' : 'Mute'}
-        >
-          {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-        </button>
-      </div>
+      )}
 
-      <p className="text-xs text-muted text-center">
-        The AI agent is navigating the phone system, waiting on hold, and will speak with the insurance rep automatically.
-        {audioStatus === 'live' && !muted && ' You should hear the call audio.'}
-      </p>
+      {/* Status message */}
+      {phase !== 'completed' && (
+        <p className="text-xs text-muted text-center">
+          {phase === 'connecting' && 'Connecting to insurance company...'}
+          {phase === 'ivr' && 'Thomas is navigating the phone menu using DTMF keys'}
+          {phase === 'hold' && 'On hold -- waiting for a representative'}
+          {phase === 'conversation' && 'Thomas is speaking with the insurance representative'}
+        </p>
+      )}
     </div>
   );
 }

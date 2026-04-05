@@ -247,7 +247,6 @@ export default function ClaimDetailPage() {
   // ---- Convex data --------------------------------------------------------
   const data = useQuery(api.claims.getWithDetails, id ? { id } : 'skip');
   const initiateCall = useAction(api.callActions.initiateCall);
-  const initiateCallIvr = useAction(api.callActions.initiateCallWithIvr);
 
   // ---- Local state --------------------------------------------------------
   const [callState, setCallState] = useState('idle'); // idle | calling | in_progress | error
@@ -306,11 +305,7 @@ export default function ClaimDetailPage() {
     setCallError(null);
 
     try {
-      if (insurance?.ivrEnabled) {
-        await initiateCallIvr({ claimId: id });
-      } else {
-        await initiateCall({ claimId: id });
-      }
+      await initiateCall({ claimId: id });
       setCallState('idle'); // Reset to idle; real-time Convex data drives the button state
     } catch (err) {
       setCallState('error');
@@ -336,8 +331,8 @@ export default function ClaimDetailPage() {
   const hasActiveCall = callState === 'calling' || callState === 'in_progress' ||
     (calls && calls.length > 0 && ['initiating', 'ringing', 'in_progress'].includes(calls[0].status));
 
-  const activeIvrCall = calls?.find((c) =>
-    ['initiating', 'in_progress'].includes(c.status) && c.callPhase
+  const activeCall = calls?.find((c) =>
+    ['initiating', 'in_progress'].includes(c.status)
   );
 
   // =========================================================================
@@ -374,8 +369,8 @@ export default function ClaimDetailPage() {
       {/* ------------------------------------------------------------------ */}
       {/* HERO: CALL INSURANCE BUTTON / LIVE CALL MONITOR                     */}
       {/* ------------------------------------------------------------------ */}
-      {activeIvrCall ? (
-        <LiveCallMonitor call={activeIvrCall} insurance={insurance} />
+      {activeCall ? (
+        <LiveCallMonitor call={activeCall} insurance={insurance} />
       ) : (
         <div className="bg-gradient-to-r from-accent/5 to-cyan/5 border border-accent/15 rounded-xl p-8 text-center glow-border-strong">
           {/* Subtitle */}

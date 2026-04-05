@@ -17,6 +17,23 @@ for (let i = 0; i < 256; i++) {
 }
 
 // ---------------------------------------------------------------------------
+// Linear interpolation upsample from 8kHz to target rate (avoids browser
+// resampling artifacts that cause static/crackling)
+// ---------------------------------------------------------------------------
+function upsample8kTo(samples8k, targetRate) {
+  const ratio = targetRate / 8000;
+  const out = new Float32Array(Math.ceil(samples8k.length * ratio));
+  for (let i = 0; i < out.length; i++) {
+    const srcIdx = i / ratio;
+    const lo = Math.floor(srcIdx);
+    const hi = Math.min(lo + 1, samples8k.length - 1);
+    const frac = srcIdx - lo;
+    out[i] = samples8k[lo] * (1 - frac) + samples8k[hi] * frac;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Elapsed timer
 // ---------------------------------------------------------------------------
 function useElapsedTimer(startIso, frozenDuration) {
@@ -130,7 +147,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [effectiveTranscript.length]);
 
-  // Audio player — smooth playback with fixed-size chunks
+  // Audio player — smooth playback with upsample to native rate
   useEffect(() => {
     playIntervalRef.current = setInterval(() => {
       if (mutedRef.current) return;
@@ -139,18 +156,19 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       const queue = audioQueueRef.current;
       if (queue.length < 640) return;
 
-      const chunkSize = Math.min(queue.length, 800);
-      const samples = new Float32Array(queue.splice(0, chunkSize));
-      const buffer = ctx.createBuffer(1, samples.length, 8000);
-      buffer.getChannelData(0).set(samples);
+      const chunkSize = Math.min(queue.length, 1600);
+      const raw = new Float32Array(queue.splice(0, chunkSize));
+      const upsampled = upsample8kTo(raw, ctx.sampleRate);
+      const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
+      buffer.getChannelData(0).set(upsampled);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.connect(ctx.destination);
       const now = ctx.currentTime;
-      const startAt = Math.max(now + 0.01, nextPlayTimeRef.current);
+      const startAt = Math.max(now + 0.005, nextPlayTimeRef.current);
       source.start(startAt);
       nextPlayTimeRef.current = startAt + buffer.duration;
-    }, 50);
+    }, 80);
 
     return () => {
       clearInterval(playIntervalRef.current);
@@ -180,12 +198,16 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
         try {
           const data = JSON.parse(event.data);
           if (data.event === 'audio' && data.media?.payload) {
+            // Only play inbound track — skip outbound (agent) to avoid 2x sample rate = slow motion
+            if (data.media.track === 'outbound') return;
+
             const binary = atob(data.media.payload);
             for (let i = 0; i < binary.length; i++) {
               audioQueueRef.current.push(MULAW_TABLE[binary.charCodeAt(i) & 0xFF]);
             }
-            if (audioQueueRef.current.length > 48000) {
-              audioQueueRef.current.splice(0, audioQueueRef.current.length - 24000);
+            if (audioQueueRef.current.length > 16000) {
+              audioQueueRef.current.splice(0, audioQueueRef.current.length - 8000);
+              nextPlayTimeRef.current = 0;
             }
           }
         } catch (err) { console.warn('Audio WS parse error:', err); }

@@ -421,10 +421,21 @@ export const getCallStatus = action({
         try {
           const call = await ctx.runQuery(api.calls.getById, { id: args.callId });
           if (call && call.status === 'in_progress') {
-            // Build transcript string
+            // Build transcript string — include tool calls (DTMF presses) for visibility
             const transcriptStr = (data.transcript || [])
-              .filter((t: any) => t.message)
-              .map((t: any) => `${t.role}: ${t.message}`)
+              .map((t: any) => {
+                const toolCalls = t.tool_calls?.filter((tc: any) => tc.tool_has_been_called) || [];
+                const dtmf = toolCalls.find((tc: any) => tc.tool_name === 'play_keypad_touch_tone');
+                if (dtmf) {
+                  try {
+                    const params = JSON.parse(dtmf.params_as_json);
+                    return `agent: [pressed ${params.dtmf_tones}] ${params.reason || ''}`.trim();
+                  } catch { return null; }
+                }
+                if (!t.message || t.message === '...') return null;
+                return `${t.role}: ${t.message}`;
+              })
+              .filter(Boolean)
               .join('\n');
 
             // Calculate duration — use ElevenLabs metadata or compute from startedAt

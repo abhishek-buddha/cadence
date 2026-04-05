@@ -239,6 +239,42 @@ http.route({
   }),
 });
 
+// ---- Call ended notification (from bridge server when WebSocket closes) ----
+http.route({
+  path: '/call-ended',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const callId = url.searchParams.get('callId');
+
+    if (!callId) {
+      return new Response(JSON.stringify({ error: 'Missing callId' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    try {
+      const call = await ctx.runQuery(api.calls.getById, { id: callId as any });
+      if (call && (call.status === 'in_progress' || call.status === 'initiating')) {
+        console.log(`[call-ended] Marking call ${callId} as completed (was ${call.status})`);
+        await ctx.runMutation(api.calls.updateStatus, {
+          id: callId as any,
+          status: 'completed',
+          completedAt: new Date().toISOString(),
+        });
+      }
+    } catch (e: any) {
+      console.error(`[call-ended] Error:`, e.message);
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }),
+});
+
 // ---- Call metadata endpoint (used by bridge server) ----
 http.route({
   path: '/call-metadata',

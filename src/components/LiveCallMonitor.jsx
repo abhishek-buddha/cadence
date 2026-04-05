@@ -81,30 +81,74 @@ export default function LiveCallMonitor({ call, insurance }) {
       }));
   }, [events]);
 
-  // When phase becomes 'completed', trigger getCallStatus ONCE to finalize the call
-  // (mark as done in Convex, trigger transcript analysis)
+  // Polling fallback: if no real-time events after 8s, poll getCallStatus every 3s
+  const [polledData, setPolledData] = useState(null);
+  const pollRef = useRef(null);
+
   useEffect(() => {
-    if (phase !== 'completed') return;
-    if (completionTriggeredRef.current) return;
     if (!call?.elevenLabsConversationId) return;
+    let cancelled = false;
 
-    completionTriggeredRef.current = true;
-    getCallStatus({
-      conversationId: call.elevenLabsConversationId,
-      callId: call._id,
-      claimId: call.claimId,
-    }).catch(() => {
-      // Non-fatal: webhook or status callback may have already handled this
-    });
-  }, [phase, call?.elevenLabsConversationId, call?._id, call?.claimId, getCallStatus]);
+    // Start polling after 8s if no events arrived
+    const startDelay = setTimeout(async () => {
+      if (cancelled) return;
+      async function poll() {
+        if (cancelled) return;
+        try {
+          const data = await getCallStatus({
+            conversationId: call.elevenLabsConversationId,
+            callId: call._id,
+            claimId: call.claimId,
+          });
+          if (data && !cancelled) {
+            setPolledData(data);
+            if (data.status === 'done') {
+              completionTriggeredRef.current = true;
+              cancelled = true;
+              return;
+            }
+          }
+        } catch {}
+        if (!cancelled) pollRef.current = setTimeout(poll, 3000);
+      }
+      poll();
+    }, 8000);
 
-  const frozenDuration = phase === 'completed' && call?.duration ? call.duration : null;
+    return () => {
+      cancelled = true;
+      clearTimeout(startDelay);
+      clearTimeout(pollRef.current);
+    };
+  }, [call?.elevenLabsConversationId, call?._id, call?.claimId, getCallStatus]);
+
+  // Merge: prefer real-time events, fall back to polled data
+  const effectiveTranscript = useMemo(() => {
+    if (transcript.length > 0) return transcript;
+    if (!polledData?.transcript) return [];
+    return polledData.transcript
+      .filter(t => t.message !== '...')
+      .map(t => ({
+        role: t.role === 'agent' ? 'agent' : 'user',
+        message: t.message,
+      }));
+  }, [transcript, polledData]);
+
+  const effectivePhase = useMemo(() => {
+    if (phase !== 'connecting') return phase;
+    if (polledData?.status === 'done') return 'completed';
+    if (polledData?.transcript?.length > 0) {
+      return detectPhase(polledData.transcript.map(t => ({ ...t, message: t.message })));
+    }
+    return 'connecting';
+  }, [phase, polledData]);
+
+  const frozenDuration = effectivePhase === 'completed' && (polledData?.duration || call?.duration) ? (polledData?.duration || call?.duration) : null;
   const elapsed = useElapsedTimer(call?.startedAt, frozenDuration);
 
   // Auto-scroll transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [transcript.length]);
+  }, [effectiveTranscript.length]);
 
   // Phase definitions
   const phases = [
@@ -115,7 +159,7 @@ export default function LiveCallMonitor({ call, insurance }) {
   ];
 
   const phaseOrder = ['connecting', 'ivr', 'hold', 'conversation', 'completed'];
-  const currentIdx = phaseOrder.indexOf(phase);
+  const currentIdx = phaseOrder.indexOf(effectivePhase);
 
   // Format transcript entry
   function formatEntry(entry) {
@@ -135,11 +179,11 @@ export default function LiveCallMonitor({ call, insurance }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-accent/10 border-2 border-accent flex items-center justify-center">
-            <Phone className={`w-5 h-5 text-accent ${phase !== 'completed' ? 'animate-pulse' : ''}`} />
+            <Phone className={`w-5 h-5 text-accent ${effectivePhase !== 'completed' ? 'animate-pulse' : ''}`} />
           </div>
           <div>
             <p className="text-sm font-display font-semibold text-gray-900">
-              {phase === 'completed' ? 'Call Completed' : 'Call in Progress'}
+              {effectivePhase === 'completed' ? 'Call Completed' : 'Call in Progress'}
             </p>
             <p className="text-xs text-muted">{insurance?.name || 'Insurance'}</p>
           </div>
@@ -174,16 +218,16 @@ export default function LiveCallMonitor({ call, insurance }) {
       </div>
 
       {/* Transcript */}
-      {transcript.length > 0 && (
+      {effectiveTranscript.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5 px-1">
             <MessageSquare className="w-3.5 h-3.5 text-muted" />
             <span className="text-xs font-medium text-muted uppercase tracking-wider">
-              {phase === 'completed' ? 'Call Transcript' : 'Live Transcript'}
+              {effectivePhase === 'completed' ? 'Call Transcript' : 'Live Transcript'}
             </span>
           </div>
           <div className="bg-white/60 border border-border rounded-lg p-3 max-h-56 overflow-y-auto space-y-1.5">
-            {transcript.filter(t => t.message !== '...').map((t, i) => (
+            {effectiveTranscript.filter(t => t.message !== '...').map((t, i) => (
               <div key={i} className={`text-xs ${t.role === 'agent' ? 'text-accent' : 'text-gray-600'}`}>
                 <span className="font-data font-medium">{getLabel(t)}:</span>
                 <span className="ml-1.5">{formatEntry(t)}</span>
@@ -195,7 +239,7 @@ export default function LiveCallMonitor({ call, insurance }) {
       )}
 
       {/* Completed summary */}
-      {phase === 'completed' && (
+      {effectivePhase === 'completed' && (
         <div className="bg-white/80 border border-success/20 rounded-lg p-3 space-y-2">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-success" />
@@ -208,12 +252,12 @@ export default function LiveCallMonitor({ call, insurance }) {
       )}
 
       {/* Status message */}
-      {phase !== 'completed' && (
+      {effectivePhase !== 'completed' && (
         <p className="text-xs text-muted text-center">
-          {phase === 'connecting' && 'Connecting to insurance company...'}
-          {phase === 'ivr' && 'Thomas is navigating the phone menu using DTMF keys'}
-          {phase === 'hold' && 'On hold -- waiting for a representative'}
-          {phase === 'conversation' && 'Thomas is speaking with the insurance representative'}
+          {effectivePhase === 'connecting' && 'Connecting to insurance company...'}
+          {effectivePhase === 'ivr' && 'Thomas is navigating the phone menu using DTMF keys'}
+          {effectivePhase === 'hold' && 'On hold -- waiting for a representative'}
+          {effectivePhase === 'conversation' && 'Thomas is speaking with the insurance representative'}
         </p>
       )}
     </div>

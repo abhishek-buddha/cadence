@@ -362,4 +362,134 @@ http.route({
   }),
 });
 
+// ===========================================================================
+// TEST IVR — Simulated insurance company phone system for demo/testing
+// Call +18629724303 to reach this IVR
+// ===========================================================================
+
+http.route({
+  path: '/test-ivr',
+  method: 'POST',
+  handler: httpAction(async (_, request) => {
+    const siteUrl = new URL(request.url).origin;
+    return twimlResponse(`
+      <Response>
+        <Gather input="speech dtmf" numDigits="1" timeout="8" speechTimeout="3" action="${siteUrl}/test-ivr-level2" method="POST">
+          <Say voice="Polly.Joanna">Thank you for calling Acme Health Insurance, a preferred provider organization.
+            Please listen carefully as our menu options have recently changed.
+            For claims and billing, press 1 or say claims.
+            For member services, press 2 or say member services.
+            For provider relations, press 3 or say provider.
+            For pharmacy, press 4.
+            To repeat this menu, press 9.</Say>
+        </Gather>
+        <Redirect method="POST">${siteUrl}/test-ivr</Redirect>
+      </Response>
+    `);
+  }),
+});
+
+http.route({
+  path: '/test-ivr-level2',
+  method: 'POST',
+  handler: httpAction(async (_, request) => {
+    const siteUrl = new URL(request.url).origin;
+    const body = await request.text();
+    const params = new URLSearchParams(body);
+    const digits = params.get('Digits') || '';
+    const speech = (params.get('SpeechResult') || '').toLowerCase();
+
+    if (digits === '1' || speech.includes('claim') || speech.includes('billing')) {
+      return twimlResponse(`
+        <Response>
+          <Gather input="speech dtmf" numDigits="1" timeout="8" speechTimeout="3" action="${siteUrl}/test-ivr-hold" method="POST">
+            <Say voice="Polly.Joanna">You have reached the claims department.
+              For claim status inquiry, press 1 or say claim status.
+              To file a new claim, press 2.
+              For claim appeals, press 3.
+              To speak with a claims representative, press 0.</Say>
+          </Gather>
+          <Redirect method="POST">${siteUrl}/test-ivr-level2?Digits=1</Redirect>
+        </Response>
+      `);
+    }
+
+    return twimlResponse(`
+      <Response>
+        <Say voice="Polly.Joanna">That option is not available. Returning to main menu.</Say>
+        <Redirect method="POST">${siteUrl}/test-ivr</Redirect>
+      </Response>
+    `);
+  }),
+});
+
+http.route({
+  path: '/test-ivr-hold',
+  method: 'POST',
+  handler: httpAction(async (_, request) => {
+    const siteUrl = new URL(request.url).origin;
+    return twimlResponse(`
+      <Response>
+        <Say voice="Polly.Joanna">Please hold while we transfer you to the next available claims representative.
+          Your estimated wait time is approximately 2 minutes. Your call is important to us.</Say>
+        <Play>http://com.twilio.music.classical.s3.amazonaws.com/ith_chopin-702.mp3</Play>
+        <Say voice="Polly.Joanna">Thank you for your continued patience.</Say>
+        <Pause length="2"/>
+        <Gather input="speech" timeout="180" speechTimeout="auto" action="${siteUrl}/test-ivr-agent" method="POST">
+          <Say voice="Polly.Matthew">Hi there, thanks so much for holding. This is Michael with the Acme Health Insurance claims department. How can I help you today?</Say>
+          <Pause length="180"/>
+        </Gather>
+        <Say voice="Polly.Matthew">Thank you for calling. Goodbye.</Say>
+        <Hangup/>
+      </Response>
+    `);
+  }),
+});
+
+http.route({
+  path: '/test-ivr-agent',
+  method: 'POST',
+  handler: httpAction(async (_, request) => {
+    const siteUrl = new URL(request.url).origin;
+    const body = await request.text();
+    const params = new URLSearchParams(body);
+    const speech = (params.get('SpeechResult') || '').toLowerCase();
+
+    if (speech.includes('no') || speech.includes('thank') || speech.includes('bye') || speech.includes('great') || speech.includes('good')) {
+      return twimlResponse(`
+        <Response>
+          <Say voice="Polly.Matthew">Glad I could help! Thanks for calling Acme Health Insurance. Have a wonderful day. Goodbye!</Say>
+          <Hangup/>
+        </Response>
+      `);
+    }
+
+    if (speech.match(/[0-9]/) || speech.includes('number') || speech.includes('clm')) {
+      return twimlResponse(`
+        <Response>
+          <Gather input="speech" timeout="60" speechTimeout="auto" action="${siteUrl}/test-ivr-agent" method="POST">
+            <Say voice="Polly.Matthew">Okay, let me look that up. One moment please.</Say>
+            <Pause length="3"/>
+            <Say voice="Polly.Matthew">Alright, I found that claim. It looks like it is currently in processing status.
+              The claim was received on March 15th and the expected decision date is approximately 10 business days from now.
+              The reference number for this call is R E F dash 2 0 2 6 0 4 0 5 dash 5 6 7 8.
+              Is there anything else I can help you with today?</Say>
+            <Pause length="60"/>
+          </Gather>
+        </Response>
+      `);
+    }
+
+    // Default: ask for more info
+    return twimlResponse(`
+      <Response>
+        <Gather input="speech" timeout="60" speechTimeout="auto" action="${siteUrl}/test-ivr-agent" method="POST">
+          <Say voice="Polly.Matthew">Sure, I can help with that. Could you give me the claim number so I can look it up?</Say>
+          <Pause length="60"/>
+        </Gather>
+      </Response>
+    `);
+  }),
+});
+
 export default http;

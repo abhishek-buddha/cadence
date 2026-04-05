@@ -110,6 +110,112 @@ export const initiateCall = action({
   },
 });
 
+export const initiateCallWithIvr = action({
+  args: {
+    claimId: v.id('claims'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+
+    // 1. Fetch claim with all related data
+    const data = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
+    if (!data || !data.claim) throw new Error('Claim not found');
+
+    const { claim, patient, insurance, provider } = data;
+    if (!patient || !insurance || !provider) {
+      throw new Error('Missing patient, insurance, or provider data for this claim');
+    }
+
+    if (!insurance.ivrEnabled || !insurance.ivrSequence) {
+      throw new Error('IVR is not configured for this insurance contact');
+    }
+
+    // 2. Create call record
+    const callId = await ctx.runMutation(api.calls.create, {
+      claimId: args.claimId,
+      insuranceContactId: claim.insuranceContactId,
+      status: 'initiating',
+      startedAt: new Date().toISOString(),
+    });
+
+    // 3. Call Twilio REST API to initiate outbound call with DTMF
+    const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+    const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+    const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
+    const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL || 'https://groovy-wren-932.convex.site';
+    const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+
+    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'failed',
+        errorMessage: 'Missing Twilio credentials in environment variables',
+      });
+      throw new Error('Twilio not configured');
+    }
+
+    try {
+      // Build TwiML URL with query params for call context
+      const twimlUrl = `${CONVEX_SITE_URL}/twiml-hold-loop?callId=${callId}&claimId=${args.claimId}`;
+      const statusCallbackUrl = `${CONVEX_SITE_URL}/twilio-status`;
+
+      // Twilio REST API - Create call with sendDigits for IVR navigation
+      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls.json`;
+      const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+
+      const params = new URLSearchParams();
+      params.append('To', insurance.phone);
+      params.append('From', TWILIO_PHONE_NUMBER);
+      params.append('Url', twimlUrl);
+      params.append('SendDigits', insurance.ivrSequence);
+      params.append('StatusCallback', statusCallbackUrl);
+      params.append('StatusCallbackEvent', 'initiated ringing answered completed');
+      params.append('Timeout', '60');
+
+      const response = await fetch(twilioUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Twilio API error ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+
+      // 4. Update call record with Twilio SID and IVR info
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'in_progress',
+        twilioCallSid: result.sid,
+        callPhase: 'ivr',
+        ivrSequenceUsed: insurance.ivrSequence,
+      });
+
+      // 5. Update claim
+      await ctx.runMutation(api.claims.update, {
+        id: args.claimId,
+        lastCalledAt: new Date().toISOString(),
+        status: claim.status === 'pending' ? 'in_progress' : claim.status,
+      });
+
+      return { success: true, callId, twilioCallSid: result.sid };
+    } catch (error: any) {
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'failed',
+        errorMessage: error.message,
+      });
+      throw error;
+    }
+  },
+});
+
 export const analyzeTranscript = action({
   args: {
     callId: v.id('calls'),

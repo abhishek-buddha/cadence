@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import LiveCallMonitor from '../components/LiveCallMonitor';
 
 // ---------------------------------------------------------------------------
 // Priority indicator pill
@@ -246,6 +247,7 @@ export default function ClaimDetailPage() {
   // ---- Convex data --------------------------------------------------------
   const data = useQuery(api.claims.getWithDetails, id ? { id } : 'skip');
   const initiateCall = useAction(api.callActions.initiateCall);
+  const initiateCallIvr = useAction(api.callActions.initiateCallWithIvr);
 
   // ---- Local state --------------------------------------------------------
   const [callState, setCallState] = useState('idle'); // idle | calling | in_progress | error
@@ -304,7 +306,11 @@ export default function ClaimDetailPage() {
     setCallError(null);
 
     try {
-      await initiateCall({ claimId: id });
+      if (insurance?.ivrEnabled) {
+        await initiateCallIvr({ claimId: id });
+      } else {
+        await initiateCall({ claimId: id });
+      }
       setCallState('idle'); // Reset to idle; real-time Convex data drives the button state
     } catch (err) {
       setCallState('error');
@@ -329,6 +335,10 @@ export default function ClaimDetailPage() {
   // ---- Derived values -----------------------------------------------------
   const hasActiveCall = callState === 'calling' || callState === 'in_progress' ||
     (calls && calls.length > 0 && ['initiating', 'ringing', 'in_progress'].includes(calls[0].status));
+
+  const activeIvrCall = calls?.find((c) =>
+    ['initiating', 'in_progress'].includes(c.status) && c.callPhase
+  );
 
   // =========================================================================
   // RENDER
@@ -362,62 +372,66 @@ export default function ClaimDetailPage() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* HERO: CALL INSURANCE BUTTON                                         */}
+      {/* HERO: CALL INSURANCE BUTTON / LIVE CALL MONITOR                     */}
       {/* ------------------------------------------------------------------ */}
-      <div className="bg-gradient-to-r from-accent/5 to-cyan/5 border border-accent/15 rounded-xl p-8 text-center glow-border-strong">
-        {/* Subtitle */}
-        {insurance && (
-          <p className="text-sm text-muted mb-4">
-            <Building2 className="w-4 h-4 inline mr-1.5 text-accent/60" />
-            {insurance.name}
-            {insurance.phone && (
-              <span className="font-data ml-2 text-muted/70">{insurance.phone}</span>
-            )}
-          </p>
-        )}
-
-        {/* The Button */}
-        <button
-          onClick={handleCallInsurance}
-          disabled={callState === 'calling' || callState === 'in_progress' || hasActiveCall}
-          className={`
-            relative inline-flex items-center gap-3 px-8 py-4 text-white font-display font-semibold text-lg rounded-xl transition-all duration-200
-            ${callState === 'calling'
-              ? 'bg-accent/80 cursor-wait pulse-ring shadow-lg shadow-accent/20'
-              : callState === 'in_progress' || hasActiveCall
-                ? 'bg-accent/60 cursor-default'
-                : 'bg-accent hover:bg-accent-hover shadow-lg shadow-accent/15 hover:shadow-accent/30 hover:scale-[1.02] active:scale-[0.98]'
-            }
-            disabled:opacity-70
-          `}
-        >
-          <Phone className={`w-5 h-5 ${callState === 'calling' ? 'animate-pulse' : ''}`} />
-          {callState === 'calling' ? (
-            <>Calling {insurance?.name || 'Insurance'}...</>
-          ) : callState === 'in_progress' || hasActiveCall ? (
-            <>
-              <span className="status-dot-pulse w-2 h-2 rounded-full bg-success inline-block" />
-              Call in Progress
-            </>
-          ) : (
-            <>Call Insurance</>
+      {activeIvrCall ? (
+        <LiveCallMonitor call={activeIvrCall} insurance={insurance} />
+      ) : (
+        <div className="bg-gradient-to-r from-accent/5 to-cyan/5 border border-accent/15 rounded-xl p-8 text-center glow-border-strong">
+          {/* Subtitle */}
+          {insurance && (
+            <p className="text-sm text-muted mb-4">
+              <Building2 className="w-4 h-4 inline mr-1.5 text-accent/60" />
+              {insurance.name}
+              {insurance.phone && (
+                <span className="font-data ml-2 text-muted/70">{insurance.phone}</span>
+              )}
+            </p>
           )}
-        </button>
 
-        {/* Error hint below button */}
-        {callState === 'error' && (
-          <p className="mt-4 text-sm text-danger flex items-center justify-center gap-1.5">
-            <XCircle className="w-4 h-4" />
-            Call failed.{' '}
-            <button
-              onClick={() => setErrorModalOpen(true)}
-              className="underline underline-offset-2 hover:text-danger/80"
-            >
-              View details
-            </button>
-          </p>
-        )}
-      </div>
+          {/* The Button */}
+          <button
+            onClick={handleCallInsurance}
+            disabled={callState === 'calling' || callState === 'in_progress' || hasActiveCall}
+            className={`
+              relative inline-flex items-center gap-3 px-8 py-4 text-white font-display font-semibold text-lg rounded-xl transition-all duration-200
+              ${callState === 'calling'
+                ? 'bg-accent/80 cursor-wait pulse-ring shadow-lg shadow-accent/20'
+                : callState === 'in_progress' || hasActiveCall
+                  ? 'bg-accent/60 cursor-default'
+                  : 'bg-accent hover:bg-accent-hover shadow-lg shadow-accent/15 hover:shadow-accent/30 hover:scale-[1.02] active:scale-[0.98]'
+              }
+              disabled:opacity-70
+            `}
+          >
+            <Phone className={`w-5 h-5 ${callState === 'calling' ? 'animate-pulse' : ''}`} />
+            {callState === 'calling' ? (
+              <>Calling {insurance?.name || 'Insurance'}...</>
+            ) : callState === 'in_progress' || hasActiveCall ? (
+              <>
+                <span className="status-dot-pulse w-2 h-2 rounded-full bg-success inline-block" />
+                Call in Progress
+              </>
+            ) : (
+              <>Call Insurance</>
+            )}
+          </button>
+
+          {/* Error hint below button */}
+          {callState === 'error' && (
+            <p className="mt-4 text-sm text-danger flex items-center justify-center gap-1.5">
+              <XCircle className="w-4 h-4" />
+              Call failed.{' '}
+              <button
+                onClick={() => setErrorModalOpen(true)}
+                className="underline underline-offset-2 hover:text-danger/80"
+              >
+                View details
+              </button>
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* INFO CARDS GRID (2x2)                                               */}

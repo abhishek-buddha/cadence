@@ -12,6 +12,13 @@ export const create = mutation({
     verificationRequirements: v.optional(v.string()),
     avgHoldTime: v.optional(v.number()),
     notes: v.optional(v.string()),
+    ivrEnabled: v.optional(v.boolean()),
+    ivrSequence: v.optional(v.string()),
+    ivrSteps: v.optional(v.array(v.object({
+      waitSeconds: v.number(),
+      digit: v.string(),
+      label: v.optional(v.string()),
+    }))),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -56,6 +63,13 @@ export const update = mutation({
     verificationRequirements: v.optional(v.string()),
     avgHoldTime: v.optional(v.number()),
     notes: v.optional(v.string()),
+    ivrEnabled: v.optional(v.boolean()),
+    ivrSequence: v.optional(v.string()),
+    ivrSteps: v.optional(v.array(v.object({
+      waitSeconds: v.number(),
+      digit: v.string(),
+      label: v.optional(v.string()),
+    }))),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

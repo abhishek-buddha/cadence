@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Building2, Plus, Pencil, Trash2, Phone } from 'lucide-react';
@@ -15,7 +15,19 @@ const EMPTY_FORM = {
   verificationRequirements: '',
   avgHoldTime: '',
   notes: '',
+  ivrEnabled: false,
+  ivrSteps: [],
+  ivrSequence: '',
 };
+
+function generateIvrSequence(steps) {
+  return steps
+    .map((step) => {
+      const wCount = (step.waitSeconds || 1) * 2;
+      return 'w'.repeat(wCount) + step.digit;
+    })
+    .join('');
+}
 
 export default function InsuranceDirectory() {
   const contacts = useQuery(api.insuranceContacts.list);
@@ -48,6 +60,9 @@ export default function InsuranceDirectory() {
       verificationRequirements: contact.verificationRequirements ?? '',
       avgHoldTime: contact.avgHoldTime != null ? String(contact.avgHoldTime) : '',
       notes: contact.notes ?? '',
+      ivrEnabled: contact.ivrEnabled ?? false,
+      ivrSteps: contact.ivrSteps ?? [],
+      ivrSequence: contact.ivrSequence ?? '',
     });
     setModalOpen(true);
   }
@@ -61,6 +76,29 @@ export default function InsuranceDirectory() {
   function setField(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
+
+  const addIvrStep = useCallback(() => {
+    setForm((prev) => {
+      const newSteps = [...prev.ivrSteps, { waitSeconds: 2, digit: '1', label: '' }];
+      return { ...prev, ivrSteps: newSteps, ivrSequence: generateIvrSequence(newSteps) };
+    });
+  }, []);
+
+  const updateIvrStep = useCallback((index, field, value) => {
+    setForm((prev) => {
+      const newSteps = prev.ivrSteps.map((step, i) =>
+        i === index ? { ...step, [field]: value } : step
+      );
+      return { ...prev, ivrSteps: newSteps, ivrSequence: generateIvrSequence(newSteps) };
+    });
+  }, []);
+
+  const removeIvrStep = useCallback((index) => {
+    setForm((prev) => {
+      const newSteps = prev.ivrSteps.filter((_, i) => i !== index);
+      return { ...prev, ivrSteps: newSteps, ivrSequence: generateIvrSequence(newSteps) };
+    });
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -76,6 +114,9 @@ export default function InsuranceDirectory() {
         verificationRequirements: form.verificationRequirements || undefined,
         avgHoldTime: form.avgHoldTime ? Number(form.avgHoldTime) : undefined,
         notes: form.notes || undefined,
+        ivrEnabled: form.ivrEnabled,
+        ivrSteps: form.ivrSteps.length > 0 ? form.ivrSteps : undefined,
+        ivrSequence: form.ivrSequence || undefined,
       };
 
       if (editing) {
@@ -172,6 +213,9 @@ export default function InsuranceDirectory() {
                       <span className="font-data inline-flex items-center gap-1.5">
                         <Phone className="w-3 h-3 text-muted" />
                         {contact.phone}
+                        {contact.ivrEnabled && (
+                          <span className="ml-2 text-[10px] font-medium bg-accent/10 text-accent px-1.5 py-0.5 rounded">IVR</span>
+                        )}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{contact.department ?? '--'}</td>
@@ -288,6 +332,77 @@ export default function InsuranceDirectory() {
               placeholder="Press 1 for provider services, then 3 for claims status..."
             />
           </div>
+
+          {/* IVR Auto-Navigation Toggle */}
+          <div className="flex items-center justify-between p-3 bg-surface rounded-lg border border-border">
+            <div>
+              <p className="text-sm font-medium text-gray-900">IVR Auto-Navigation</p>
+              <p className="text-xs text-muted">Automatically navigate phone menu before connecting AI agent</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.ivrEnabled}
+              onClick={() => setField('ivrEnabled', !form.ivrEnabled)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${form.ivrEnabled ? 'bg-accent' : 'bg-gray-300'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.ivrEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {/* IVR Step Builder */}
+          {form.ivrEnabled && (
+            <div className="space-y-3 p-4 bg-surface rounded-lg border border-border">
+              <div className="flex items-center justify-between">
+                <label className={labelClass}>IVR Navigation Steps</label>
+                <button type="button" onClick={addIvrStep} className="text-xs text-accent hover:text-accent-hover font-medium">
+                  + Add Step
+                </button>
+              </div>
+              {form.ivrSteps.map((step, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs text-muted font-data w-6">{i + 1}.</span>
+                  <select
+                    value={step.waitSeconds}
+                    onChange={(e) => updateIvrStep(i, 'waitSeconds', Number(e.target.value))}
+                    className="bg-white border border-border-light rounded-lg px-2 py-1.5 text-xs text-gray-900 focus:border-accent focus:ring-1 focus:ring-accent outline-none"
+                  >
+                    {Array.from({ length: 10 }, (_, n) => n + 1).map((n) => (
+                      <option key={n} value={n}>{n}s wait</option>
+                    ))}
+                  </select>
+                  <select
+                    value={step.digit}
+                    onChange={(e) => updateIvrStep(i, 'digit', e.target.value)}
+                    className="bg-white border border-border-light rounded-lg px-2 py-1.5 text-xs text-gray-900 focus:border-accent focus:ring-1 focus:ring-accent outline-none"
+                  >
+                    {['0','1','2','3','4','5','6','7','8','9','#','*'].map((d) => (
+                      <option key={d} value={d}>Press {d}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={step.label}
+                    onChange={(e) => updateIvrStep(i, 'label', e.target.value)}
+                    className="flex-1 bg-white border border-border-light rounded-lg px-2 py-1.5 text-xs text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none"
+                    placeholder="e.g., Claims dept"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeIvrStep(i)}
+                    className="p-1.5 text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {form.ivrSteps.length > 0 && (
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs text-muted">Preview: <code className="font-data text-accent">{form.ivrSequence}</code></p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <label className={labelClass}>Verification Requirements</label>

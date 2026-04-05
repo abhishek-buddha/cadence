@@ -2,8 +2,261 @@ import { httpRouter } from 'convex/server';
 import { httpAction } from './_generated/server';
 import { api } from './_generated/api';
 
+const MAX_HOLD_ATTEMPTS = 30; // 30 × 60s = 30 minutes max hold
+
+function twimlResponse(twiml: string): Response {
+  return new Response(twiml.trim(), {
+    status: 200,
+    headers: { 'Content-Type': 'text/xml' },
+  });
+}
+
 const http = httpRouter();
 
+// ---- TwiML: Hold loop with speech detection (Phase 2) ----
+http.route({
+  path: '/twiml-hold-loop',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const callId = url.searchParams.get('callId') || '';
+    const claimId = url.searchParams.get('claimId') || '';
+    const attempt = parseInt(url.searchParams.get('attempt') || '1', 10);
+
+    const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+
+    // Update call phase to "hold" on first attempt
+    if (attempt === 1 && callId) {
+      try {
+        await ctx.runMutation(api.calls.updateStatus, {
+          id: callId as any,
+          status: 'in_progress',
+          callPhase: 'hold',
+          holdStartedAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.error('Failed to update call phase:', e);
+      }
+    }
+
+    // Exceeded max hold time — hang up
+    if (attempt > MAX_HOLD_ATTEMPTS) {
+      if (callId) {
+        try {
+          await ctx.runMutation(api.calls.updateStatus, {
+            id: callId as any,
+            status: 'failed',
+            errorMessage: 'Hold timeout exceeded (30 minutes)',
+            callPhase: 'hold_timeout',
+            completedAt: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.error('Failed to update timeout status:', e);
+        }
+      }
+      return twimlResponse(`
+        <Response>
+          <Say voice="alice">We were unable to reach a representative within the allowed hold time. The call will now end.</Say>
+          <Hangup/>
+        </Response>
+      `);
+    }
+
+    const siteUrl = url.origin;
+    const connectUrl = `${siteUrl}/twiml-connect-agent?callId=${callId}&claimId=${claimId}`;
+    const nextLoopUrl = `${siteUrl}/twiml-hold-loop?callId=${callId}&claimId=${claimId}&attempt=${attempt + 1}`;
+
+    return twimlResponse(`
+      <Response>
+        <Start>
+          <Stream url="${BRIDGE_URL}/monitor" track="both_tracks">
+            <Parameter name="callId" value="${callId}"/>
+          </Stream>
+        </Start>
+        <Gather input="speech" timeout="55" speechTimeout="3" action="${connectUrl}" method="POST">
+          <Pause length="55"/>
+        </Gather>
+        <Redirect method="POST">${nextLoopUrl}</Redirect>
+      </Response>
+    `);
+  }),
+});
+
+// ---- TwiML: Connect agent (Phase 3 — human detected) ----
+http.route({
+  path: '/twiml-connect-agent',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const callId = url.searchParams.get('callId') || '';
+    const claimId = url.searchParams.get('claimId') || '';
+
+    const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+
+    // Calculate hold duration and update call phase
+    if (callId) {
+      try {
+        const call = await ctx.runQuery(api.calls.getById, { id: callId as any });
+        const holdDuration = call?.holdStartedAt
+          ? Math.round((Date.now() - new Date(call.holdStartedAt).getTime()) / 1000)
+          : 0;
+
+        await ctx.runMutation(api.calls.updateStatus, {
+          id: callId as any,
+          status: 'in_progress',
+          callPhase: 'connecting',
+          humanDetectedAt: new Date().toISOString(),
+          holdDuration,
+        });
+      } catch (e) {
+        console.error('Failed to update connecting phase:', e);
+      }
+    }
+
+    return twimlResponse(`
+      <Response>
+        <Connect>
+          <Stream url="${BRIDGE_URL}/media-stream">
+            <Parameter name="callId" value="${callId}"/>
+            <Parameter name="claimId" value="${claimId}"/>
+          </Stream>
+        </Connect>
+      </Response>
+    `);
+  }),
+});
+
+// ---- Twilio status callback ----
+http.route({
+  path: '/twilio-status',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const formData = await request.text();
+      const params = new URLSearchParams(formData);
+      const callSid = params.get('CallSid');
+      const callStatus = params.get('CallStatus'); // initiated, ringing, answered, completed, failed, busy, no-answer
+      const duration = params.get('CallDuration');
+
+      if (!callSid) {
+        return new Response(JSON.stringify({ error: 'No CallSid' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Find call by Twilio SID
+      const call = await ctx.runQuery(api.calls.getByTwilioSid, { twilioCallSid: callSid });
+
+      if (call) {
+        if (callStatus === 'completed') {
+          await ctx.runMutation(api.calls.updateStatus, {
+            id: call._id,
+            status: call.status === 'failed' ? 'failed' : 'completed',
+            completedAt: new Date().toISOString(),
+            duration: duration ? parseInt(duration, 10) : undefined,
+          });
+        } else if (callStatus === 'failed' || callStatus === 'busy' || callStatus === 'no-answer') {
+          await ctx.runMutation(api.calls.updateStatus, {
+            id: call._id,
+            status: 'failed',
+            errorMessage: `Call ${callStatus}`,
+            completedAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error: any) {
+      console.error('Twilio status callback error:', error.message);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
+
+// ---- Call metadata endpoint (used by bridge server) ----
+http.route({
+  path: '/call-metadata',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const callId = url.searchParams.get('callId');
+
+    if (!callId) {
+      return new Response(JSON.stringify({ error: 'Missing callId' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    try {
+      const metadata = await ctx.runQuery(api.calls.getCallMetadata, { id: callId as any });
+      if (!metadata) {
+        return new Response(JSON.stringify({ error: 'Call not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { call, claim, patient, insurance, provider } = metadata;
+      return new Response(JSON.stringify({
+        callId: call._id,
+        claimId: claim._id,
+        dynamic_variables: {
+          practice_name: provider?.practiceName || '',
+          npi: provider?.npi || '',
+          tax_id: provider?.taxId || '',
+          callback_number: provider?.phone || '',
+          patient_name: patient ? `${patient.firstName} ${patient.lastName}` : '',
+          patient_dob: patient?.dateOfBirth || '',
+          member_id: patient?.memberId || '',
+          group_number: patient?.groupNumber || 'N/A',
+          claim_number: claim.claimNumber,
+          date_of_service: claim.dateOfService,
+          billed_amount: (claim.amount / 100).toFixed(2),
+          cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
+          internal_call_id: call._id,
+          internal_claim_id: claim._id,
+        },
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
+
+// ---- CORS preflight for call-metadata ----
+http.route({
+  path: '/call-metadata',
+  method: 'OPTIONS',
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }),
+});
+
+// ---- ElevenLabs webhook (existing) ----
 http.route({
   path: '/elevenlabs-webhook',
   method: 'POST',

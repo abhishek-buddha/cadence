@@ -15,11 +15,13 @@ import {
   X,
   Trash2,
   Download,
+  Sparkles,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import AddClaimModal from '../components/AddClaimModal';
 import { useProviderFilter } from '../context/ProviderFilterContext';
 
 const STATUS_OPTIONS = [
@@ -580,6 +582,7 @@ export default function ClaimsPage() {
   const bulkRemove = useMutation(api.claims.bulkRemove);
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [addClaimModalOpen, setAddClaimModalOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
 
@@ -728,6 +731,13 @@ export default function ClaimsPage() {
             Download
           </button>
           <button
+            onClick={() => setAddClaimModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-accent text-accent hover:bg-accent hover:text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+          >
+            <Sparkles className="w-4 h-4" />
+            Add Claim
+          </button>
+          <button
             onClick={() => setUploadModalOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
           >
@@ -845,6 +855,9 @@ export default function ClaimsPage() {
 
       {/* Upload Claims Modal */}
       <UploadClaimsModal open={uploadModalOpen} onClose={() => setUploadModalOpen(false)} />
+
+      {/* Add Claim Modal */}
+      <AddClaimModal open={addClaimModalOpen} onClose={() => setAddClaimModalOpen(false)} />
     </div>
   );
 }

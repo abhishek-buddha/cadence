@@ -29,6 +29,11 @@ export const updateStatus = mutation({
     recordingUrl: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     completedAt: v.optional(v.string()),
+    callPhase: v.optional(v.string()),
+    holdStartedAt: v.optional(v.string()),
+    holdDuration: v.optional(v.number()),
+    humanDetectedAt: v.optional(v.string()),
+    ivrSequenceUsed: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -68,6 +73,31 @@ export const getById = query({
   args: { id: v.id('calls') },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.id);
+  },
+});
+
+export const getCallMetadata = query({
+  args: { id: v.id('calls') },
+  handler: async (ctx, args) => {
+    const call = await ctx.db.get(args.id);
+    if (!call) return null;
+
+    const claim = await ctx.db.get(call.claimId);
+    if (!claim) return null;
+
+    const patient = await ctx.db.get(claim.patientId);
+    const insurance = await ctx.db.get(claim.insuranceContactId);
+    const provider = await ctx.db.get(claim.providerId);
+
+    return { call, claim, patient, insurance, provider };
+  },
+});
+
+export const getByTwilioSid = query({
+  args: { twilioCallSid: v.string() },
+  handler: async (ctx, args) => {
+    const calls = await ctx.db.query('calls').collect();
+    return calls.find((c) => c.twilioCallSid === args.twilioCallSid) || null;
   },
 });
 

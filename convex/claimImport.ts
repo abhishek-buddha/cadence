@@ -331,3 +331,128 @@ export const bulkImportClaims = mutation({
     };
   },
 });
+
+/**
+ * AI-powered single claim autofill: Takes minimal user input and uses GPT-4o
+ * to fill in remaining fields by matching against existing database entities.
+ */
+export const aiAutofillClaim = action({
+  args: {
+    claimNumber: v.optional(v.string()),
+    patientName: v.optional(v.string()),
+    insuranceName: v.optional(v.string()),
+    amount: v.optional(v.string()),
+    dateOfService: v.optional(v.string()),
+    cptCodes: v.optional(v.string()),
+    diagnosisCodes: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject || 'default';
+
+    // Fetch existing entities for matching
+    const existingPatients = await ctx.runQuery(api.patients.list);
+    const existingInsurance = await ctx.runQuery(api.insuranceContacts.list);
+    const existingProviders = await ctx.runQuery(api.providers.list);
+
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_API_KEY) throw new Error('Missing OpenAI API key');
+
+    // Build entity lists for AI context
+    const patientList = (existingPatients || []).map((p: any) => ({
+      id: p._id, name: `${p.firstName} ${p.lastName}`, memberId: p.memberId, dob: p.dateOfBirth, groupNumber: p.groupNumber,
+    }));
+    const insuranceList = (existingInsurance || []).map((c: any) => ({
+      id: c._id, name: c.name, payerId: c.payerId, phone: c.phone,
+    }));
+    const providerList = (existingProviders || []).map((p: any) => ({
+      id: p._id, name: p.practiceName, npi: p.npi,
+    }));
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `You are a medical billing assistant. Given partial claim information, fill in as many fields as possible using the existing database entities and reasonable defaults.
+
+Today's date: ${today}
+
+EXISTING DATABASE ENTITIES:
+Patients: ${JSON.stringify(patientList)}
+Insurance Companies: ${JSON.stringify(insuranceList)}
+Providers: ${JSON.stringify(providerList)}
+
+RULES:
+- Match patient name to existing patients (fuzzy match). If matched, use their memberId, DOB, groupNumber.
+- Match insurance name to existing contacts (fuzzy: "BCBS" = "Blue Cross", "UHC" = "UnitedHealthcare", etc.)
+- If only one provider exists, use it as default.
+- Parse amount: "$500" or "500" → 50000 (cents). "$1,234.56" → 123456.
+- Parse CPT codes: "99213, 99214" → ["99213", "99214"]
+- Parse diagnosis codes similarly.
+- Generate claim number if not provided: "CLM-YYYYMMDD-XXXX" (XXXX = random 4 chars)
+- Calculate aging bucket from dateOfService vs today.
+- Assign priority based on aging + amount (120+ days → high, 61-120 → medium, 0-60 → low, >$10k → bump up).
+- Default status: "pending"
+
+Return JSON:
+{
+  "claimNumber": "CLM-20260405-A1B2",
+  "matchedPatientId": "id_or_null",
+  "patientFirstName": "John",
+  "patientLastName": "Smith",
+  "patientDOB": "1985-03-15",
+  "memberId": "MBR123",
+  "groupNumber": "GRP456",
+  "matchedInsuranceId": "id_or_null",
+  "insuranceName": "Aetna",
+  "matchedProviderId": "id_or_null",
+  "amount": 50000,
+  "dateOfService": "2026-03-01",
+  "dateSubmitted": null,
+  "cptCodes": ["99213"],
+  "diagnosisCodes": ["Z00.00"],
+  "status": "pending",
+  "priority": "medium",
+  "agingBucket": "31-60",
+  "notes": null,
+  "confidence": 0.85,
+  "suggestions": ["Matched patient 'John Smith' from existing records", "Using default provider 'ABC Practice'"]
+}
+
+For any field you cannot determine, use null or sensible defaults. Always return all fields.`,
+          },
+          {
+            role: 'user',
+            content: `Partial claim data from user:\n${JSON.stringify(args, null, 2)}`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      throw new Error(`AI processing failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    let parsed;
+    try {
+      parsed = JSON.parse(result.choices[0].message.content);
+    } catch {
+      throw new Error('AI returned invalid response');
+    }
+    return parsed;
+  },
+});

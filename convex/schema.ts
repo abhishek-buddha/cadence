@@ -26,6 +26,14 @@ export default defineSchema({
     verificationRequirements: v.optional(v.string()),
     avgHoldTime: v.optional(v.number()),
     notes: v.optional(v.string()),
+    // IVR navigation
+    ivrEnabled: v.optional(v.boolean()),
+    ivrSequence: v.optional(v.string()),
+    ivrSteps: v.optional(v.array(v.object({
+      waitSeconds: v.number(),
+      digit: v.string(),
+      label: v.optional(v.string()),
+    }))),
     userId: v.string(),
     createdAt: v.string(),
     updatedAt: v.string(),
@@ -94,6 +102,12 @@ export default defineSchema({
     transcript: v.optional(v.string()),
     recordingUrl: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
+    // IVR call phase tracking
+    callPhase: v.optional(v.string()),
+    holdStartedAt: v.optional(v.string()),
+    holdDuration: v.optional(v.number()),
+    humanDetectedAt: v.optional(v.string()),
+    ivrSequenceUsed: v.optional(v.string()),
     userId: v.string(),
     startedAt: v.string(),
     completedAt: v.optional(v.string()),

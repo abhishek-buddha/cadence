@@ -43,10 +43,13 @@ function useElapsedTimer(startIso, frozenDuration) {
 // ---------------------------------------------------------------------------
 // LiveCallMonitor
 // ---------------------------------------------------------------------------
-export default function LiveCallMonitor({ call, insurance }) {
+export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const getCallStatus = useAction(api.callActions.getCallStatus);
   const transcriptEndRef = useRef(null);
   const completionTriggeredRef = useRef(false);
+
+  // Ref-based timer freeze — set synchronously when "done" detected
+  const callDoneDurationRef = useRef(null);
 
   // Audio state
   const [muted, setMuted] = useState(false);
@@ -79,9 +82,15 @@ export default function LiveCallMonitor({ call, insurance }) {
             claimId: call.claimId,
           });
           if (data && !cancelled) {
+            // Freeze timer SYNCHRONOUSLY before async state update
+            if (data.status === 'done' && callDoneDurationRef.current == null) {
+              callDoneDurationRef.current = data.duration ||
+                (call?.startedAt ? Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000) : 0);
+              completionTriggeredRef.current = true;
+              if (onComplete) onComplete(call._id);
+            }
             setPolledData(data);
             if (data.status === 'done') {
-              completionTriggeredRef.current = true;
               cancelled = true;
               return;
             }
@@ -97,7 +106,7 @@ export default function LiveCallMonitor({ call, insurance }) {
       clearTimeout(startDelay);
       clearTimeout(pollRef.current);
     };
-  }, [call?.elevenLabsConversationId, call?._id, call?.claimId, getCallStatus]);
+  }, [call?.elevenLabsConversationId, call?._id, call?.claimId, getCallStatus, onComplete]);
 
   const isCompleted = polledData?.status === 'done' || call?.status === 'completed' || call?.status === 'failed';
 
@@ -111,23 +120,27 @@ export default function LiveCallMonitor({ call, insurance }) {
       }));
   }, [polledData]);
 
-  const frozenDuration = isCompleted && polledData?.duration ? polledData.duration : null;
+  // Use ref-based frozen duration (set synchronously) with fallback to state-based
+  const frozenDuration = callDoneDurationRef.current != null
+    ? callDoneDurationRef.current
+    : (isCompleted && polledData?.duration ? polledData.duration : null);
   const elapsed = useElapsedTimer(call?.startedAt, frozenDuration);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [effectiveTranscript.length]);
 
-  // Audio player — batched playback (AudioContext created on user click via ensureAudioContext)
+  // Audio player — smooth playback with fixed-size chunks
   useEffect(() => {
     playIntervalRef.current = setInterval(() => {
       if (mutedRef.current) return;
       const ctx = audioCtxRef.current;
       if (!ctx || ctx.state !== 'running') return;
       const queue = audioQueueRef.current;
-      if (queue.length < 2000) return;
+      if (queue.length < 640) return;
 
-      const samples = new Float32Array(queue.splice(0, queue.length));
+      const chunkSize = Math.min(queue.length, 800);
+      const samples = new Float32Array(queue.splice(0, chunkSize));
       const buffer = ctx.createBuffer(1, samples.length, 8000);
       buffer.getChannelData(0).set(samples);
       const source = ctx.createBufferSource();
@@ -137,7 +150,7 @@ export default function LiveCallMonitor({ call, insurance }) {
       const startAt = Math.max(now + 0.01, nextPlayTimeRef.current);
       source.start(startAt);
       nextPlayTimeRef.current = startAt + buffer.duration;
-    }, 250);
+    }, 50);
 
     return () => {
       clearInterval(playIntervalRef.current);
@@ -171,7 +184,7 @@ export default function LiveCallMonitor({ call, insurance }) {
             for (let i = 0; i < binary.length; i++) {
               audioQueueRef.current.push(MULAW_TABLE[binary.charCodeAt(i) & 0xFF]);
             }
-            if (audioQueueRef.current.length > 24000) {
+            if (audioQueueRef.current.length > 48000) {
               audioQueueRef.current.splice(0, audioQueueRef.current.length - 24000);
             }
           }
@@ -272,7 +285,6 @@ export default function LiveCallMonitor({ call, insurance }) {
               } else {
                 setMuted(true);
               }
-              // Always ensure AudioContext is initialized on any click (user gesture)
               ensureAudioContext();
             }}
             className={`p-2 rounded-lg transition-colors ${muted ? 'text-muted hover:text-gray-900 hover:bg-gray-100' : 'text-accent hover:bg-accent/10'}`}

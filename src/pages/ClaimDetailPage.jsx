@@ -253,6 +253,15 @@ export default function ClaimDetailPage() {
   const [callError, setCallError] = useState(null);
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [piiVisible, setPiiVisible] = useState(false);
+  const [localCompletedCallIds, setLocalCompletedCallIds] = useState(new Set());
+
+  const handleCallComplete = (callId) => {
+    setLocalCompletedCallIds(prev => {
+      const next = new Set(prev);
+      next.add(callId);
+      return next;
+    });
+  };
 
   // ---- Loading / Error states ---------------------------------------------
   if (data === undefined) {
@@ -342,13 +351,15 @@ export default function ClaimDetailPage() {
     return Date.now() - new Date(call.completedAt).getTime() < 30000;
   };
 
+  const isLocallyDone = (c) => localCompletedCallIds.has(c._id);
+
   const hasActiveCall = callState === 'calling' || callState === 'in_progress' ||
-    (calls && calls.length > 0 && ['initiating', 'ringing', 'in_progress'].includes(calls[0].status) && !isCallStale(calls[0])) ||
-    (calls && calls.length > 0 && isRecentlyCompleted(calls[0]));
+    (calls && calls.length > 0 && ['initiating', 'ringing', 'in_progress'].includes(calls[0].status) && !isCallStale(calls[0]) && !isLocallyDone(calls[0])) ||
+    (calls && calls.length > 0 && isRecentlyCompleted(calls[0]) && !isLocallyDone(calls[0]));
 
   const activeCall = calls?.find((c) =>
-    ['initiating', 'ringing', 'in_progress'].includes(c.status) && !isCallStale(c)
-  ) || calls?.find((c) => isRecentlyCompleted(c));
+    ['initiating', 'ringing', 'in_progress'].includes(c.status) && !isCallStale(c) && !isLocallyDone(c)
+  ) || calls?.find((c) => isRecentlyCompleted(c) && !isLocallyDone(c));
 
   // =========================================================================
   // RENDER
@@ -385,7 +396,7 @@ export default function ClaimDetailPage() {
       {/* HERO: CALL INSURANCE BUTTON / LIVE CALL MONITOR                     */}
       {/* ------------------------------------------------------------------ */}
       {activeCall ? (
-        <LiveCallMonitor call={activeCall} insurance={insurance} />
+        <LiveCallMonitor call={activeCall} insurance={insurance} onComplete={handleCallComplete} />
       ) : (
         <div className="bg-gradient-to-r from-accent/5 to-cyan/5 border border-accent/15 rounded-xl p-8 text-center glow-border-strong">
           {/* Subtitle */}

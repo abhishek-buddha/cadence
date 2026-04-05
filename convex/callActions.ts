@@ -113,9 +113,29 @@ export const initiateCall = action({
         }
       }
 
-      // Note: Twilio Streams REST API removed — call SID belongs to ElevenLabs'
-      // Twilio subaccount, not ours, so stream attachment always fails silently.
-      // Audio monitoring relies on ElevenLabs monitor WebSocket via bridge /start-monitor.
+      // Step 3: Attach a passive Twilio monitor stream for browser audio listening
+      if (callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+        try {
+          const streamUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}/Streams.json`;
+          const streamParams = new URLSearchParams();
+          streamParams.append('Url', `${BRIDGE_URL}/monitor`);
+          streamParams.append('Track', 'both_tracks');
+          streamParams.append('Name', `monitor-${callId}`);
+          streamParams.append('Parameter1.Name', 'callId');
+          streamParams.append('Parameter1.Value', callId);
+
+          await fetch(streamUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`),
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: streamParams.toString(),
+          });
+        } catch (streamErr: any) {
+          console.error('Failed to attach monitor stream (non-fatal):', streamErr.message);
+        }
+      }
 
       // 5. Update claim
       await ctx.runMutation(api.claims.update, {

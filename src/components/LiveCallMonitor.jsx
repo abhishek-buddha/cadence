@@ -52,7 +52,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const callDoneDurationRef = useRef(null);
 
   // Audio state
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(true);
   const [audioConnected, setAudioConnected] = useState(false);
   const mutedRef = useRef(false);
   const audioCtxRef = useRef(null);
@@ -265,7 +265,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success" />
                 </span>
-                <span className="text-sm text-gray-900 font-medium">Live Audio</span>
+                <span className="text-sm text-gray-900 font-medium">{muted ? 'Click speaker to listen' : 'Live Audio'}</span>
               </>
             ) : (
               <>

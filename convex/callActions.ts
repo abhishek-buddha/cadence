@@ -114,6 +114,8 @@ export const initiateCall = action({
       }
 
       // Step 3: Attach a passive Twilio monitor stream for browser audio listening
+      // Wait for call to be fully connected before attaching stream
+      await new Promise(resolve => setTimeout(resolve, 5000));
       if (callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
         try {
           const streamUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}/Streams.json`;

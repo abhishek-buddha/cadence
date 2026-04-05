@@ -26,6 +26,7 @@ export default defineSchema({
     verificationRequirements: v.optional(v.string()),
     avgHoldTime: v.optional(v.number()),
     notes: v.optional(v.string()),
+    humanAgentNumber: v.optional(v.string()),
     // IVR navigation
     ivrEnabled: v.optional(v.boolean()),
     ivrSequence: v.optional(v.string()),

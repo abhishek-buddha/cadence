@@ -429,10 +429,13 @@ http.route({
   path: '/test-ivr',
   method: 'POST',
   handler: httpAction(async (_, request) => {
-    const siteUrl = new URL(request.url).origin;
+    const url = new URL(request.url);
+    const siteUrl = url.origin;
+    const forwardNumber = url.searchParams.get('forwardNumber') || '';
+    const fwdParam = forwardNumber ? `?forwardNumber=${encodeURIComponent(forwardNumber)}` : '';
     return twimlResponse(`
       <Response>
-        <Gather input="speech dtmf" numDigits="1" timeout="8" speechTimeout="3" action="${siteUrl}/test-ivr-level2" method="POST">
+        <Gather input="speech dtmf" numDigits="1" timeout="8" speechTimeout="3" action="${siteUrl}/test-ivr-level2${fwdParam}" method="POST">
           <Say voice="Polly.Joanna">Thank you for calling Acme Health Insurance, a preferred provider organization.
             Please listen carefully as our menu options have recently changed.
             For claims and billing, press 1 or say claims.
@@ -441,7 +444,7 @@ http.route({
             For pharmacy, press 4.
             To repeat this menu, press 9.</Say>
         </Gather>
-        <Redirect method="POST">${siteUrl}/test-ivr</Redirect>
+        <Redirect method="POST">${siteUrl}/test-ivr${fwdParam}</Redirect>
       </Response>
     `);
   }),
@@ -451,7 +454,10 @@ http.route({
   path: '/test-ivr-level2',
   method: 'POST',
   handler: httpAction(async (_, request) => {
-    const siteUrl = new URL(request.url).origin;
+    const url = new URL(request.url);
+    const siteUrl = url.origin;
+    const forwardNumber = url.searchParams.get('forwardNumber') || '';
+    const fwdParam = forwardNumber ? `?forwardNumber=${encodeURIComponent(forwardNumber)}` : '';
     const body = await request.text();
     const params = new URLSearchParams(body);
     const digits = params.get('Digits') || '';
@@ -460,14 +466,14 @@ http.route({
     if (digits === '1' || speech.includes('claim') || speech.includes('billing')) {
       return twimlResponse(`
         <Response>
-          <Gather input="speech dtmf" numDigits="1" timeout="8" speechTimeout="3" action="${siteUrl}/test-ivr-hold" method="POST">
+          <Gather input="speech dtmf" numDigits="1" timeout="8" speechTimeout="3" action="${siteUrl}/test-ivr-hold${fwdParam}" method="POST">
             <Say voice="Polly.Joanna">You have reached the claims department.
               For claim status inquiry, press 1 or say claim status.
               To file a new claim, press 2.
               For claim appeals, press 3.
               To speak with a claims representative, press 0.</Say>
           </Gather>
-          <Redirect method="POST">${siteUrl}/test-ivr-level2?Digits=1</Redirect>
+          <Redirect method="POST">${siteUrl}/test-ivr-level2?Digits=1${forwardNumber ? `&forwardNumber=${encodeURIComponent(forwardNumber)}` : ''}</Redirect>
         </Response>
       `);
     }
@@ -475,7 +481,7 @@ http.route({
     return twimlResponse(`
       <Response>
         <Say voice="Polly.Joanna">That option is not available. Returning to main menu.</Say>
-        <Redirect method="POST">${siteUrl}/test-ivr</Redirect>
+        <Redirect method="POST">${siteUrl}/test-ivr${fwdParam}</Redirect>
       </Response>
     `);
   }),
@@ -485,7 +491,23 @@ http.route({
   path: '/test-ivr-hold',
   method: 'POST',
   handler: httpAction(async (_, request) => {
-    const siteUrl = new URL(request.url).origin;
+    const url = new URL(request.url);
+    const siteUrl = url.origin;
+    const forwardNumber = url.searchParams.get('forwardNumber') || '';
+
+    // After hold music, either dial the human agent number or fall back to TTS Michael
+    const afterHold = forwardNumber
+      ? `<Say voice="Polly.Joanna">Transferring you now.</Say>
+         <Dial callerId="+12272573081" timeout="30">${forwardNumber}</Dial>
+         <Say voice="Polly.Joanna">We were unable to reach the representative. Please try again later.</Say>
+         <Hangup/>`
+      : `<Gather input="speech" timeout="180" speechTimeout="auto" action="${siteUrl}/test-ivr-agent" method="POST">
+          <Say voice="Polly.Matthew">Hi there, thanks so much for holding. This is Michael with the Acme Health Insurance claims department. How can I help you today?</Say>
+          <Pause length="180"/>
+        </Gather>
+        <Say voice="Polly.Matthew">Thank you for calling. Goodbye.</Say>
+        <Hangup/>`;
+
     return twimlResponse(`
       <Response>
         <Say voice="Polly.Joanna">Please hold while we transfer you to the next available claims representative.
@@ -493,12 +515,7 @@ http.route({
         <Play>http://com.twilio.music.classical.s3.amazonaws.com/ith_chopin-702.mp3</Play>
         <Say voice="Polly.Joanna">Thank you for your continued patience.</Say>
         <Pause length="2"/>
-        <Gather input="speech" timeout="180" speechTimeout="auto" action="${siteUrl}/test-ivr-agent" method="POST">
-          <Say voice="Polly.Matthew">Hi there, thanks so much for holding. This is Michael with the Acme Health Insurance claims department. How can I help you today?</Say>
-          <Pause length="180"/>
-        </Gather>
-        <Say voice="Polly.Matthew">Thank you for calling. Goodbye.</Say>
-        <Hangup/>
+        ${afterHold}
       </Response>
     `);
   }),

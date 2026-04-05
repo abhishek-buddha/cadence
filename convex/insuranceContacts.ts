@@ -12,6 +12,7 @@ export const create = mutation({
     verificationRequirements: v.optional(v.string()),
     avgHoldTime: v.optional(v.number()),
     notes: v.optional(v.string()),
+    humanAgentNumber: v.optional(v.string()),
     ivrEnabled: v.optional(v.boolean()),
     ivrSequence: v.optional(v.string()),
     ivrSteps: v.optional(v.array(v.object({
@@ -63,6 +64,7 @@ export const update = mutation({
     verificationRequirements: v.optional(v.string()),
     avgHoldTime: v.optional(v.number()),
     notes: v.optional(v.string()),
+    humanAgentNumber: v.optional(v.string()),
     ivrEnabled: v.optional(v.boolean()),
     ivrSequence: v.optional(v.string()),
     ivrSteps: v.optional(v.array(v.object({

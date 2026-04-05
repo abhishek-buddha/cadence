@@ -8,6 +8,7 @@ import EmptyState from '../components/EmptyState';
 const EMPTY_FORM = {
   name: '',
   phone: '',
+  humanAgentNumber: '',
   department: '',
   payerId: '',
   hours: '',
@@ -41,6 +42,7 @@ export default function InsuranceDirectory() {
     setForm({
       name: contact.name,
       phone: contact.phone,
+      humanAgentNumber: contact.humanAgentNumber ?? '',
       department: contact.department ?? '',
       payerId: contact.payerId ?? '',
       hours: contact.hours ?? '',
@@ -69,6 +71,7 @@ export default function InsuranceDirectory() {
       const payload = {
         name: form.name,
         phone: form.phone,
+        humanAgentNumber: form.humanAgentNumber || undefined,
         department: form.department || undefined,
         payerId: form.payerId || undefined,
         hours: form.hours || undefined,
@@ -229,6 +232,17 @@ export default function InsuranceDirectory() {
                 required
               />
             </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Human Agent Number</label>
+            <input
+              type="tel"
+              value={form.humanAgentNumber}
+              onChange={(e) => setField('humanAgentNumber', e.target.value)}
+              className={inputClass}
+              placeholder="+918309838260 (forwarded after IVR)"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

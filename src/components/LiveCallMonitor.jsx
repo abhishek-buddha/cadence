@@ -225,7 +225,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
               const inSamples = inQ.splice(0, mixLen);
               const outSamples = outQ.splice(0, mixLen);
               for (let i = 0; i < mixLen; i++) {
-                audioQueueRef.current.push((inSamples[i] + outSamples[i]) * 0.7);
+                audioQueueRef.current.push(Math.max(-1, Math.min(1, inSamples[i] + outSamples[i])));
               }
             }
             // If one track is ahead by >2000 samples, flush it solo so it doesn't lag

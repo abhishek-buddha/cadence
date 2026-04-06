@@ -70,6 +70,9 @@ export const initiateCall = action({
               cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
               internal_call_id: callId,
               internal_claim_id: args.claimId,
+              insurance_name: insurance.name,
+              insurance_phone: insurance.phone,
+              ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses. Speak your selections clearly instead of pressing keys.',
             },
           },
         }),
@@ -510,5 +513,52 @@ export const getCallStatus = action({
     } catch {
       return null;
     }
+  },
+});
+
+export const endCall = action({
+  args: {
+    callId: v.id('calls'),
+  },
+  handler: async (ctx, args) => {
+    // 1. Get the call record
+    const call = await ctx.runQuery(api.calls.getById, { id: args.callId });
+    if (!call) throw new Error('Call not found');
+    if (call.status === 'completed' || call.status === 'failed') {
+      return { success: true, message: 'Call already ended' };
+    }
+
+    const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+    const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+
+    // 2. If we have a Twilio call SID, terminate via Twilio API
+    if (call.twilioCallSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+      try {
+        const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${call.twilioCallSid}.json`;
+        const params = new URLSearchParams();
+        params.append('Status', 'completed');
+
+        await fetch(twilioUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
+        });
+      } catch (e: any) {
+        console.error('Failed to terminate Twilio call:', e.message);
+      }
+    }
+
+    // 3. Mark call as completed in Convex regardless
+    await ctx.runMutation(api.calls.updateStatus, {
+      id: args.callId,
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      errorMessage: 'Call ended by user',
+    });
+
+    return { success: true };
   },
 });

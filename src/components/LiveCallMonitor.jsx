@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { Phone, Clock, CheckCircle2, MessageSquare, Volume2, VolumeX, Loader2 } from 'lucide-react';
+import { Phone, PhoneOff, Clock, CheckCircle2, MessageSquare, Volume2, VolumeX, Loader2 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Standard ITU-T G.711 mu-law decode table
@@ -62,6 +62,8 @@ function useElapsedTimer(startIso, frozenDuration) {
 // ---------------------------------------------------------------------------
 export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const getCallStatus = useAction(api.callActions.getCallStatus);
+  const endCallAction = useAction(api.callActions.endCall);
+  const [ending, setEnding] = useState(false);
   const transcriptEndRef = useRef(null);
   const completionTriggeredRef = useRef(false);
 
@@ -278,6 +280,19 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     }
   }
 
+  async function handleEndCall() {
+    if (ending || isCompleted) return;
+    setEnding(true);
+    try {
+      await endCallAction({ callId: call._id });
+      if (onComplete) onComplete(call._id);
+    } catch (err) {
+      console.error('Failed to end call:', err);
+    } finally {
+      setEnding(false);
+    }
+  }
+
   function handleUnmute() {
     setMuted(false);
     ensureAudioContext();
@@ -307,9 +322,22 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
             <p className="text-xs text-muted">{insurance?.name || 'Insurance'} — AI agent handling the call</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 bg-white/80 border border-border rounded-lg px-3 py-2">
-          <Clock className="w-3.5 h-3.5 text-muted" />
-          <span className="font-data text-sm text-gray-900">{elapsed}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-white/80 border border-border rounded-lg px-3 py-2">
+            <Clock className="w-3.5 h-3.5 text-muted" />
+            <span className="font-data text-sm text-gray-900">{elapsed}</span>
+          </div>
+          {!isCompleted && (
+            <button
+              onClick={handleEndCall}
+              disabled={ending}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-danger/10 border border-danger/20 text-danger hover:bg-danger/20 transition-colors text-sm font-medium disabled:opacity-50"
+              title="End call"
+            >
+              <PhoneOff className="w-3.5 h-3.5" />
+              {ending ? 'Ending...' : 'End Call'}
+            </button>
+          )}
         </div>
       </div>
 

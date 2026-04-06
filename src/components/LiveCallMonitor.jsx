@@ -73,7 +73,9 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const [audioConnected, setAudioConnected] = useState(false);
   const mutedRef = useRef(false);
   const audioCtxRef = useRef(null);
-  const audioQueueRef = useRef([]);
+  const inboundQueueRef = useRef([]);
+  const outboundQueueRef = useRef([]);
+  const audioQueueRef = useRef([]); // mixed output queue
   const nextPlayTimeRef = useRef(0);
   const playIntervalRef = useRef(null);
   const wsRef = useRef(null);
@@ -174,6 +176,8 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     return () => {
       clearInterval(playIntervalRef.current);
       audioQueueRef.current = [];
+      inboundQueueRef.current = [];
+      outboundQueueRef.current = [];
       nextPlayTimeRef.current = 0;
       if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
         audioCtxRef.current.close().catch(() => {});
@@ -199,13 +203,42 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
         try {
           const data = JSON.parse(event.data);
           if (data.event === 'audio' && data.media?.payload) {
-            // Only play inbound track — skip outbound (agent) to avoid 2x sample rate = slow motion
-            if (data.media.track === 'outbound') return;
-
             const binary = atob(data.media.payload);
+            const samples = [];
             for (let i = 0; i < binary.length; i++) {
-              audioQueueRef.current.push(MULAW_TABLE[binary.charCodeAt(i) & 0xFF]);
+              samples.push(MULAW_TABLE[binary.charCodeAt(i) & 0xFF]);
             }
+
+            // Route to separate queues by track, then mix
+            const track = data.media.track;
+            if (track === 'outbound') {
+              outboundQueueRef.current.push(...samples);
+            } else {
+              inboundQueueRef.current.push(...samples);
+            }
+
+            // Mix both tracks into the playback queue
+            const inQ = inboundQueueRef.current;
+            const outQ = outboundQueueRef.current;
+            const mixLen = Math.min(inQ.length, outQ.length);
+            if (mixLen > 0) {
+              const inSamples = inQ.splice(0, mixLen);
+              const outSamples = outQ.splice(0, mixLen);
+              for (let i = 0; i < mixLen; i++) {
+                audioQueueRef.current.push((inSamples[i] + outSamples[i]) * 0.7);
+              }
+            }
+            // If one track is ahead by >2000 samples, flush it solo so it doesn't lag
+            if (inQ.length > 2000) {
+              const solo = inQ.splice(0, inQ.length);
+              for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
+            }
+            if (outQ.length > 2000) {
+              const solo = outQ.splice(0, outQ.length);
+              for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
+            }
+
+            // Overflow protection on mixed queue
             if (audioQueueRef.current.length > 16000) {
               audioQueueRef.current.splice(0, audioQueueRef.current.length - 8000);
               nextPlayTimeRef.current = 0;
@@ -231,6 +264,8 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       if (ws) ws.close();
       wsRef.current = null;
       audioQueueRef.current = [];
+      inboundQueueRef.current = [];
+      outboundQueueRef.current = [];
     };
   }, [call?._id, isCompleted]);
 

@@ -195,6 +195,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     let ws;
     let retryTimeout;
 
+    let wsMessageCount = 0;
     function connect() {
       ws = new WebSocket(`${BRIDGE_URL}/listen/${call._id}`);
       wsRef.current = ws;
@@ -205,6 +206,10 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
         try {
           const data = JSON.parse(event.data);
           if (data.event === 'audio' && data.media?.payload) {
+            wsMessageCount++;
+            if (wsMessageCount % 100 === 1) {
+              console.log(`[LiveCallMonitor] Audio chunk #${wsMessageCount}, track=${data.media.track}, muted=${mutedRef.current}, audioCtx=${audioCtxRef.current?.state}, queueSize=${audioQueueRef.current.length}`);
+            }
             const binary = atob(data.media.payload);
             const samples = [];
             for (let i = 0; i < binary.length; i++) {

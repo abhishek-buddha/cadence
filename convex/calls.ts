@@ -115,6 +115,15 @@ export const getByTwilioSid = query({
   },
 });
 
+// Used by test IVR to dynamically look up the forwarding number
+export const getMostRecent = query({
+  args: {},
+  handler: async (ctx) => {
+    const calls = await ctx.db.query('calls').order('desc').take(1);
+    return calls[0] || null;
+  },
+});
+
 export const getByConversationId = query({
   args: { conversationId: v.string() },
   handler: async (ctx, args) => {

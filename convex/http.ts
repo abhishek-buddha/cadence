@@ -520,10 +520,25 @@ http.route({
 http.route({
   path: '/test-ivr',
   method: 'POST',
-  handler: httpAction(async (_, request) => {
+  handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
     const siteUrl = url.origin;
-    const forwardNumber = url.searchParams.get('forwardNumber') || '';
+
+    // Dynamically look up humanAgentNumber from the most recent call's insurance contact
+    let forwardNumber = url.searchParams.get('forwardNumber') || '';
+    if (!forwardNumber) {
+      try {
+        const recentCall = await ctx.runQuery(api.calls.getMostRecent, {});
+        if (recentCall) {
+          const insurance = await ctx.runQuery(api.insuranceContacts.getById, { id: recentCall.insuranceContactId });
+          if (insurance?.humanAgentNumber) {
+            forwardNumber = insurance.humanAgentNumber;
+          }
+        }
+      } catch (e) {
+        // Non-fatal — fall back to TTS Michael agent
+      }
+    }
     const fwdParam = forwardNumber ? `?forwardNumber=${encodeURIComponent(forwardNumber)}` : '';
     return twimlResponse(`
       <Response>

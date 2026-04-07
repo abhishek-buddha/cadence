@@ -211,14 +211,43 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
               console.log(`[LiveCallMonitor] Audio chunk #${wsMessageCount}, track=${data.media.track}, muted=${mutedRef.current}, audioCtx=${audioCtxRef.current?.state}, queueSize=${audioQueueRef.current.length}`);
             }
             const binary = atob(data.media.payload);
-            const queue = audioQueueRef.current;
+            const samples = new Array(binary.length);
             for (let i = 0; i < binary.length; i++) {
-              queue.push(MULAW_TABLE[binary.charCodeAt(i) & 0xFF]);
+              samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xFF];
             }
 
-            // Overflow protection — keep queue bounded
-            if (queue.length > 16000) {
-              queue.splice(0, queue.length - 8000);
+            // Route to separate queues by track, then mix
+            const track = data.media.track;
+            if (track === 'outbound') {
+              outboundQueueRef.current.push(...samples);
+            } else {
+              inboundQueueRef.current.push(...samples);
+            }
+
+            // Mix both tracks into the playback queue
+            const inQ = inboundQueueRef.current;
+            const outQ = outboundQueueRef.current;
+            const mixLen = Math.min(inQ.length, outQ.length);
+            if (mixLen > 0) {
+              const inSamples = inQ.splice(0, mixLen);
+              const outSamples = outQ.splice(0, mixLen);
+              for (let i = 0; i < mixLen; i++) {
+                audioQueueRef.current.push(Math.max(-1, Math.min(1, inSamples[i] + outSamples[i])));
+              }
+            }
+            // Flush solo tracks immediately — don't wait for 2000 samples
+            if (inQ.length > 0 && outQ.length === 0) {
+              const solo = inQ.splice(0, inQ.length);
+              for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
+            }
+            if (outQ.length > 0 && inQ.length === 0) {
+              const solo = outQ.splice(0, outQ.length);
+              for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
+            }
+
+            // Overflow protection on mixed queue
+            if (audioQueueRef.current.length > 16000) {
+              audioQueueRef.current.splice(0, audioQueueRef.current.length - 8000);
               nextPlayTimeRef.current = 0;
             }
           }

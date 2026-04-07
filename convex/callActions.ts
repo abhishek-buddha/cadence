@@ -117,30 +117,56 @@ export const initiateCall = action({
       }
 
       // Step 3: Attach a passive Twilio monitor stream for browser audio listening
-      // Wait for call to be fully connected before attaching stream
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Retry up to 6 times (every 5s for 30s) until call is in-progress
       if (callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
-        try {
-          const streamUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}/Streams.json`;
-          const streamParams = new URLSearchParams();
-          streamParams.append('Url', `${BRIDGE_URL}/monitor`);
-          streamParams.append('Track', 'both_tracks');
-          streamParams.append('Name', `monitor-${callId}`);
-          streamParams.append('Parameter1.Name', 'callId');
-          streamParams.append('Parameter1.Value', callId);
+        const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+        for (let attempt = 0; attempt < 6; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          try {
+            // Check if call is still active before attempting stream
+            const callStatusRes = await fetch(
+              `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}.json`,
+              { headers: { 'Authorization': authHeader } }
+            );
+            if (callStatusRes.ok) {
+              const callData = await callStatusRes.json();
+              const status = callData.status;
+              console.log(`[stream-retry] Attempt ${attempt + 1}: callSid=${callSid} status=${status}`);
+              if (status === 'completed' || status === 'failed' || status === 'canceled' || status === 'busy' || status === 'no-answer') {
+                console.log(`[stream-retry] Call already ended (${status}), skipping stream attachment`);
+                break;
+              }
+              if (status !== 'in-progress') {
+                console.log(`[stream-retry] Call not in-progress yet (${status}), retrying...`);
+                continue;
+              }
+            }
 
-          const streamRes = await fetch(streamUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`),
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: streamParams.toString(),
-          });
-          const streamBody = await streamRes.text();
-          console.log(`Twilio Streams: ${streamRes.status} for callSid=${callSid}`, streamBody.substring(0, 200));
-        } catch (streamErr: any) {
-          console.error('Failed to attach monitor stream:', streamErr.message);
+            const streamUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}/Streams.json`;
+            const streamParams = new URLSearchParams();
+            streamParams.append('Url', `${BRIDGE_URL}/monitor`);
+            streamParams.append('Track', 'both_tracks');
+            streamParams.append('Name', `monitor-${callId}`);
+            streamParams.append('Parameter1.Name', 'callId');
+            streamParams.append('Parameter1.Value', callId);
+
+            const streamRes = await fetch(streamUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': authHeader,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: streamParams.toString(),
+            });
+            const streamBody = await streamRes.text();
+            console.log(`Twilio Streams: ${streamRes.status} for callSid=${callSid}`, streamBody.substring(0, 200));
+            if (streamRes.ok) {
+              console.log(`[stream-retry] Stream attached successfully on attempt ${attempt + 1}`);
+              break;
+            }
+          } catch (streamErr: any) {
+            console.error(`[stream-retry] Attempt ${attempt + 1} failed:`, streamErr.message);
+          }
         }
       }
 

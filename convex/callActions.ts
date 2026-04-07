@@ -26,6 +26,12 @@ export const initiateCall = action({
       startedAt: new Date().toISOString(),
     });
 
+    // Store forwarding number for the test IVR to read
+    await ctx.runMutation(api.calls.setCallSetting, {
+      key: 'forwardNumber',
+      value: insurance.humanAgentNumber || '',
+    });
+
     // 3. Use ElevenLabs native outbound call API (proven to work with IVR)
     const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
     const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;

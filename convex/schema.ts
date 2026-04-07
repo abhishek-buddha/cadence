@@ -151,4 +151,10 @@ export default defineSchema({
     message: v.optional(v.string()),
     timestamp: v.string(),
   }).index('by_callId', ['callId']),
+
+  // Single-row settings for passing data between call initiation and TwiML handlers
+  callSettings: defineTable({
+    key: v.string(),
+    value: v.string(),
+  }).index('by_key', ['key']),
 });

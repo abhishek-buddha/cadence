@@ -524,11 +524,11 @@ http.route({
     const url = new URL(request.url);
     const siteUrl = url.origin;
 
-    // Dynamically look up humanAgentNumber from the current call's insurance contact
+    // Read forwarding number from callSettings (set by initiateCall before each call)
     let forwardNumber = url.searchParams.get('forwardNumber') || '';
     if (!forwardNumber) {
       try {
-        const fwd = await ctx.runQuery(api.calls.getActiveCallForwardNumber, {});
+        const fwd = await ctx.runQuery(api.calls.getCallSetting, { key: 'forwardNumber' });
         if (fwd) forwardNumber = fwd;
       } catch (e) {
         // Non-fatal — fall back to TTS Michael agent

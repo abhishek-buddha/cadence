@@ -235,12 +235,14 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
                 audioQueueRef.current.push(Math.max(-1, Math.min(1, inSamples[i] + outSamples[i])));
               }
             }
-            // Flush solo tracks immediately — don't wait for 2000 samples
-            if (inQ.length > 0 && outQ.length === 0) {
+            // Flush solo tracks after small buffer (480 samples = 60ms)
+            // This allows time for the other track to arrive for proper mixing
+            // without the old 2000-sample (250ms) delay
+            if (inQ.length > 480 && outQ.length === 0) {
               const solo = inQ.splice(0, inQ.length);
               for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
             }
-            if (outQ.length > 0 && inQ.length === 0) {
+            if (outQ.length > 480 && inQ.length === 0) {
               const solo = outQ.splice(0, outQ.length);
               for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
             }

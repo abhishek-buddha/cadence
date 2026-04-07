@@ -524,15 +524,16 @@ http.route({
     const url = new URL(request.url);
     const siteUrl = url.origin;
 
-    // Read forwarding number from callSettings (set by initiateCall before each call)
-    let forwardNumber = url.searchParams.get('forwardNumber') || '';
+    // Read forwarding number — database first (dynamic), URL param fallback (legacy)
+    let forwardNumber = '';
+    try {
+      const fwd = await ctx.runQuery(api.calls.getCallSetting, { key: 'forwardNumber' });
+      if (fwd) forwardNumber = fwd;
+    } catch (e) {
+      // Fall back to URL param
+    }
     if (!forwardNumber) {
-      try {
-        const fwd = await ctx.runQuery(api.calls.getCallSetting, { key: 'forwardNumber' });
-        if (fwd) forwardNumber = fwd;
-      } catch (e) {
-        // Non-fatal — fall back to TTS Michael agent
-      }
+      forwardNumber = url.searchParams.get('forwardNumber') || '';
     }
     const fwdParam = forwardNumber ? `?forwardNumber=${encodeURIComponent(forwardNumber)}` : '';
     return twimlResponse(`

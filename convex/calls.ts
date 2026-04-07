@@ -1,6 +1,18 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 
+// Get the most recent initiating/in-progress call's insurance contact forwarding number
+export const getActiveCallForwardNumber = query({
+  args: {},
+  handler: async (ctx) => {
+    // Find the most recent call (any status) — the one just created for the current call
+    const call = await ctx.db.query('calls').order('desc').first();
+    if (!call) return null;
+    const insurance = await ctx.db.get(call.insuranceContactId);
+    return insurance?.humanAgentNumber || null;
+  },
+});
+
 export const create = mutation({
   args: {
     claimId: v.id('claims'),

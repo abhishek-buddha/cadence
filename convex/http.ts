@@ -524,17 +524,12 @@ http.route({
     const url = new URL(request.url);
     const siteUrl = url.origin;
 
-    // Dynamically look up humanAgentNumber from the most recent call's insurance contact
+    // Dynamically look up humanAgentNumber from the current call's insurance contact
     let forwardNumber = url.searchParams.get('forwardNumber') || '';
     if (!forwardNumber) {
       try {
-        const recentCall = await ctx.runQuery(api.calls.getMostRecent, {});
-        if (recentCall) {
-          const insurance = await ctx.runQuery(api.insuranceContacts.getById, { id: recentCall.insuranceContactId });
-          if (insurance?.humanAgentNumber) {
-            forwardNumber = insurance.humanAgentNumber;
-          }
-        }
+        const fwd = await ctx.runQuery(api.calls.getActiveCallForwardNumber, {});
+        if (fwd) forwardNumber = fwd;
       } catch (e) {
         // Non-fatal — fall back to TTS Michael agent
       }

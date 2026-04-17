@@ -193,8 +193,11 @@ export const listItems = query({
 
         const isClaim = 'claimNumber' in entity;
         const label = isClaim ? entity.claimNumber : entity.caseNumber;
+        const amountStr = entity.amount != null
+          ? `$${Number(entity.amount).toFixed(2)}`
+          : '$0.00';
         const detail = isClaim
-          ? `$${entity.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 }) ?? '0.00'} · DOS ${entity.dateOfService ?? '--'}`
+          ? `${amountStr} · DOS ${entity.dateOfService ?? '--'}`
           : `CDT: ${(entity.cdtCodes ?? []).join(', ') || '--'} · DOS ${entity.proposedDateOfService ?? '--'}`;
 
         const lastCall: any = isClaim

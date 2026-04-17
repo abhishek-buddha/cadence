@@ -134,7 +134,7 @@ export default function SessionsPage() {
                         {(session.useCase || '').replace(/_/g, ' ')}
                       </td>
                       <td className="px-4 py-3.5 text-center font-data text-gray-900 whitespace-nowrap">
-                        {session.itemCount ?? session.items?.length ?? '--'}
+                        {session.itemRefs?.length ?? '--'}
                       </td>
                       <td className="px-4 py-3.5 text-center whitespace-nowrap">
                         <StatusBadge status={session.status || 'unknown'} />

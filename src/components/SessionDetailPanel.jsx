@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { List, ChevronRight } from 'lucide-react';
@@ -23,18 +24,34 @@ function ProgressBar({ current, total }) {
   );
 }
 
+// Derive a display label + detail line from a raw claim or dental case entity.
+function formatItem(entity, idx) {
+  if (!entity) return { label: `Item ${idx + 1}`, detail: '' };
+  const isClaim = 'claimNumber' in entity;
+  if (isClaim) {
+    const amount = entity.amount != null ? `$${Number(entity.amount).toFixed(2)}` : '';
+    return {
+      label: entity.claimNumber || `Claim ${idx + 1}`,
+      detail: [amount, entity.dateOfService ? `DOS ${entity.dateOfService}` : ''].filter(Boolean).join(' · '),
+    };
+  }
+  const cdts = (entity.cdtCodes ?? []).join(', ') || '--';
+  return {
+    label: entity.caseNumber || `EV Case ${idx + 1}`,
+    detail: [`CDT: ${cdts}`, entity.proposedDateOfService ? `DOS ${entity.proposedDateOfService}` : ''].filter(Boolean).join(' · '),
+  };
+}
+
 export default function SessionDetailPanel({ session }) {
-  const items = useQuery(
-    api.callSessions?.listItems,
-    session?._id ? { sessionId: session._id } : 'skip'
+  // Use the already-deployed getWithItems query (returns { session, insurance, items })
+  // where each item = { ref, entity, result, lastCall }
+  const withItems = useQuery(
+    api.callSessions?.getWithItems,
+    session?._id ? { id: session._id } : 'skip'
   );
   const activeCall = useQuery(
     api.callSessions?.getActiveCall,
     session?._id ? { sessionId: session._id } : 'skip'
-  );
-  const insurance = useQuery(
-    api.insuranceContacts.getById,
-    session?.insuranceContactId ? { id: session.insuranceContactId } : 'skip'
   );
 
   if (!session) {
@@ -45,7 +62,19 @@ export default function SessionDetailPanel({ session }) {
     );
   }
 
-  const itemList = items ?? [];
+  const insurance = withItems?.insurance ?? null;
+  const rawItems = withItems?.items ?? [];
+
+  const itemList = useMemo(() =>
+    rawItems.map((item, idx) => {
+      const { label, detail } = formatItem(item.entity, idx);
+      const outcome = item.lastCall?.outcome ?? null;
+      const missingFields = item.lastCall?.missingFields ?? [];
+      return { key: item.ref ?? idx, label, detail, outcome, missingFields };
+    }),
+    [rawItems]
+  );
+
   const completedCount = itemList.filter((i) => i.outcome && i.outcome !== 'pending').length;
 
   return (
@@ -63,8 +92,8 @@ export default function SessionDetailPanel({ session }) {
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={session.status || 'unknown'} />
-            {session.outcome && (
-              <OutcomeBadge outcome={session.outcome} missingFields={session.missingFields} />
+            {session.aggregateOutcome && (
+              <OutcomeBadge outcome={session.aggregateOutcome} missingFields={session.missingFields} />
             )}
           </div>
         </div>
@@ -83,18 +112,18 @@ export default function SessionDetailPanel({ session }) {
           <h3 className="text-sm font-display font-semibold text-gray-900">Items</h3>
         </div>
         <div className="divide-y divide-border/50">
-          {itemList.length === 0 ? (
+          {withItems === undefined ? (
+            <p className="text-sm text-muted text-center py-8">Loading...</p>
+          ) : itemList.length === 0 ? (
             <p className="text-sm text-muted text-center py-8">No items in this session.</p>
           ) : (
             itemList.map((item, idx) => (
-              <div key={item._id || idx} className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 transition-colors">
+              <div key={item.key} className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 transition-colors">
                 <span className="w-6 h-6 rounded-full bg-surface text-xs font-data text-muted flex items-center justify-center shrink-0">
                   {idx + 1}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-900 truncate">
-                    {item.label || item.patientName || `Item ${idx + 1}`}
-                  </p>
+                  <p className="text-sm text-gray-900 truncate">{item.label}</p>
                   {item.detail && (
                     <p className="text-xs text-muted truncate mt-0.5">{item.detail}</p>
                   )}

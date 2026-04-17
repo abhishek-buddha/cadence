@@ -8,17 +8,30 @@
  * @module
  */
 
+import type * as apiKeys from "../apiKeys.js";
+import type * as auditEvents from "../auditEvents.js";
 import type * as callActions from "../callActions.js";
 import type * as callEvents from "../callEvents.js";
 import type * as callResults from "../callResults.js";
+import type * as callSessions from "../callSessions.js";
 import type * as calls from "../calls.js";
 import type * as claimImport from "../claimImport.js";
 import type * as claims from "../claims.js";
 import type * as dashboard from "../dashboard.js";
+import type * as dentalCallActions from "../dentalCallActions.js";
+import type * as dentalCases from "../dentalCases.js";
+import type * as dentalPlans from "../dentalPlans.js";
+import type * as devSeed from "../devSeed.js";
+import type * as evResults from "../evResults.js";
 import type * as http from "../http.js";
 import type * as insuranceContacts from "../insuranceContacts.js";
+import type * as outcomeClassifier from "../outcomeClassifier.js";
 import type * as patients from "../patients.js";
 import type * as providers from "../providers.js";
+import type * as reports from "../reports.js";
+import type * as transferDestinations from "../transferDestinations.js";
+import type * as users from "../users.js";
+import type * as webhooks from "../webhooks.js";
 
 import type {
   ApiFromModules,
@@ -27,17 +40,30 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  apiKeys: typeof apiKeys;
+  auditEvents: typeof auditEvents;
   callActions: typeof callActions;
   callEvents: typeof callEvents;
   callResults: typeof callResults;
+  callSessions: typeof callSessions;
   calls: typeof calls;
   claimImport: typeof claimImport;
   claims: typeof claims;
   dashboard: typeof dashboard;
+  dentalCallActions: typeof dentalCallActions;
+  dentalCases: typeof dentalCases;
+  dentalPlans: typeof dentalPlans;
+  devSeed: typeof devSeed;
+  evResults: typeof evResults;
   http: typeof http;
   insuranceContacts: typeof insuranceContacts;
+  outcomeClassifier: typeof outcomeClassifier;
   patients: typeof patients;
   providers: typeof providers;
+  reports: typeof reports;
+  transferDestinations: typeof transferDestinations;
+  users: typeof users;
+  webhooks: typeof webhooks;
 }>;
 
 /**

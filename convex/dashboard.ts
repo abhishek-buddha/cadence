@@ -34,7 +34,7 @@ export const getStats = query({
 
     // Filter calls to only those belonging to filtered claims
     if (args.providerId) {
-      allCalls = allCalls.filter((c) => claimIds.has(c.claimId));
+      allCalls = allCalls.filter((c) => c.claimId !== undefined && claimIds.has(c.claimId));
     }
 
     const callsToday = allCalls.filter((c) => c.startedAt.startsWith(today)).length;
@@ -59,6 +59,16 @@ export const getStats = query({
       appealing: allClaims.filter((c) => c.status === 'appealing').length,
     };
 
+    // RFP requirement: outcome stats for the current week (last 7 days based on startedAt)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
+    const weekCalls = allCalls.filter((c) => c.startedAt >= sevenDaysAgo);
+    const outcomeStats = {
+      successful: weekCalls.filter((c) => c.outcome === 'successful').length,
+      partial: weekCalls.filter((c) => c.outcome === 'partial').length,
+      failed: weekCalls.filter((c) => c.outcome === 'failed').length,
+      transferred_to_human: weekCalls.filter((c) => c.outcome === 'transferred_to_human').length,
+    };
+
     return {
       totalClaims: allClaims.length,
       pendingClaims,
@@ -72,7 +82,67 @@ export const getStats = query({
       recoveredAmount: recoveredAmount || 0,
       byAgingBucket,
       byStatus,
+      outcomeStats,
     };
+  },
+});
+
+// Last 8 weeks of outcome counts grouped by useCase (RFP reporting requirement).
+export const outcomeStatsByWeek = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject || 'default';
+    const calls = await ctx.db
+      .query('calls')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .collect();
+
+    // Build last 8 ISO weeks (Monday-start), oldest first
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const dayOfWeek = (today.getUTCDay() + 6) % 7; // 0 = Mon
+    const thisWeekMonday = new Date(today.getTime() - dayOfWeek * 86400000);
+
+    type Bucket = {
+      weekStart: string;
+      byUseCase: Record<string, { successful: number; partial: number; failed: number; transferred_to_human: number; total: number }>;
+    };
+    const weeks: Bucket[] = [];
+    for (let i = 7; i >= 0; i--) {
+      const wkStart = new Date(thisWeekMonday.getTime() - i * 7 * 86400000);
+      weeks.push({
+        weekStart: wkStart.toISOString().split('T')[0],
+        byUseCase: {},
+      });
+    }
+    const startOfWindow = weeks[0].weekStart;
+
+    for (const c of calls) {
+      if (!c.startedAt || c.startedAt < startOfWindow) continue;
+      const callDate = c.startedAt.split('T')[0];
+      let idx = -1;
+      for (let i = weeks.length - 1; i >= 0; i--) {
+        if (weeks[i].weekStart <= callDate) { idx = i; break; }
+      }
+      if (idx < 0) continue;
+      const useCase = c.useCase ?? 'unknown';
+      const bucket = weeks[idx].byUseCase[useCase] ?? {
+        successful: 0,
+        partial: 0,
+        failed: 0,
+        transferred_to_human: 0,
+        total: 0,
+      };
+      bucket.total++;
+      if (c.outcome === 'successful') bucket.successful++;
+      else if (c.outcome === 'partial') bucket.partial++;
+      else if (c.outcome === 'transferred_to_human') bucket.transferred_to_human++;
+      else if (c.outcome === 'failed') bucket.failed++;
+      weeks[idx].byUseCase[useCase] = bucket;
+    }
+
+    return weeks;
   },
 });
 

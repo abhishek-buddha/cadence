@@ -1,0 +1,51 @@
+Claim Number,Patient First Name,Patient Last Name,Patient DOB,Member ID,Insurance,CPT Codes,ICD-10 Codes,Amount,Date of Service,Status,Notes
+CLM-2026-50100,Jeffrey,Howard,2007-07-28,W972481522,Aetna,27447,S93.401A,552.54,2026-01-17,paid,Claim in adjudication queue
+CLM-2026-50101,Christine,Ramirez,1954-02-09,W501692663,Aetna,36415,"R10.9, I10, R53.83",3691.39,2026-03-12,in_progress,"EOB reconciled, no balance due"
+CLM-2026-50102,Edward,Thomas,2006-11-28,YYL73960283,Anthem,99215,"E11.9, F32.9",4279.27,2026-03-11,pending,Awaiting EOB from payer
+CLM-2026-50103,Jeffrey,Vasquez,1949-11-09,H82905729,Humana,"27447, 99291","S00.83XA, F41.1, G47.00",1146.62,2026-01-14,in_progress,Out-of-network benefit applied
+CLM-2026-50104,Douglas,Cook,1991-05-25,H92015527,Humana,"71046, 99291",E78.5,1943.34,2026-02-16,pending,Awaiting EOB from payer
+CLM-2026-50105,Virginia,Wallace,1968-04-03,W146524784,Aetna,"71045, 99284","F90.0, R05, J20.9",2672.93,2026-03-27,pending,Claim in adjudication queue
+CLM-2026-50106,Kevin,Alexander,1970-02-26,YYL26914182,Anthem,36415,"K21.9, G43.909, S60.512A",2376.16,2026-01-30,paid,Denial appeal in progress
+CLM-2026-50107,Pamela,Phillips,1997-06-10,W742149589,Aetna,"80053, 99281","R10.9, G43.909, Z00.00",1296.71,2025-12-25,pending,Resubmitted with corrected modifier
+CLM-2026-50108,Henry,Scott,1980-10-06,B7RFRLHPJ,UnitedHealthcare,99215,"J20.9, I10, M79.3",1643.78,2026-03-08,pending,Held pending W9 verification
+CLM-2026-50109,Pamela,Bell,1981-10-08,U618333998,Cigna,"99281, 80061",S93.401A,2946.31,2026-03-19,in_progress,Provider re-attested NPI
+CLM-2026-50110,Jean,Castillo,1996-07-01,U280838916,Cigna,85025,R51,1838.25,2026-01-18,paid,Reviewed by coding QA team
+CLM-2026-50111,Dylan,Butler,1981-12-24,U960028141,Cigna,"93000, 99203, 97140",M25.561,4774.19,2025-12-20,pending,Awaiting medical records request
+CLM-2026-50112,Laura,Jenkins,1950-08-06,CZCPB7SN8,UnitedHealthcare,"93010, 80061",E78.5,405.55,2026-02-21,pending,Reviewed by coding QA team
+CLM-2026-50113,Susan,Miller,1998-09-14,U884139010,Cigna,"27130, 99291","J45.909, A09, E78.5",2495.44,2026-01-20,in_progress,Provider re-attested NPI
+CLM-2026-50114,Nathan,Edwards,1961-12-22,H20430415,Humana,99285,"J20.9, J45.909, J06.9",4959.74,2026-02-27,paid,Denial appeal in progress
+CLM-2026-50115,Timothy,Bennett,1989-07-18,W721070581,Aetna,99214,"F41.1, L20.9, S93.401A",3813.33,2026-04-01,pending,Coordination of benefits required
+CLM-2026-50116,Heather,Roberts,1954-05-06,4LCRFXMZ4,UnitedHealthcare,"93010, 43239","R07.9, G47.00, G43.909",1669.72,2026-04-03,paid,Reviewed by coding QA team
+CLM-2026-50117,Heather,Jenkins,1958-03-10,H94732537,Humana,"82565, 97110","F32.9, L20.9, E11.9",3396.41,2026-03-25,pending,Submitted via clearinghouse
+CLM-2026-50118,Frank,Parker,1986-01-18,H91350892,Humana,"43239, 81001","R07.9, G47.00, K59.00",3304.66,2026-01-30,paid,Claim returned for missing diagnosis pointer
+CLM-2026-50119,Helen,Cruz,1994-08-16,YYL29676080,Anthem,99284,"J20.9, J06.9",422.73,2026-03-17,in_progress,Awaiting EOB from payer
+CLM-2026-50120,Tyler,Bell,1975-08-09,C42B2LW2E,UnitedHealthcare,"99212, 99203",M79.3,3977.02,2026-04-09,denied,Awaiting EOB from payer
+CLM-2026-50121,Laura,Garcia,2008-08-02,YYL90753448,Anthem,"99203, 93000","H66.90, L20.9, B34.9",1111.47,2026-02-07,in_progress,Patient verified eligibility on file
+CLM-2026-50122,Madison,Russell,1958-10-11,W540494431,Aetna,"99291, 84443",S60.512A,3108.51,2026-01-05,denied,Reviewed by coding QA team
+CLM-2026-50123,Betty,Ward,2002-07-05,H22772209,Humana,"99281, 99215, 97530","Z23, G43.909, J45.909",138.96,2026-01-18,paid,Provider re-attested NPI
+CLM-2026-50124,Robert,Torres,1953-06-05,YYL23590694,Anthem,90471,"I10, Z71.3, G47.00",2321.86,2025-12-23,pending,Status check call scheduled
+CLM-2026-50125,Andrew,Jackson,1967-10-26,W464083579,Aetna,"99282, 82565, 99281","E78.5, J20.9, I10",4364.08,2026-01-22,paid,Provider re-attested NPI
+CLM-2026-50126,Michael,Price,1987-04-26,F26DLXP5X,UnitedHealthcare,27447,"M79.3, G43.909, Z23",588.63,2025-12-28,pending,Claim returned for missing diagnosis pointer
+CLM-2026-50127,Justin,Ramirez,1950-09-20,YYL63966293,Anthem,"97110, 82565, 99285","S60.512A, I10",4914.32,2025-12-26,pending,Awaiting medical records request
+CLM-2026-50128,Raymond,Bennett,1977-05-06,H25246882,Humana,"90471, 99284","K21.9, I10",3047.29,2026-04-01,paid,Provider re-attested NPI
+CLM-2026-50129,James,Campbell,1963-11-25,H35031264,Humana,"99284, 80053, 71046","I10, G43.909",1907.28,2026-02-06,pending,Patient responsibility transferred to statement
+CLM-2026-50130,Jose,Barnes,1970-10-14,P3WVCSS7Q,UnitedHealthcare,"90472, 99285, 81001","F90.0, K21.9, M79.3",1948.32,2026-01-09,pending,Patient responsibility transferred to statement
+CLM-2026-50131,Dylan,Mitchell,1997-09-16,YYL77934306,Anthem,45378,"B34.9, M54.5",3984.45,2026-03-22,pending,Claim in adjudication queue
+CLM-2026-50132,Jordan,Jones,2000-11-14,YYL81244640,Anthem,"84443, 45378",R10.9,2445.5,2026-04-04,in_progress,Patient responsibility transferred to statement
+CLM-2026-50133,Billy,Young,1994-09-12,W847213564,Aetna,"71045, 80061","F41.1, F90.0",588.57,2026-03-13,pending,Patient responsibility transferred to statement
+CLM-2026-50134,Peter,Ortiz,1990-05-12,U208905497,Cigna,"99204, 99212","Z71.3, R07.9",3248.62,2026-04-07,in_progress,Denial appeal in progress
+CLM-2026-50135,Judith,Evans,1975-12-09,72AA6U82E,UnitedHealthcare,"36415, 90472, 99215","S00.83XA, G43.909",279.99,2026-04-06,pending,Claim returned for missing diagnosis pointer
+CLM-2026-50136,James,Taylor,1984-11-05,U803250048,Cigna,"99212, 90471, 71045","Z71.3, J06.9, R53.83",3560.79,2026-02-14,in_progress,Patient verified eligibility on file
+CLM-2026-50137,Carol,Anderson,1974-06-19,EQW694MK3,UnitedHealthcare,76700,M54.5,62.85,2026-01-29,paid,Resubmitted with corrected modifier
+CLM-2026-50138,Robert,Davis,1968-10-11,H29472976,Humana,80053,N39.0,3834.68,2026-04-16,pending,Denial appeal in progress
+CLM-2026-50139,Betty,Green,1981-11-19,U417312742,Cigna,"84443, 81001",R51,848.84,2026-04-03,in_progress,Provider re-attested NPI
+CLM-2026-50140,Evelyn,Peterson,1976-10-18,H66903707,Humana,"85025, 84443, 99213","I10, F90.0, M79.3",2959.79,2026-01-24,paid,Provider re-attested NPI
+CLM-2026-50141,Gary,Foster,1964-11-07,U530717131,Cigna,"36415, 85025, 71045",R51,3858.18,2026-02-23,pending,Secondary insurance billed next
+CLM-2026-50142,Charles,Wallace,1993-04-10,W644171353,Aetna,"99205, 97530","F90.0, S00.83XA, S60.512A",3113.68,2026-02-23,paid,Submitted via clearinghouse
+CLM-2026-50143,Kelly,Sanchez,1956-01-15,U146703404,Cigna,"99282, 45378",Z00.00,910.44,2025-12-18,paid,Payment posted to AR
+CLM-2026-50144,Kyle,Myers,1968-01-10,SQEBER49G,UnitedHealthcare,"99204, 45378","F32.9, Z23, Z79.4",4338.22,2026-01-14,pending,Claim returned for missing diagnosis pointer
+CLM-2026-50145,Kimberly,Diaz,1967-02-11,U933461049,Cigna,45378,F90.0,2779.09,2026-01-18,paid,"EOB reconciled, no balance due"
+CLM-2026-50146,Jerry,Lopez,1981-02-13,YYL21798778,Anthem,"43239, 80061",R05,1288.22,2026-03-17,pending,Out-of-network benefit applied
+CLM-2026-50147,George,Griffin,1991-12-19,X42P4C8TV,UnitedHealthcare,"99285, 27130",R07.9,4173.65,2026-01-20,in_progress,Awaiting EOB from payer
+CLM-2026-50148,Eric,King,1993-02-21,U879093229,Cigna,"99215, 99283",F41.1,3850.03,2026-02-16,in_progress,Status check call scheduled
+CLM-2026-50149,Douglas,Anderson,1968-06-24,C33LBXNP5,UnitedHealthcare,80053,"R07.9, J06.9",1792.85,2026-01-09,paid,Claim returned for missing diagnosis pointer

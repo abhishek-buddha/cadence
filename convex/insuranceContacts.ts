@@ -20,6 +20,13 @@ export const create = mutation({
       digit: v.string(),
       label: v.optional(v.string()),
     }))),
+    // RFP additions: voice IVR support + payer kind
+    voiceIvrEnabled: v.optional(v.boolean()),
+    voiceIvrPhrases: v.optional(v.array(v.object({
+      promptContains: v.string(),
+      responseText: v.string(),
+    }))),
+    payerKind: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -72,6 +79,13 @@ export const update = mutation({
       digit: v.string(),
       label: v.optional(v.string()),
     }))),
+    // RFP additions: voice IVR support + payer kind
+    voiceIvrEnabled: v.optional(v.boolean()),
+    voiceIvrPhrases: v.optional(v.array(v.object({
+      promptContains: v.string(),
+      responseText: v.string(),
+    }))),
+    payerKind: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

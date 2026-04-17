@@ -1,16 +1,17 @@
 import { action, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
+import { classifyMedicalCallOutcome } from './outcomeClassifier';
 
 export const initiateCall = action({
   args: {
     claimId: v.id('claims'),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ success: boolean; callId: string; twilioCallSid?: string; conversationId?: string }> => {
     const identity = await ctx.auth.getUserIdentity();
 
     // 1. Fetch claim with all related data
-    const data = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
+    const data: any = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
     if (!data || !data.claim) throw new Error('Claim not found');
 
     const { claim, patient, insurance, provider } = data;
@@ -19,11 +20,17 @@ export const initiateCall = action({
     }
 
     // 2. Create call record
-    const callId = await ctx.runMutation(api.calls.create, {
+    const callId: any = await ctx.runMutation(api.calls.create, {
       claimId: args.claimId,
       insuranceContactId: claim.insuranceContactId,
       status: 'initiating',
       startedAt: new Date().toISOString(),
+    });
+
+    // Stamp useCase on the call (calls.create has narrow args)
+    await ctx.runMutation(internal.callActions.patchCallUseCase, {
+      callId,
+      useCase: 'medical_claim',
     });
 
     // Store forwarding number for the test IVR to read
@@ -199,11 +206,11 @@ export const initiateCallWithIvr = action({
   args: {
     claimId: v.id('claims'),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ success: boolean; callId: string; twilioCallSid?: string }> => {
     const identity = await ctx.auth.getUserIdentity();
 
     // 1. Fetch claim with all related data
-    const data = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
+    const data: any = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
     if (!data || !data.claim) throw new Error('Claim not found');
 
     const { claim, patient, insurance, provider } = data;
@@ -216,11 +223,17 @@ export const initiateCallWithIvr = action({
     }
 
     // 2. Create call record
-    const callId = await ctx.runMutation(api.calls.create, {
+    const callId: any = await ctx.runMutation(api.calls.create, {
       claimId: args.claimId,
       insuranceContactId: claim.insuranceContactId,
       status: 'initiating',
       startedAt: new Date().toISOString(),
+    });
+
+    // Stamp useCase on the call (calls.create has narrow args)
+    await ctx.runMutation(internal.callActions.patchCallUseCase, {
+      callId,
+      useCase: 'medical_claim',
     });
 
     // 3. Call Twilio REST API to initiate outbound call with DTMF
@@ -450,7 +463,76 @@ SPECIAL STATUSES:
 
     await ctx.runMutation(api.claims.updateStatus, statusUpdate);
 
+    // Classify outcome (RFP requirement: 100% required-field retrieval = success)
+    const callRow = await ctx.runQuery(api.calls.getById, { id: args.callId });
+    const parsedForClass = { ...extraction, referenceNumber };
+    const { outcome, requiredFieldsRetrieved, missingFields, reason } =
+      classifyMedicalCallOutcome(parsedForClass, callRow?.status);
+
+    await ctx.runMutation(internal.callActions.patchCallOutcome, {
+      callId: args.callId,
+      outcome,
+      requiredFieldsRetrieved,
+      missingFields,
+      outcomeReason: reason,
+    });
+
+    // Audit log + webhook fanout (best-effort, non-blocking)
+    try {
+      await ctx.runMutation(internal.auditEvents.logEvent, {
+        action: 'classify_outcome',
+        resourceType: 'call',
+        resourceId: args.callId,
+        payloadSummary: outcome,
+      });
+    } catch (e: any) {
+      console.error('Audit log failed (non-fatal):', e.message);
+    }
+    try {
+      await ctx.runAction(internal.webhooks.dispatchEvent, {
+        eventType: 'call.outcome_classified',
+        payload: {
+          callId: args.callId,
+          outcome,
+          requiredFieldsRetrieved,
+          missingFields,
+        },
+      });
+    } catch (e: any) {
+      console.error('Webhook dispatch failed (non-fatal):', e.message);
+    }
+
     return extraction;
+  },
+});
+
+// Internal helper: patch outcome fields onto a call doc (calls.updateStatus has narrow args)
+export const patchCallOutcome = internalMutation({
+  args: {
+    callId: v.id('calls'),
+    outcome: v.string(),
+    requiredFieldsRetrieved: v.array(v.string()),
+    missingFields: v.array(v.string()),
+    outcomeReason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.callId, {
+      outcome: args.outcome,
+      requiredFieldsRetrieved: args.requiredFieldsRetrieved,
+      missingFields: args.missingFields,
+      outcomeReason: args.outcomeReason,
+    });
+  },
+});
+
+// Internal helper: stamp useCase on a freshly-created call
+export const patchCallUseCase = internalMutation({
+  args: {
+    callId: v.id('calls'),
+    useCase: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.callId, { useCase: args.useCase });
   },
 });
 

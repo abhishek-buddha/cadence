@@ -8,10 +8,18 @@ import {
   DollarSign,
   ArrowDownToLine,
   Phone,
+  PieChart,
 } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
 import { useProviderFilter } from '../context/ProviderFilterContext';
+
+const OUTCOME_SEGMENTS = [
+  { key: 'successful', label: 'Successful', color: 'bg-success' },
+  { key: 'partial', label: 'Partial', color: 'bg-warn' },
+  { key: 'failed', label: 'Failed', color: 'bg-danger' },
+  { key: 'transferred', label: 'Transferred', color: 'bg-accent' },
+];
 
 const AGING_BUCKETS = [
   { key: '0-30', label: '0-30 days', color: 'bg-success' },
@@ -144,6 +152,72 @@ export default function Dashboard() {
           />
         </div>
       )}
+
+      {/* Outcome Distribution (this week) */}
+      {(() => {
+        const outcomeStats = stats?.outcomeStats;
+        const outcomeTotal = outcomeStats
+          ? OUTCOME_SEGMENTS.reduce((sum, s) => sum + (outcomeStats[s.key] ?? 0), 0)
+          : 0;
+
+        return (
+          <div className="bg-white border border-border rounded-xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-display font-semibold text-gray-900">
+                Outcome Distribution
+              </h2>
+              <PieChart className="w-4 h-4 text-muted" />
+            </div>
+            <p className="text-xs text-muted mb-4">This week</p>
+
+            {isLoading ? (
+              <ShimmerBlock className="h-6 w-full" />
+            ) : !outcomeStats || outcomeTotal === 0 ? (
+              <div className="py-4 text-center">
+                <p className="text-sm text-muted">
+                  {!outcomeStats
+                    ? 'Outcome data not available yet.'
+                    : 'No outcomes recorded this week.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex h-3 w-full rounded-md overflow-hidden bg-surface">
+                  {OUTCOME_SEGMENTS.map(({ key, color }) => {
+                    const count = outcomeStats[key] ?? 0;
+                    const pct = (count / outcomeTotal) * 100;
+                    if (pct === 0) return null;
+                    return (
+                      <div
+                        key={key}
+                        className={`${color} transition-all duration-700 ease-out`}
+                        style={{ width: `${pct}%` }}
+                        title={`${key}: ${count}`}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                  {OUTCOME_SEGMENTS.map(({ key, label, color }) => {
+                    const count = outcomeStats[key] ?? 0;
+                    const pct = outcomeTotal > 0 ? (count / outcomeTotal) * 100 : 0;
+                    return (
+                      <div key={key} className="flex items-center gap-2 text-xs">
+                        <span className={`w-2.5 h-2.5 rounded-sm ${color}`} />
+                        <span className="text-gray-600">{label}</span>
+                        <span className="font-data text-muted">
+                          {count}{' '}
+                          <span className="text-muted/50">({pct.toFixed(0)}%)</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Two-column layout for charts and recent calls */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

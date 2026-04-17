@@ -3,8 +3,16 @@ import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
+import OutcomeBadge from '../components/OutcomeBadge';
 import EmptyState from '../components/EmptyState';
 import { useProviderFilter } from '../context/ProviderFilterContext';
+
+const OUTCOME_OPTIONS = [
+  { value: 'successful', label: 'Successful' },
+  { value: 'partial', label: 'Partial' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'transferred_to_human', label: 'Transferred' },
+];
 
 function formatDuration(seconds) {
   if (seconds == null) return '--:--';
@@ -58,6 +66,9 @@ function CallRow({ call }) {
         </span>
         <span className="px-4 py-3 text-sm text-gray-600 flex-1 truncate">
           {insurancePreview?.name ?? '...'}
+        </span>
+        <span className="min-w-[140px] flex justify-start">
+          <OutcomeBadge outcome={call.outcome} missingFields={call.missingFields} />
         </span>
         <span className="px-4 py-3 text-sm font-data text-gray-600 min-w-[70px] text-right">
           {formatDuration(call.duration)}
@@ -193,6 +204,8 @@ export default function CallHistory() {
   const allCalls = useQuery(api.calls.listRecent, { limit: 50 });
   const allClaims = useQuery(api.claims.list);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [outcomeFilter, setOutcomeFilter] = useState([]); // empty = all
+  const [outcomeMenuOpen, setOutcomeMenuOpen] = useState(false);
 
   const isLoading = allCalls === undefined;
 
@@ -207,10 +220,16 @@ export default function CallHistory() {
     : allCalls;
 
   const filteredCalls = calls
-    ? statusFilter === 'all'
-      ? calls
-      : calls.filter((c) => c.status === statusFilter)
+    ? calls
+        .filter((c) => statusFilter === 'all' || c.status === statusFilter)
+        .filter((c) => outcomeFilter.length === 0 || outcomeFilter.includes(c.outcome))
     : [];
+
+  const toggleOutcome = (value) => {
+    setOutcomeFilter((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  };
 
   const inputClass =
     'w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-700 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
@@ -238,6 +257,45 @@ export default function CallHistory() {
               <option value="failed">Failed</option>
             </select>
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOutcomeMenuOpen((o) => !o)}
+              className={`${inputClass} appearance-none pr-8 w-48 cursor-pointer text-left`}
+            >
+              {outcomeFilter.length === 0
+                ? 'All Outcomes'
+                : `${outcomeFilter.length} selected`}
+            </button>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
+            {outcomeMenuOpen && (
+              <div className="absolute right-0 mt-1 w-56 bg-white border border-border rounded-lg shadow-lg z-10 p-2">
+                {OUTCOME_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm text-gray-700"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={outcomeFilter.includes(opt.value)}
+                      onChange={() => toggleOutcome(opt.value)}
+                      className="rounded border-border-light text-accent focus:ring-accent"
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                ))}
+                {outcomeFilter.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setOutcomeFilter([])}
+                    className="w-full text-left px-2 py-1.5 mt-1 text-xs text-muted hover:text-gray-700 border-t border-border"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -296,6 +354,7 @@ export default function CallHistory() {
             <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold min-w-[160px]">Date</span>
             <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold min-w-[120px]">Claim #</span>
             <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold flex-1">Insurance</span>
+            <span className="min-w-[140px] text-left text-xs uppercase tracking-wider text-muted font-semibold">Outcome</span>
             <span className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted font-semibold min-w-[70px]">Duration</span>
             <span className="min-w-[110px] text-right text-xs uppercase tracking-wider text-muted font-semibold pr-4">Status</span>
           </div>

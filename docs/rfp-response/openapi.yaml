@@ -1,0 +1,1400 @@
+openapi: 3.1.0
+info:
+  title: Cadence Public API
+  version: 1.0.0
+  summary: REST API for Cadence Conversational AI Voice Bot for healthcare RCM.
+  description: |
+    The Cadence Public API exposes case management, call orchestration,
+    transcript and recording retrieval, webhook subscription, reporting, and
+    audit endpoints. All endpoints require an API key in the Authorization
+    header. Every request and response uses JSON and is tenant-scoped.
+  contact:
+    name: Cadence Support
+    email: support@cadence.com
+    url: https://docs.cadence.com
+  license:
+    name: Proprietary
+    url: https://cadence.com/terms
+
+servers:
+  - url: https://api.cadence.com
+    description: Production
+  - url: https://api.staging.cadence.com
+    description: Staging
+
+security:
+  - apiKey: []
+
+tags:
+  - name: Health
+    description: Service liveness and readiness.
+  - name: EligibilityCases
+    description: Dental eligibility verification cases.
+  - name: ClaimCases
+    description: Medical claim status follow-up cases.
+  - name: Calls
+    description: Call orchestration and result retrieval.
+  - name: Sessions
+    description: Multi-patient call sessions.
+  - name: Webhooks
+    description: Webhook subscription management.
+  - name: Audit
+    description: Audit log retrieval (admin only).
+  - name: Payers
+    description: Payer directory.
+  - name: Transfers
+    description: Live human-agent transfer.
+  - name: Reports
+    description: Operational reports.
+
+paths:
+
+  /v1/health:
+    get:
+      tags: [Health]
+      summary: Service health probe
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok] }
+                  uptimeSeconds: { type: integer }
+                required: [status, uptimeSeconds]
+
+  /v1/version:
+    get:
+      tags: [Health]
+      summary: Service version metadata
+      security: []
+      responses:
+        '200':
+          description: Version info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: string, example: 1.4.2 }
+                  commit: { type: string, example: a1b2c3d }
+                  buildTime: { type: string, format: date-time }
+                required: [version, commit, buildTime]
+
+  /v1/eligibility-cases:
+    get:
+      tags: [EligibilityCases]
+      summary: List eligibility cases
+      parameters:
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, queued, in_progress, completed, failed, cancelled] }
+        - name: payerId
+          in: query
+          schema: { type: string }
+        - name: dateOfServiceFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateOfServiceTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Paginated case list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/EligibilityCase' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [EligibilityCases]
+      summary: Create an eligibility case
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EligibilityCaseInput' }
+      responses:
+        '201':
+          description: Case created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityCase' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/eligibility-cases/bulk:
+    post:
+      tags: [EligibilityCases]
+      summary: Bulk create eligibility cases
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cases]
+              properties:
+                cases:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { $ref: '#/components/schemas/EligibilityCaseInput' }
+      responses:
+        '202':
+          description: Accepted for processing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batchId: { type: string }
+                  acceptedCount: { type: integer }
+                  rejectedCount: { type: integer }
+                  rejected:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index: { type: integer }
+                        reason: { type: string }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/eligibility-cases/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [EligibilityCases]
+      summary: Get an eligibility case
+      responses:
+        '200':
+          description: Case found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityCase' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [EligibilityCases]
+      summary: Update an eligibility case
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EligibilityCaseUpdate' }
+      responses:
+        '200':
+          description: Case updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityCase' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [EligibilityCases]
+      summary: Soft-delete an eligibility case
+      responses:
+        '204':
+          description: Case deleted
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/eligibility-cases/{id}/calls:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    post:
+      tags: [EligibilityCases, Calls]
+      summary: Initiate an eligibility verification call
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                priority: { type: string, enum: [normal, high], default: normal }
+                scheduledAt: { type: string, format: date-time }
+                callbackOverride: { type: string, format: uri }
+      responses:
+        '202':
+          description: Call queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Call' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Case not in callable state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/claim-cases:
+    get:
+      tags: [ClaimCases]
+      summary: List claim cases
+      parameters:
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: payerId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Claim' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [ClaimCases]
+      summary: Create a claim case
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimInput' }
+      responses:
+        '201':
+          description: Case created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Claim' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /v1/claim-cases/bulk:
+    post:
+      tags: [ClaimCases]
+      summary: Bulk create claim cases
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [claims]
+              properties:
+                claims:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { $ref: '#/components/schemas/ClaimInput' }
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batchId: { type: string }
+                  acceptedCount: { type: integer }
+                  rejectedCount: { type: integer }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/claim-cases/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [ClaimCases]
+      summary: Get a claim case
+      responses:
+        '200':
+          description: Found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Claim' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [ClaimCases]
+      summary: Update a claim case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Claim' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [ClaimCases]
+      summary: Soft-delete a claim case
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/claim-cases/{id}/calls:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    post:
+      tags: [ClaimCases, Calls]
+      summary: Initiate a claim status call
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                priority: { type: string, enum: [normal, high], default: normal }
+                scheduledAt: { type: string, format: date-time }
+      responses:
+        '202':
+          description: Call queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Call' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Case not in callable state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/calls/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Calls]
+      summary: Get call details
+      responses:
+        '200':
+          description: Call found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Call' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/calls/{id}/transcript:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Calls]
+      summary: Get call transcript
+      responses:
+        '200':
+          description: Transcript
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  callId: { type: string }
+                  segments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        speaker: { type: string, enum: [agent, rep, ivr, system] }
+                        text: { type: string }
+                        startMs: { type: integer }
+                        endMs: { type: integer }
+                        confidence: { type: number, format: float }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/calls/{id}/recording:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Calls]
+      summary: Get a signed URL to the call recording
+      responses:
+        '200':
+          description: Signed URL (15-minute TTL)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  callId: { type: string }
+                  url: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+                  contentType: { type: string, example: audio/mpeg }
+                  durationSeconds: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/calls/{id}/result:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Calls]
+      summary: Get the structured call result envelope
+      responses:
+        '200':
+          description: Result envelope (medical or dental)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/CallResult'
+                  - $ref: '#/components/schemas/EvResult'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/calls/{id}/end:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    post:
+      tags: [Calls]
+      summary: End an in-progress call
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, example: operator_request }
+      responses:
+        '202':
+          description: Termination accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Call' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Call not in terminable state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/sessions:
+    get:
+      tags: [Sessions]
+      summary: List multi-patient sessions
+      parameters:
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageSize'
+        - name: payerId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Sessions]
+      summary: Create a multi-patient session
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payerId, items]
+              properties:
+                payerId: { type: string }
+                items:
+                  type: array
+                  minItems: 2
+                  maxItems: 10
+                  items:
+                    type: object
+                    properties:
+                      claimId: { type: string }
+                      caseId: { type: string }
+                priority: { type: string, enum: [normal, high], default: normal }
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/sessions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Sessions]
+      summary: Get a multi-patient session
+      responses:
+        '200':
+          description: Session found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List webhook subscriptions
+      parameters:
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Subscriptions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Webhook' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Webhooks]
+      summary: Subscribe to webhook events
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url: { type: string, format: uri }
+                events:
+                  type: array
+                  minItems: 1
+                  items: { type: string, example: call.outcome_classified }
+                description: { type: string }
+      responses:
+        '201':
+          description: Subscription created (secret returned once)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Webhook'
+                  - type: object
+                    properties:
+                      secret:
+                        type: string
+                        description: HMAC secret; shown once at creation. Store securely.
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/webhooks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    delete:
+      tags: [Webhooks]
+      summary: Delete a webhook subscription
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/webhooks/{id}/test:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    post:
+      tags: [Webhooks]
+      summary: Fire a test event to a subscription
+      responses:
+        '202':
+          description: Test fired
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deliveryId: { type: string }
+                  status: { type: string, enum: [queued] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/audit-events:
+    get:
+      tags: [Audit]
+      summary: List audit events (Admin role required)
+      parameters:
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageSize'
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: userId
+          in: query
+          schema: { type: string }
+        - name: resourceType
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AuditEvent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/payers:
+    get:
+      tags: [Payers]
+      summary: List configured payers
+      parameters:
+        - name: domain
+          in: query
+          schema: { type: string, enum: [medical, dental] }
+        - name: q
+          in: query
+          schema: { type: string, description: Free-text search by name }
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Payer list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagination'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Payer' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/transfers/{callId}:
+    parameters:
+      - name: callId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Transfers]
+      summary: Initiate human transfer for an in-progress call
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destination, mode]
+              properties:
+                destination:
+                  type: string
+                  example: '+15551234567'
+                  description: E.164 phone number, SIP URI, or transfer-target ID.
+                mode:
+                  type: string
+                  enum: [warm, cold]
+                  description: Warm conferences the bot in then drops; cold REFERs the leg directly.
+                reason:
+                  type: string
+                  example: hostile_rep
+      responses:
+        '202':
+          description: Transfer initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  callId: { type: string }
+                  transferId: { type: string }
+                  status: { type: string, enum: [initiated] }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Call not in transferable state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/reports/success-rate:
+    get:
+      tags: [Reports]
+      summary: Success-rate report
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: groupBy
+          in: query
+          schema: { type: string, enum: [day, week, payer, useCase], default: day }
+        - name: useCase
+          in: query
+          schema: { type: string, enum: [medical_claim_status, dental_eligibility] }
+      responses:
+        '200':
+          description: Aggregated rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        bucket: { type: string }
+                        successful: { type: integer }
+                        partial: { type: integer }
+                        failed: { type: integer }
+                        successRate: { type: number, format: float }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /v1/reports/turnaround-time:
+    get:
+      tags: [Reports]
+      summary: Turnaround-time report
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: percentile
+          in: query
+          schema: { type: string, enum: [p50, p90, p95, p99], default: p95 }
+      responses:
+        '200':
+          description: Latency rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        bucket: { type: string }
+                        queuedToInitiatedSec: { type: number }
+                        initiatedToConnectedSec: { type: number }
+                        connectedToOutcomeSec: { type: number }
+                        endToEndSec: { type: number }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/reports/exceptions:
+    get:
+      tags: [Reports]
+      summary: Exception report
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: severity
+          in: query
+          schema: { type: string, enum: [low, medium, high, critical] }
+      responses:
+        '200':
+          description: Exceptions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        callId: { type: string }
+                        ruleName: { type: string }
+                        severity: { type: string }
+                        detectedAt: { type: string, format: date-time }
+                        details: { type: object, additionalProperties: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        Send your API key in the Authorization header:
+        `Authorization: Bearer ck_live_<32-char base32 secret>`
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: Resource identifier (ULID).
+    PageCursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+      description: Pagination cursor returned by previous response.
+    PageSize:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string, format: uuid }
+      description: Optional UUID to deduplicate retried writes within 24 hours.
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Authenticated but not permitted
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Request did not pass schema validation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UnprocessableEntity:
+      description: Request was syntactically valid but semantically rejected
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Resource state conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema: { type: integer }
+        X-RateLimit-Remaining:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code: { type: string, example: validation_error }
+            message: { type: string, example: 'patient.dateOfBirth is required' }
+            field: { type: string, example: patient.dateOfBirth }
+            requestId: { type: string, example: req_01HZX9... }
+            documentation: { type: string, format: uri }
+
+    Pagination:
+      type: object
+      required: [pagination]
+      properties:
+        pagination:
+          type: object
+          properties:
+            nextCursor: { type: string, nullable: true }
+            limit: { type: integer }
+            total: { type: integer, nullable: true, description: Optional, may be null on large collections. }
+
+    Patient:
+      type: object
+      required: [firstName, lastName, dateOfBirth, memberId]
+      properties:
+        id: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        dateOfBirth: { type: string, format: date }
+        memberId: { type: string }
+        gender: { type: string, enum: [M, F, X, U] }
+        relationshipToSubscriber: { type: string, enum: [self, spouse, child, other] }
+
+    Provider:
+      type: object
+      required: [name, npi, tin]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        npi: { type: string, pattern: '^\d{10}$' }
+        tin: { type: string, pattern: '^\d{9}$' }
+        addressLine1: { type: string }
+        addressLine2: { type: string }
+        city: { type: string }
+        state: { type: string, minLength: 2, maxLength: 2 }
+        postalCode: { type: string }
+
+    Insurance:
+      type: object
+      required: [payerId]
+      properties:
+        payerId: { type: string }
+        planId: { type: string }
+        groupNumber: { type: string }
+        coverageType: { type: string, enum: [primary, secondary, tertiary] }
+
+    Payer:
+      type: object
+      required: [id, name, domain]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        domain: { type: string, enum: [medical, dental] }
+        phone: { type: string }
+        ivrEnabled: { type: boolean }
+        notes: { type: string }
+
+    EligibilityCaseInput:
+      type: object
+      required: [patient, provider, payerId, procedureCodes, proposedDateOfService]
+      properties:
+        patient: { $ref: '#/components/schemas/Patient' }
+        subscriber: { $ref: '#/components/schemas/Patient' }
+        provider: { $ref: '#/components/schemas/Provider' }
+        payerId: { type: string }
+        planId: { type: string }
+        groupNumber: { type: string }
+        procedureCodes:
+          type: array
+          minItems: 1
+          items: { type: string, example: D0150 }
+        proposedDateOfService: { type: string, format: date }
+        notes: { type: string }
+
+    EligibilityCaseUpdate:
+      type: object
+      properties:
+        patient: { $ref: '#/components/schemas/Patient' }
+        subscriber: { $ref: '#/components/schemas/Patient' }
+        provider: { $ref: '#/components/schemas/Provider' }
+        planId: { type: string }
+        groupNumber: { type: string }
+        procedureCodes:
+          type: array
+          items: { type: string }
+        proposedDateOfService: { type: string, format: date }
+        notes: { type: string }
+        status:
+          type: string
+          enum: [pending, queued, in_progress, completed, failed, cancelled]
+
+    EligibilityCase:
+      type: object
+      required: [id, tenantId, status, createdAt]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        patient: { $ref: '#/components/schemas/Patient' }
+        subscriber: { $ref: '#/components/schemas/Patient' }
+        provider: { $ref: '#/components/schemas/Provider' }
+        payerId: { type: string }
+        planId: { type: string }
+        groupNumber: { type: string }
+        procedureCodes:
+          type: array
+          items: { type: string }
+        proposedDateOfService: { type: string, format: date }
+        status:
+          type: string
+          enum: [pending, queued, in_progress, completed, failed, cancelled]
+        notes: { type: string }
+        latestCallId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ClaimInput:
+      type: object
+      required: [patient, provider, payerId, claimNumber, dateOfService, billedAmount]
+      properties:
+        patient: { $ref: '#/components/schemas/Patient' }
+        provider: { $ref: '#/components/schemas/Provider' }
+        payerId: { type: string }
+        claimNumber: { type: string }
+        dateOfService: { type: string, format: date }
+        billedAmount: { type: number, format: float }
+        cptCodes:
+          type: array
+          items: { type: string }
+        icdCodes:
+          type: array
+          items: { type: string }
+        placeOfService: { type: string }
+        notes: { type: string }
+
+    ClaimUpdate:
+      type: object
+      properties:
+        patient: { $ref: '#/components/schemas/Patient' }
+        provider: { $ref: '#/components/schemas/Provider' }
+        cptCodes:
+          type: array
+          items: { type: string }
+        icdCodes:
+          type: array
+          items: { type: string }
+        placeOfService: { type: string }
+        notes: { type: string }
+        status: { type: string }
+
+    Claim:
+      type: object
+      required: [id, tenantId, status, createdAt]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        patient: { $ref: '#/components/schemas/Patient' }
+        provider: { $ref: '#/components/schemas/Provider' }
+        payerId: { type: string }
+        claimNumber: { type: string }
+        dateOfService: { type: string, format: date }
+        billedAmount: { type: number, format: float }
+        cptCodes:
+          type: array
+          items: { type: string }
+        icdCodes:
+          type: array
+          items: { type: string }
+        placeOfService: { type: string }
+        notes: { type: string }
+        status:
+          type: string
+          enum: [pending, queued, in_progress, completed, failed, cancelled]
+        latestCallId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Call:
+      type: object
+      required: [id, tenantId, status]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        sessionId: { type: string, nullable: true }
+        useCase:
+          type: string
+          enum: [medical_claim_status, dental_eligibility]
+        caseId: { type: string }
+        payerId: { type: string }
+        twilioCallSid: { type: string, nullable: true }
+        status:
+          type: string
+          enum:
+            - queued
+            - initiating
+            - connected
+            - in_conversation
+            - terminating
+            - completed_pending_analysis
+            - completed
+            - failed
+            - cancelled
+        startedAt: { type: string, format: date-time, nullable: true }
+        endedAt: { type: string, format: date-time, nullable: true }
+        durationSeconds: { type: integer, nullable: true }
+        outcome:
+          type: string
+          enum: [successful, partial, failed, transferred_to_human]
+          nullable: true
+        recordingUrl: { type: string, format: uri, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    CallResult:
+      type: object
+      required: [callId, useCase, outcome]
+      properties:
+        callId: { type: string }
+        useCase: { type: string, enum: [medical_claim_status] }
+        caseId: { type: string }
+        outcome: { type: string, enum: [successful, partial, failed, transferred_to_human] }
+        outcomeReason: { type: string }
+        requiredFieldsRetrieved:
+          type: array
+          items: { type: string }
+        missingFields:
+          type: array
+          items: { type: string }
+        durationSeconds: { type: integer }
+        extractedData:
+          type: object
+          properties:
+            claimStatus:
+              type: string
+              enum: [paid, pending, denied, processing, no_info_available]
+            paidAmount: { type: number, nullable: true }
+            paidDate: { type: string, format: date, nullable: true }
+            checkOrEftNumber: { type: string, nullable: true }
+            denialCode: { type: string, nullable: true }
+            denialReason: { type: string, nullable: true }
+            remarkCode: { type: string, nullable: true }
+            appealStatus: { type: string, nullable: true }
+            appealDeadline: { type: string, format: date, nullable: true }
+            nextSteps: { type: string, nullable: true }
+        repName: { type: string, nullable: true }
+        referenceNumber: { type: string, nullable: true }
+        confidence: { type: number, format: float }
+
+    EvResult:
+      type: object
+      required: [callId, useCase, outcome]
+      properties:
+        callId: { type: string }
+        useCase: { type: string, enum: [dental_eligibility] }
+        caseId: { type: string }
+        outcome: { type: string, enum: [successful, partial, failed, transferred_to_human] }
+        outcomeReason: { type: string }
+        requiredFieldsRetrieved:
+          type: array
+          items: { type: string }
+        missingFields:
+          type: array
+          items: { type: string }
+        durationSeconds: { type: integer }
+        extractedData:
+          type: object
+          properties:
+            isActive: { type: boolean }
+            effectiveDate: { type: string, format: date, nullable: true }
+            terminationDate: { type: string, format: date, nullable: true }
+            networkStatus: { type: string, enum: [in_network, out_of_network, unknown] }
+            deductibleAnnual: { type: number, nullable: true }
+            deductibleMet: { type: number, nullable: true }
+            annualMaximum: { type: number, nullable: true }
+            annualMaxRemaining: { type: number, nullable: true }
+            coinsurancePctPreventive: { type: integer, nullable: true }
+            coinsurancePctBasic: { type: integer, nullable: true }
+            coinsurancePctMajor: { type: integer, nullable: true }
+            copayAmount: { type: number, nullable: true }
+            waitingPeriods:
+              type: array
+              items:
+                type: object
+                properties:
+                  category: { type: string }
+                  monthsRemaining: { type: integer }
+            frequencyLimits:
+              type: array
+              items:
+                type: object
+                properties:
+                  code: { type: string }
+                  limit: { type: string }
+                  lastDate: { type: string, format: date, nullable: true }
+            missingTeethClause: { type: boolean, nullable: true }
+            preAuthRequired: { type: boolean, nullable: true }
+        repName: { type: string, nullable: true }
+        referenceNumber: { type: string, nullable: true }
+        confidence: { type: number, format: float }
+
+    Session:
+      type: object
+      required: [id, tenantId, payerId, status, items]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        payerId: { type: string }
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed, cancelled]
+        aggregateOutcome:
+          type: string
+          enum: [all_successful, mixed, none_successful]
+          nullable: true
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              claimId: { type: string, nullable: true }
+              caseId: { type: string, nullable: true }
+              outcome:
+                type: string
+                enum: [successful, partial, failed, transferred_to_human]
+                nullable: true
+        callIds:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Webhook:
+      type: object
+      required: [id, tenantId, url, events, status, createdAt]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items: { type: string }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [active, paused, dead] }
+        lastDeliveryAt: { type: string, format: date-time, nullable: true }
+        lastDeliveryStatus: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    AuditEvent:
+      type: object
+      required: [id, tenantId, action, resourceType, timestamp]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        userId: { type: string, nullable: true }
+        apiKeyId: { type: string, nullable: true }
+        action: { type: string, example: case.read }
+        resourceType: { type: string, example: eligibility_case }
+        resourceId: { type: string, nullable: true }
+        ipAddress: { type: string, nullable: true }
+        userAgent: { type: string, nullable: true }
+        payloadHash: { type: string, nullable: true }
+        outcome: { type: string, enum: [allow, deny] }
+        timestamp: { type: string, format: date-time }

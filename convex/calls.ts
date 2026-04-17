@@ -23,10 +23,15 @@ export const getCallSetting = query({
 
 export const create = mutation({
   args: {
-    claimId: v.id('claims'),
+    claimId: v.optional(v.id('claims')),
+    dentalCaseId: v.optional(v.id('dentalCases')),
+    sessionId: v.optional(v.id('callSessions')),
+    useCase: v.optional(v.string()),
     insuranceContactId: v.id('insuranceContacts'),
     status: v.string(),
     startedAt: v.string(),
+    parentCallId: v.optional(v.id('calls')),
+    attemptNumber: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -41,7 +46,7 @@ export const create = mutation({
 export const updateStatus = mutation({
   args: {
     id: v.id('calls'),
-    status: v.string(),
+    status: v.optional(v.string()),
     elevenLabsConversationId: v.optional(v.string()),
     twilioCallSid: v.optional(v.string()),
     duration: v.optional(v.number()),
@@ -54,6 +59,13 @@ export const updateStatus = mutation({
     holdDuration: v.optional(v.number()),
     humanDetectedAt: v.optional(v.string()),
     ivrSequenceUsed: v.optional(v.string()),
+    outcome: v.optional(v.string()),
+    outcomeReason: v.optional(v.string()),
+    requiredFieldsRetrieved: v.optional(v.array(v.string())),
+    missingFields: v.optional(v.array(v.string())),
+    transferredAt: v.optional(v.string()),
+    transferType: v.optional(v.string()),
+    transferDestination: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -75,6 +87,17 @@ export const listByClaim = query({
   },
 });
 
+export const listByDentalCase = query({
+  args: { dentalCaseId: v.id('dentalCases') },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query('calls')
+      .withIndex('by_dentalCaseId', (q) => q.eq('dentalCaseId', args.dentalCaseId))
+      .order('desc')
+      .collect();
+  },
+});
+
 export const listRecent = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -87,15 +110,34 @@ export const listRecent = query({
       .order('desc')
       .take(limit);
 
-    // Join claim and insurance data for dashboard display
     const enriched = await Promise.all(
       calls.map(async (call) => {
-        const claim = await ctx.db.get(call.claimId);
-        const insurance = claim ? await ctx.db.get(claim.insuranceContactId) : null;
+        let claimNumber: string | null = null;
+        let dentalCaseNumber: string | null = null;
+        let insuranceCompany: string | null = null;
+        if (call.claimId) {
+          const claim = await ctx.db.get(call.claimId);
+          if (claim) {
+            claimNumber = claim.claimNumber;
+            const insurance = await ctx.db.get(claim.insuranceContactId);
+            insuranceCompany = insurance?.name ?? null;
+          }
+        } else if (call.dentalCaseId) {
+          const dCase = await ctx.db.get(call.dentalCaseId);
+          if (dCase) {
+            dentalCaseNumber = dCase.caseNumber;
+            const insurance = await ctx.db.get(dCase.insuranceContactId);
+            insuranceCompany = insurance?.name ?? null;
+          }
+        } else {
+          const insurance = await ctx.db.get(call.insuranceContactId);
+          insuranceCompany = insurance?.name ?? null;
+        }
         return {
           ...call,
-          claimNumber: claim?.claimNumber ?? null,
-          insuranceCompany: insurance?.name ?? null,
+          claimNumber,
+          dentalCaseNumber,
+          insuranceCompany,
         };
       })
     );
@@ -116,14 +158,24 @@ export const getCallMetadata = query({
     const call = await ctx.db.get(args.id);
     if (!call) return null;
 
-    const claim = await ctx.db.get(call.claimId);
-    if (!claim) return null;
-
-    const patient = await ctx.db.get(claim.patientId);
-    const insurance = await ctx.db.get(claim.insuranceContactId);
-    const provider = await ctx.db.get(claim.providerId);
-
-    return { call, claim, patient, insurance, provider };
+    if (call.claimId) {
+      const claim = await ctx.db.get(call.claimId);
+      if (!claim) return null;
+      const patient = await ctx.db.get(claim.patientId);
+      const insurance = await ctx.db.get(claim.insuranceContactId);
+      const provider = await ctx.db.get(claim.providerId);
+      return { call, useCase: 'medical_claim' as const, claim, patient, insurance, provider };
+    }
+    if (call.dentalCaseId) {
+      const dCase = await ctx.db.get(call.dentalCaseId);
+      if (!dCase) return null;
+      const patient = await ctx.db.get(dCase.patientId);
+      const insurance = await ctx.db.get(dCase.insuranceContactId);
+      const provider = await ctx.db.get(dCase.providerId);
+      const plan = dCase.planId ? await ctx.db.get(dCase.planId) : null;
+      return { call, useCase: 'dental_ev' as const, dentalCase: dCase, plan, patient, insurance, provider };
+    }
+    return { call };
   },
 });
 
@@ -135,7 +187,6 @@ export const getByTwilioSid = query({
   },
 });
 
-// Used by test IVR to dynamically look up the forwarding number
 export const getMostRecent = query({
   args: {},
   handler: async (ctx) => {

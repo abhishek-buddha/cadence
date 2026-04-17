@@ -1,0 +1,31 @@
+Case Number,Patient First Name,Patient Last Name,Patient DOB,Member ID,Group Number,Plan Name,Insurance,Provider NPI,CDT Codes,Proposed Date of Service,Notes
+EV-2026-30100,Anna,Ramirez,1957-07-02,C701877848,GRP-52185,Cigna DPPO Advantage,Cigna Dental,1590077016,"D3310, D6010, D7220",2026-05-01,Waiting period applies for major work
+EV-2026-30101,Melissa,Gomez,1979-09-22,M976115180,GRP-37276,MetLife High Option,MetLife Dental,1747500105,"D3310, D2330, D6010",2026-04-24,Dual coverage on file
+EV-2026-30102,Stephen,Walker,2005-01-25,UC49732828,GRP-16877,United Concordia FFS,United Concordia,1358206301,D4341,2026-05-06,Patient requested pre-D for crown
+EV-2026-30103,Laura,Butler,1971-05-21,UC99414037,GRP-47030,United Concordia Advantage Plus,United Concordia,1354290750,"D8080, D2740",2026-05-09,Dual coverage on file
+EV-2026-30104,Joseph,Vasquez,1992-08-10,A782958808,GRP-90684,Aetna PPO Max,Aetna Dental,1475909640,"D0274, D1120, D3320",2026-05-17,Patient requested pre-D for crown
+EV-2026-30105,William,Flores,1994-08-24,UC80392061,GRP-16418,United Concordia Elite,United Concordia,1508365686,D5213,2026-04-18,Verifying annual maximum remaining
+EV-2026-30106,Noah,Torres,2000-08-12,M249383962,GRP-76754,MetLife Standard Option,MetLife Dental,1741972786,D3330,2026-05-11,Active orthodontic case
+EV-2026-30107,Daniel,Campbell,2001-05-20,M467938635,GRP-35253,MetLife PDP Plus,MetLife Dental,1796766082,D6056,2026-05-12,Out-of-network benefit verification
+EV-2026-30108,Carol,Foster,1949-05-17,A222509188,GRP-94513,Aetna PPO Max,Aetna Dental,1824834801,"D4910, D8080",2026-04-27,Coordination with primary insurance pending
+EV-2026-30109,Teresa,Alvarez,1996-12-22,DD70281167,GRP-59444,Delta DeltaCare USA HMO,Delta Dental,1584245875,"D3330, D6010",2026-05-13,Waiting period applies for major work
+EV-2026-30110,David,Hall,1989-03-17,DD62625978,GRP-74740,Delta DeltaCare USA HMO,Delta Dental,1012750949,"D5110, D0330, D3320",2026-04-23,Patient updating address with payer
+EV-2026-30111,Frances,Sullivan,1950-02-01,DD93243395,GRP-13746,Delta PPO Standard,Delta Dental,1836599396,"D2391, D8080, D0150",2026-04-27,Periodontal frequency verification
+EV-2026-30112,Frances,Parker,1975-08-24,C672979385,GRP-47816,Cigna Dental Preferred,Cigna Dental,1466248470,D7220,2026-04-21,Patient new to practice
+EV-2026-30113,Harold,James,1962-11-24,UC98874979,GRP-98209,United Concordia Advantage Plus,United Concordia,1763325202,D8080,2026-04-30,Implant exclusion review
+EV-2026-30114,Bruce,Price,1963-06-22,UC46105451,GRP-42266,United Concordia Elite,United Concordia,1301354221,"D0210, D4342",2026-05-08,Awaiting attachment X-rays
+EV-2026-30115,Jerry,Anderson,1953-11-20,DD60614670,GRP-98946,Delta PPO Premier,Delta Dental,1654010086,"D7220, D0150",2026-05-02,Waiting period applies for major work
+EV-2026-30116,Jacqueline,Carter,1947-06-09,C768132136,GRP-81630,Cigna Dental Preferred,Cigna Dental,1195917419,"D7220, D2740, D6056",2026-05-06,Patient requested pre-D for crown
+EV-2026-30117,Sean,Alvarez,1969-01-19,A958815912,GRP-14508,Aetna DMO,Aetna Dental,1497916577,"D8080, D2392",2026-05-17,Out-of-network benefit verification
+EV-2026-30118,Christopher,Richardson,1962-08-11,M725330813,GRP-78256,MetLife PDP Plus,MetLife Dental,1540221150,D8080,2026-05-07,Patient requested pre-D for crown
+EV-2026-30119,Anthony,Parker,1979-03-15,M304678515,GRP-48259,MetLife PDP Plus,MetLife Dental,1225382674,"D1206, D5213",2026-04-23,Patient updating address with payer
+EV-2026-30120,Katherine,Hughes,1959-01-07,UC33681482,GRP-91698,United Concordia Elite,United Concordia,1319133916,"D4341, D5120, D6056",2026-04-21,Missing tooth clause may apply
+EV-2026-30121,James,King,1948-03-14,A507817066,GRP-51931,Aetna DMO,Aetna Dental,1681788860,"D4341, D2392",2026-04-18,Confirm orthodontic lifetime max
+EV-2026-30122,James,Rivera,1992-02-26,DD70272447,GRP-57700,Delta DeltaCare USA HMO,Delta Dental,1803631785,"D7140, D2392, D5110",2026-05-17,Frequency limitation check needed
+EV-2026-30123,James,Gutierrez,1966-11-15,DD10490444,GRP-28668,Delta PPO Premier,Delta Dental,1283589653,"D6056, D3330",2026-05-12,Awaiting attachment X-rays
+EV-2026-30124,Christopher,Young,2000-02-25,M668273559,GRP-64085,MetLife PDP Plus,MetLife Dental,1310163881,D3320,2026-04-18,Patient new to practice
+EV-2026-30125,Martha,Jackson,1946-12-25,C262079979,GRP-97436,Cigna Dental Preferred,Cigna Dental,1900875792,"D2392, D5120",2026-04-30,Coordination with primary insurance pending
+EV-2026-30126,Jack,Carter,1996-07-17,A655394943,GRP-22238,Aetna Vital Savings,Aetna Dental,1686753817,D2330,2026-04-30,Previous restoration replacement check
+EV-2026-30127,Michael,Turner,1947-05-25,A680211228,GRP-39036,Aetna DMO,Aetna Dental,1928107070,"D2330, D2392",2026-04-23,Verifying annual maximum remaining
+EV-2026-30128,Julia,Rogers,1968-07-02,UC83052689,GRP-39199,United Concordia Elite,United Concordia,1418894596,"D1110, D0330",2026-04-20,Bridge replacement age check
+EV-2026-30129,Noah,Mendoza,1993-11-17,A922625778,GRP-89970,Aetna DMO,Aetna Dental,1124383493,D7140,2026-04-28,Previous restoration replacement check

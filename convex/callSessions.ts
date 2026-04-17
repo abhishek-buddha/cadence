@@ -175,3 +175,69 @@ export const resume = mutation({
     await ctx.db.patch(args.id, patch);
   },
 });
+
+// Returns items for a session with display labels and per-item outcome state.
+// Used by SessionDetailPanel to render the items list.
+export const listItems = query({
+  args: { sessionId: v.id('callSessions') },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) return [];
+
+    const items = await Promise.all(
+      (session.itemRefs ?? []).map(async (ref) => {
+        const entity: any = await ctx.db.get(ref);
+        if (!entity) {
+          return { _id: ref, label: 'Unknown', detail: '', outcome: null, missingFields: [] };
+        }
+
+        const isClaim = 'claimNumber' in entity;
+        const label = isClaim ? entity.claimNumber : entity.caseNumber;
+        const detail = isClaim
+          ? `$${entity.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 }) ?? '0.00'} · DOS ${entity.dateOfService ?? '--'}`
+          : `CDT: ${(entity.cdtCodes ?? []).join(', ') || '--'} · DOS ${entity.proposedDateOfService ?? '--'}`;
+
+        const lastCall: any = isClaim
+          ? await ctx.db
+              .query('calls')
+              .withIndex('by_claimId', (q) => q.eq('claimId', ref as any))
+              .order('desc')
+              .first()
+          : await ctx.db
+              .query('calls')
+              .withIndex('by_dentalCaseId', (q) => q.eq('dentalCaseId', ref as any))
+              .order('desc')
+              .first();
+
+        return {
+          _id: ref,
+          label,
+          detail,
+          outcome: lastCall?.outcome ?? null,
+          missingFields: lastCall?.missingFields ?? [],
+        };
+      })
+    );
+
+    return items;
+  },
+});
+
+// Returns the currently active call for a session (initiating / ringing / in_progress).
+// Used by SessionDetailPanel to show the live call monitor.
+export const getActiveCall = query({
+  args: { sessionId: v.id('callSessions') },
+  handler: async (ctx, args) => {
+    const calls = await ctx.db
+      .query('calls')
+      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
+      .order('desc')
+      .collect();
+
+    return (
+      calls.find((c) =>
+        ['initiating', 'ringing', 'in_progress'].includes(c.status)
+      ) ?? null
+    );
+  },
+});

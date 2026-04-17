@@ -59,21 +59,25 @@ export default function EvResultsCard({ result }) {
   }
 
   const {
-    coverageActive,
-    deductibleTotal,
-    deductibleUsed,
-    annualMax,
-    annualMaxUsed,
-    coinsurance,
-    copay,
+    isActive: coverageActive,
+    deductibleAnnualCents: deductibleTotal,
+    deductibleMetCents: deductibleUsed,
+    annualMaximumCents: annualMax,
+    annualMaxRemainingCents,
+    coinsurancePct: coinsurance,
+    copayCents: copay,
     networkStatus,
     frequencyLimits,
     waitingPeriods,
-    planType,
-    effectiveDate,
-    termDate,
+    coverageEffectiveDate: effectiveDate,
+    coverageTerminationDate: termDate,
     confidence,
   } = result;
+  // annualMaxRemainingCents is what's left; derive used = total - remaining
+  const annualMaxUsed =
+    annualMax != null && annualMaxRemainingCents != null
+      ? annualMax - annualMaxRemainingCents
+      : null;
 
   return (
     <div className="bg-white border border-accent/15 rounded-xl overflow-hidden shadow-sm glow-border">
@@ -233,8 +237,10 @@ export default function EvResultsCard({ result }) {
                   {frequencyLimits.map((f, i) => (
                     <tr key={i} className="border-t border-border/40">
                       <td className="px-3 py-2 font-data text-accent">{f.cdtCode}</td>
-                      <td className="px-3 py-2 text-gray-700">{f.limit}</td>
-                      <td className="px-3 py-2 text-right font-data text-gray-900">{f.remaining}</td>
+                      <td className="px-3 py-2 text-gray-700">{f.limitDescription}</td>
+                      <td className="px-3 py-2 text-right font-data text-gray-900">
+                        {f.remainingThisYear ?? '--'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -256,18 +262,20 @@ export default function EvResultsCard({ result }) {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-white border-b border-border">
-                    <th className="px-3 py-2 text-left text-muted font-medium">Service</th>
-                    <th className="px-3 py-2 text-left text-muted font-medium">Period</th>
+                    <th className="px-3 py-2 text-left text-muted font-medium">CDT Code</th>
+                    <th className="px-3 py-2 text-left text-muted font-medium">Status</th>
                     <th className="px-3 py-2 text-right text-muted font-medium">Ends</th>
                   </tr>
                 </thead>
                 <tbody>
                   {waitingPeriods.map((w, i) => (
                     <tr key={i} className="border-t border-border/40">
-                      <td className="px-3 py-2 text-gray-700">{w.serviceCategory}</td>
-                      <td className="px-3 py-2 text-gray-700">{w.duration}</td>
+                      <td className="px-3 py-2 font-data text-accent">{w.cdtCode}</td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {w.satisfied ? 'Satisfied' : 'Pending'}
+                      </td>
                       <td className="px-3 py-2 text-right font-data text-gray-900">
-                        {w.endsAt ? new Date(w.endsAt).toLocaleDateString() : '--'}
+                        {w.endsOn ? new Date(w.endsOn).toLocaleDateString() : '--'}
                       </td>
                     </tr>
                   ))}

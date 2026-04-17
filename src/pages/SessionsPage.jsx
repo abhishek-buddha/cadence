@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Users, Plus, ChevronRight, ChevronDown } from 'lucide-react';
@@ -112,9 +112,8 @@ export default function SessionsPage() {
               sessions.map((session) => {
                 const isExpanded = expandedId === session._id;
                 return (
-                  <>
+                  <Fragment key={session._id}>
                     <tr
-                      key={session._id}
                       onClick={() => toggleExpand(session._id)}
                       className="table-row-hover cursor-pointer hover:bg-gray-50"
                     >
@@ -161,7 +160,7 @@ export default function SessionsPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })
             )}

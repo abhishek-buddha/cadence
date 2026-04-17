@@ -136,13 +136,13 @@ function EvCallTimelineEntry({ call, result }) {
               <Clock className="w-3 h-3 inline mr-1" />
               {durationStr}
             </span>
-            {result?.coverageActive != null && (
+            {result?.isActive != null && (
               <span
                 className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  result.coverageActive ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
+                  result.isActive ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
                 }`}
               >
-                {result.coverageActive ? 'Coverage Active' : 'Coverage Inactive'}
+                {result.isActive ? 'Coverage Active' : 'Coverage Inactive'}
               </span>
             )}
           </div>
@@ -155,26 +155,26 @@ function EvCallTimelineEntry({ call, result }) {
           <div className="border-t border-border px-4 py-3 space-y-3">
             {result && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-                {result.deductibleTotal != null && (
+                {result.deductibleAnnualCents != null && (
                   <div>
                     <p className="text-muted uppercase tracking-wider font-medium">Deductible</p>
                     <p className="font-data text-gray-900">
-                      ${(result.deductibleUsed || 0) / 100} / ${result.deductibleTotal / 100}
+                      ${((result.deductibleMetCents || 0) / 100).toFixed(2)} / ${(result.deductibleAnnualCents / 100).toFixed(2)}
                     </p>
                   </div>
                 )}
-                {result.annualMax != null && (
+                {result.annualMaximumCents != null && (
                   <div>
                     <p className="text-muted uppercase tracking-wider font-medium">Annual Max</p>
                     <p className="font-data text-gray-900">
-                      ${(result.annualMaxUsed || 0) / 100} / ${result.annualMax / 100}
+                      ${((result.annualMaximumCents - (result.annualMaxRemainingCents ?? result.annualMaximumCents)) / 100).toFixed(2)} / ${(result.annualMaximumCents / 100).toFixed(2)}
                     </p>
                   </div>
                 )}
-                {result.coinsurance != null && (
+                {result.coinsurancePct != null && (
                   <div>
                     <p className="text-muted uppercase tracking-wider font-medium">Coinsurance</p>
-                    <p className="font-data text-gray-900">{result.coinsurance}%</p>
+                    <p className="font-data text-gray-900">{result.coinsurancePct}%</p>
                   </div>
                 )}
                 {result.repName && (
@@ -223,7 +223,6 @@ export default function EvCaseDetailPage() {
 
   const data = useQuery(api.dentalCases?.getWithDetails, id ? { id } : 'skip');
   const initiateEvCall = useAction(api.dentalCallActions?.initiateEvCall);
-  const latestEvResult = useQuery(api.evResults?.getByCase, id ? { caseId: id } : 'skip');
 
   const [callState, setCallState] = useState('idle');
   const [callError, setCallError] = useState(null);
@@ -482,7 +481,7 @@ export default function EvCaseDetailPage() {
       </div>
 
       {/* Latest EV Result */}
-      <EvResultsCard result={latestEvResult ?? null} />
+      <EvResultsCard result={data?.latestResult ?? null} />
 
       {/* EV history timeline */}
       <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">

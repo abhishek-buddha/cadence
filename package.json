@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "convex:dev": "npx convex dev",
     "convex:deploy": "npx convex deploy",
+    "convex:clean": "npx convex run devSeed:cleanTestData",
     "test": "playwright test --config=tests/playwright.config.ts",
     "test:smoke": "playwright test --config=tests/playwright.config.ts tests/smoke",
     "test:e2e": "playwright test --config=tests/playwright.config.ts tests/e2e",

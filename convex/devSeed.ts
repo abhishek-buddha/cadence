@@ -449,3 +449,102 @@ export const wipeAndReseed = internalMutation({
     return { wiped: true, reseeded: true };
   },
 });
+
+// ---------------------------------------------------------------------------
+// Targeted cleanup: remove all dummy/test data created during development
+// while preserving legitimate demo claims (CLM-2026-* series).
+//
+// Removes:
+//   - All dentalCases with caseNumber matching EV-20260417-*  (44 cases)
+//   - All claims with claimNumber matching TST-*              (14 claims)
+//   - All callSessions whose itemRefs overlap the deleted claims/cases above
+//   - evResults and calls linked to the removed dental cases
+// ---------------------------------------------------------------------------
+export const cleanTestData = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let dentalDeleted = 0;
+    let claimsDeleted = 0;
+    let sessionsDeleted = 0;
+    let evResultsDeleted = 0;
+    let callsDeleted = 0;
+
+    // 1. Collect IDs to delete
+    const allDentalCases = await ctx.db.query('dentalCases').collect();
+    const junkCaseIds = new Set(
+      allDentalCases
+        .filter((c) => c.caseNumber?.startsWith('EV-20260417-'))
+        .map((c) => c._id)
+    );
+
+    const allClaims = await ctx.db.query('claims').collect();
+    const junkClaimIds = new Set(
+      allClaims
+        .filter((c) => c.claimNumber?.startsWith('TST-'))
+        .map((c) => c._id)
+    );
+
+    // 2. Delete calls + evResults linked to junk dental cases
+    for (const caseId of junkCaseIds) {
+      const linkedCalls = await ctx.db
+        .query('calls')
+        .withIndex('by_dentalCaseId', (q) => q.eq('dentalCaseId', caseId))
+        .collect();
+      for (const call of linkedCalls) {
+        // Delete any evResults for this call
+        const evs = await ctx.db
+          .query('evResults')
+          .withIndex('by_callId', (q) => q.eq('callId', call._id))
+          .collect();
+        for (const ev of evs) {
+          await ctx.db.delete(ev._id);
+          evResultsDeleted++;
+        }
+        await ctx.db.delete(call._id);
+        callsDeleted++;
+      }
+      // Also delete evResults indexed directly by dentalCaseId
+      const caseEvs = await ctx.db
+        .query('evResults')
+        .withIndex('by_dentalCaseId', (q) => q.eq('dentalCaseId', caseId))
+        .collect();
+      for (const ev of caseEvs) {
+        await ctx.db.delete(ev._id);
+        evResultsDeleted++;
+      }
+    }
+
+    // 3. Delete sessions whose itemRefs overlap junk IDs
+    const allSessions = await ctx.db.query('callSessions').collect();
+    for (const session of allSessions) {
+      const refs = session.itemRefs ?? [];
+      const hasJunk = refs.some(
+        (ref) => junkCaseIds.has(ref as any) || junkClaimIds.has(ref as any)
+      );
+      if (hasJunk) {
+        await ctx.db.delete(session._id);
+        sessionsDeleted++;
+      }
+    }
+
+    // 4. Delete the junk dental cases
+    for (const id of junkCaseIds) {
+      await ctx.db.delete(id);
+      dentalDeleted++;
+    }
+
+    // 5. Delete the TST- claims
+    for (const id of junkClaimIds) {
+      await ctx.db.delete(id);
+      claimsDeleted++;
+    }
+
+    return {
+      dentalCasesDeleted: dentalDeleted,
+      claimsDeleted,
+      sessionsDeleted,
+      evResultsDeleted,
+      callsDeleted,
+    };
+  },
+});

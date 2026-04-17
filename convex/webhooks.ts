@@ -1,14 +1,27 @@
 import { mutation, query, action, internalMutation, internalAction, internalQuery } from './_generated/server';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
-import crypto from 'node:crypto';
 
-// Exponential backoff in seconds (60s, 5m, 30m, 2h, 8h, 24h, 48h, 96h) — 8 retries
 const RETRY_BACKOFF_SECONDS = [60, 300, 1800, 7200, 28800, 86400, 172800, 345600];
 const MAX_ATTEMPTS = RETRY_BACKOFF_SECONDS.length + 1;
 
-function buildSignature(secret: string, payload: string, timestamp: string): string {
-  return crypto.createHmac('sha256', secret).update(payload + ':' + timestamp).digest('hex');
+function bytesToHex(b: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < b.length; i++) s += b[i].toString(16).padStart(2, '0');
+  return s;
+}
+
+function randomHex(byteCount: number): string {
+  const buf = new Uint8Array(byteCount);
+  crypto.getRandomValues(buf);
+  return bytesToHex(buf);
+}
+
+async function buildSignature(secret: string, payload: string, timestamp: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload + ':' + timestamp));
+  return bytesToHex(new Uint8Array(sig));
 }
 
 export const subscribe = mutation({
@@ -23,7 +36,7 @@ export const subscribe = mutation({
     }
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject || 'default';
-    const secret = args.secret ?? crypto.randomBytes(16).toString('hex'); // 32 hex chars
+    const secret = args.secret ?? randomHex(16); // 32 hex chars
     return await ctx.db.insert('webhookSubscriptions', {
       url: args.url,
       events: args.events,
@@ -254,7 +267,7 @@ export const deliverNext = internalAction({
     }
 
     const timestamp = new Date().toISOString();
-    const signature = buildSignature(sub.secret, delivery.eventPayload, timestamp);
+    const signature = await buildSignature(sub.secret, delivery.eventPayload, timestamp);
 
     let httpStatus = 0;
     let responseBody = '';

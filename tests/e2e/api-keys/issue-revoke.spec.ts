@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 /**
  * API key issue / revoke / verify lifecycle — TC-API-KEY-001..010.
@@ -21,17 +21,46 @@ interface IssuedKey {
 }
 
 function convexRun(fn: string, args: object = {}): any {
-  const out = execSync(`npx convex run ${fn} '${JSON.stringify(args)}'`, {
-    env: { ...process.env, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY ?? '' },
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 30_000,
-  });
-  const trimmed = out.trim();
+  // Cross-platform: on Windows, npx is a .cmd shim → need shell:true + cmd.exe-compatible
+  // double-quoted JSON. On posix, shell:false with raw JSON works fine.
+  const isWin = process.platform === 'win32';
+  const argJson = JSON.stringify(args);
+  const r = isWin
+    ? spawnSync('npx', ['convex', 'run', fn, `"${argJson.replace(/"/g, '\\"')}"`], {
+        env: { ...process.env, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY ?? '' },
+        encoding: 'utf8',
+        timeout: 30_000,
+        shell: true,
+      })
+    : spawnSync('npx', ['convex', 'run', fn, argJson], {
+        env: { ...process.env, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY ?? '' },
+        encoding: 'utf8',
+        timeout: 30_000,
+        shell: false,
+      });
+  if (r.status !== 0) {
+    const err: any = new Error(`convex run ${fn} failed: ${r.stderr || r.stdout}`);
+    err.stderr = r.stderr;
+    err.stdout = r.stdout;
+    throw err;
+  }
+  // `convex run` prints the function's return value as pretty-printed multi-line JSON.
+  // Find the first `{`, `[`, or primitive marker, then accumulate to the end and parse.
+  // (Bottom-up line-by-line parsing fails for multi-line objects.)
+  const out = (r.stdout ?? '').trim();
+  const firstBrace = out.search(/[\{\[]/);
+  if (firstBrace >= 0) {
+    try {
+      return JSON.parse(out.slice(firstBrace));
+    } catch {
+      /* fall through */
+    }
+  }
+  // Try whole-output parse as a fallback.
   try {
-    return JSON.parse(trimmed);
+    return JSON.parse(out);
   } catch {
-    return trimmed;
+    return out;
   }
 }
 
@@ -209,12 +238,17 @@ test.describe('TC-API-KEY — API key lifecycle', () => {
       // 2. There is no `apiKeys:get` or `apiKeys:reveal` public function. Probe by name; expect failure.
       let revealAttemptThrew = false;
       try {
-        execSync(`npx convex run apiKeys:reveal '{"id":"${k.id}"}'`, {
-          env: { ...process.env, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY ?? '' },
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: 30_000,
-        });
+        const probe = spawnSync(
+          'npx',
+          ['convex', 'run', 'apiKeys:reveal', JSON.stringify({ id: k.id })],
+          {
+            env: { ...process.env, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY ?? '' },
+            encoding: 'utf8',
+            timeout: 30_000,
+            shell: false,
+          },
+        );
+        if (probe.status !== 0) revealAttemptThrew = true;
       } catch {
         revealAttemptThrew = true;
       }

@@ -165,7 +165,7 @@ test.describe('Dental Eligibility — page render', () => {
     expect(getErrors()).toEqual([]);
   });
 
-  test('TC-DENTAL-UI-014 — Add Case modal Cancel button closes it', async ({
+  test('TC-DENTAL-UI-014 — Add Case modal closes via Escape key', async ({
     loggedInPage,
   }) => {
     const getErrors = trackConsoleErrors(loggedInPage);
@@ -173,7 +173,9 @@ test.describe('Dental Eligibility — page render', () => {
     await loggedInPage.getByRole('button', { name: /add case/i }).first().click();
     const dialog = loggedInPage.getByRole('dialog').first();
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await dialog.getByRole('button', { name: /cancel/i }).first().click();
+    // Modal has no Cancel button — header X icon (no aria-label) and Escape are the close paths.
+    // Escape is the most robust selector-free close.
+    await loggedInPage.keyboard.press('Escape');
     await expect(dialog).toBeHidden({ timeout: 10_000 });
     expect(getErrors()).toEqual([]);
   });

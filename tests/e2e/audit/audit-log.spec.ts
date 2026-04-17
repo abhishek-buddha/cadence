@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 /**
  * Audit log — TC-SSO-AUD-001..014.
@@ -23,26 +23,38 @@ const authHeaders = () => (KEY ? { Authorization: `Bearer ${KEY}` } : {});
 /**
  * Run a Convex function via CLI. Returns the parsed JSON output, or the raw string
  * if the result isn't JSON (some queries return primitives).
+ *
+ * Uses spawnSync without a shell so the JSON args don't get mangled by cmd.exe
+ * (single quotes aren't quote-characters there, so the JSON gets stripped to garbage).
  */
 function convexRun(fn: string, args: object = {}): any {
+  const isWin = process.platform === 'win32';
   const argJson = JSON.stringify(args);
-  // On Windows the shell is cmd.exe by default; single-quote arg JSON for cross-shell safety.
-  const cmd = `npx convex run ${fn} '${argJson}'`;
-  const out = execSync(cmd, {
-    env: {
-      ...process.env,
-      CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY ?? '',
-    },
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 30_000,
-  });
-  const trimmed = out.trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return trimmed;
+  const r = isWin
+    ? spawnSync('npx', ['convex', 'run', fn, `"${argJson.replace(/"/g, '\\"')}"`], {
+        env: { ...process.env, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY ?? '' },
+        encoding: 'utf8',
+        timeout: 30_000,
+        shell: true,
+      })
+    : spawnSync('npx', ['convex', 'run', fn, argJson], {
+        env: { ...process.env, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY ?? '' },
+        encoding: 'utf8',
+        timeout: 30_000,
+        shell: false,
+      });
+  if (r.status !== 0) {
+    const err: any = new Error(`convex run ${fn} failed: ${r.stderr || r.stdout}`);
+    err.stderr = r.stderr;
+    err.stdout = r.stdout;
+    throw err;
   }
+  const out = (r.stdout ?? '').trim();
+  const firstBrace = out.search(/[\{\[]/);
+  if (firstBrace >= 0) {
+    try { return JSON.parse(out.slice(firstBrace)); } catch { /* fall through */ }
+  }
+  try { return JSON.parse(out); } catch { return out; }
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -188,12 +200,7 @@ test.describe('TC-SSO-AUD — audit log', () => {
     let threw = false;
     let message = '';
     try {
-      execSync(`npx convex run auditEvents:update '{"id":"x","action":"tampered"}'`, {
-        env: { ...process.env, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY ?? '' },
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 30_000,
-      });
+      convexRun('auditEvents:update', { id: 'x', action: 'tampered' });
     } catch (e: any) {
       threw = true;
       message = (e.stderr || e.stdout || e.message || '').toString();
@@ -204,7 +211,9 @@ test.describe('TC-SSO-AUD — audit log', () => {
   });
 
   test('TC-SSO-AUD-014 — exportCsv action returns CSV string with header row', async () => {
-    const csv = convexRun('auditEvents:exportCsv', { filters: { limit: 50 } });
+    // exportCsv only accepts filter fields (action/resourceType/userId/fromDate/toDate);
+    // page size is fixed at 10k internally. Pass an empty filter object.
+    const csv = convexRun('auditEvents:exportCsv', { filters: {} });
     expect(typeof csv).toBe('string');
     expect(csv).toMatch(/^timestamp,action,resourceType,resourceId/);
     // At minimum: header line. If rows exist, the second line should be a real ISO timestamp.

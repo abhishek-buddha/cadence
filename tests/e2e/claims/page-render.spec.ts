@@ -103,7 +103,11 @@ test.describe('Claims — page render', () => {
     const getErrors = trackConsoleErrors(loggedInPage);
     await loggedInPage.goto('/claims');
     await loggedInPage.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-    const rows = loggedInPage.locator('table tbody tr');
+    // Exclude shimmer rows (those without real data) by waiting for a row containing
+    // the font-data class on the claim-# cell, which only renders for loaded claims.
+    const rows = loggedInPage.locator('table tbody tr').filter({
+      has: loggedInPage.locator('td.font-data'),
+    });
     const count = await rows.count();
     if (count === 0) {
       test.info().annotations.push({
@@ -112,15 +116,14 @@ test.describe('Claims — page render', () => {
       });
       return;
     }
-    // Click on a non-checkbox cell — pick the claim-number cell.
-    await rows
-      .first()
-      .locator('td')
-      .nth(1)
-      .click({ force: true });
+    // The <tr> itself owns the onClick (navigate to /claims/:id). Click the claim-#
+    // cell (index 1) — checkbox cell at index 0 has stopPropagation; status cell has
+    // a button that also stops propagation. Cell 1 reliably bubbles to the row handler.
+    await rows.first().locator('td').nth(1).click();
+    // Accept /claims/<id> with optional trailing slash, query, or hash.
     await expect
       .poll(() => loggedInPage.url(), { timeout: 10_000 })
-      .toMatch(/\/claims\/[^/]+$/);
+      .toMatch(/\/claims\/[^/?#]+\/?(\?.*)?(#.*)?$/);
     expect(getErrors()).toEqual([]);
   });
 

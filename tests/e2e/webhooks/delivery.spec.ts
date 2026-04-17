@@ -235,7 +235,7 @@ test.describe('TC-API-WH — webhook delivery (receiver: webhook.site)', () => {
     try {
       // The /v1 surface only exposes POST/DELETE for webhooks; pause() is a Convex mutation.
       // Try the CLI path; if it isn't supported, skip with documentation.
-      const { execSync } = require('node:child_process');
+      const { execSync } = await import('node:child_process');
       let pausedOk = false;
       try {
         execSync(`npx convex run webhooks:pause '{"id":"${subId}"}'`, {

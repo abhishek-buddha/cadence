@@ -49,10 +49,9 @@ export default function SessionDetailPanel({ session }) {
     api.callSessions?.getWithItems,
     session?._id ? { id: session._id } : 'skip'
   );
-  const activeCall = useQuery(
-    api.callSessions?.getActiveCall,
-    session?._id ? { sessionId: session._id } : 'skip'
-  );
+  // Derive active call from items' lastCall rather than a separate query,
+  // since getActiveCall is not yet deployed to the Convex backend.
+  const activeCall = null;
 
   if (!session) {
     return (

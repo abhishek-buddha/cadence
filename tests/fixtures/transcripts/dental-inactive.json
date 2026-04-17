@@ -1,0 +1,21 @@
+{
+  "id": "dental-inactive",
+  "useCase": "dental-eligibility-verification",
+  "callDurationSecs": 167,
+  "transcript": "Agent: Hi, this is Cadence calling on behalf of Pearl Dental Group, NPI 1827364582, for an eligibility verification. Tax ID 92-7281930. Your rep ID please?\nRep: Hi, this is Tom, rep ID TM4429, MetLife Dental.\nAgent: Thanks Tom. Verifying for member Daniel Foster, member ID MET8273645, date of birth October 22 1978, group number 4493827.\nRep: One moment. Okay, I have the member record. Coverage for Daniel Foster terminated on December 31 2025. Member is no longer eligible for benefits as of January 1 2026.\nAgent: Was the termination due to non-payment, employment change, or other reason?\nRep: Termination reason on file is loss of employment, COBRA was not elected. The member was offered continuation coverage but declined.\nAgent: Was there any active coverage transitioned elsewhere?\nRep: No, we have no record of replacement coverage on our end.\nAgent: Thank you Tom.\nRep: Sure, have a good day.",
+  "expectedExtraction": {
+    "memberName": "Daniel Foster",
+    "memberId": "MET8273645",
+    "dob": "1978-10-22",
+    "groupNumber": "4493827",
+    "coverageStatus": "TERMINATED",
+    "terminationDate": "2025-12-31",
+    "terminationReason": "loss of employment, COBRA not elected",
+    "replacementCoverage": "none reported",
+    "repName": "Tom",
+    "repId": "TM4429"
+  },
+  "expectedOutcome": "INACTIVE_COVERAGE",
+  "expectedRequiredFieldsRetrieved": ["memberName", "memberId", "coverageStatus", "terminationDate", "terminationReason"],
+  "expectedMissingFields": []
+}

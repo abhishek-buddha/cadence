@@ -1,0 +1,18 @@
+{
+  "id": "medical-partial",
+  "useCase": "medical-claim-status",
+  "callDurationSecs": 124,
+  "transcript": "Agent: Hi, this is Cadence calling on behalf of Hilltop Medical, NPI 1827364901, regarding a claim status. Tax ID 47-2839102. Could I have your rep ID please?\nRep: This is Robert, REP ID RB2218.\nAgent: Thanks Robert. Claim CLM-H7762031, member ID HHM2873641, date of service March 5 2026, billed eight hundred dollars.\nRep: Yes, the claim is in finalized paid status.\nAgent: Could you tell me the allowed amount and patient responsibility?\nRep: I'm sorry, I'm not able to share specific payment breakdowns over the phone. You'll need to look up the EOB on the provider portal.\nAgent: Understood. Could you at least confirm the check number or EFT trace?\nRep: I cannot disclose payment details over the phone. Please use the portal.\nAgent: Got it. Was the claim paid in full or with adjustments?\nRep: I'm not able to share that. Anything else I can help with?\nAgent: No, thank you Robert.\nRep: Goodbye.",
+  "expectedExtraction": {
+    "claimNumber": "CLM-H7762031",
+    "memberId": "HHM2873641",
+    "dateOfService": "2026-03-05",
+    "billedAmount": 800.00,
+    "claimStatus": "FINALIZED_PAID",
+    "repName": "Robert",
+    "repId": "RB2218"
+  },
+  "expectedOutcome": "PARTIAL_INFO",
+  "expectedRequiredFieldsRetrieved": ["claimNumber", "memberId", "claimStatus"],
+  "expectedMissingFields": ["allowedAmount", "patientResponsibility", "planPaid", "checkNumber", "eftTraceNumber"]
+}

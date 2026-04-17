@@ -1,0 +1,25 @@
+{
+  "id": "medical-paid-full",
+  "useCase": "medical-claim-status",
+  "callDurationSecs": 312,
+  "transcript": "Agent: Hi, this is Cadence calling on behalf of Memorial Hospital Group, NPI 1942876503, for a claim status follow-up. Tax ID 472938176. May I have your name and rep ID please?\nRep: Yes, this is Janet, rep ID JN4729 with Aetna provider services.\nAgent: Thank you Janet. I am calling about claim number CLM-A4938201 for member John Doe, member ID W283746591, date of service March 12 2026, billed amount four thousand two hundred dollars even.\nRep: One moment while I pull that up. Okay, I have the claim. This claim was processed and finalized on April 2 2026. The claim was paid in full. Total allowed amount three thousand eight hundred dollars. Patient responsibility was one hundred fifty dollars copay. Plan paid three thousand six hundred fifty dollars. Check number CHK7728193 was issued April 5 2026 and mailed to the billing address on file. Check has been cashed.\nAgent: Excellent. Could you confirm the EFT trace number?\nRep: Yes, EFT trace number TRN884726103, deposited April 7 2026.\nAgent: And the claim status code on your end?\nRep: Status code 22, finalized payment.\nAgent: Perfect. Anything else on the claim, any pending appeals or adjustments?\nRep: No, claim is fully closed. No further action required.\nAgent: Thank you Janet, have a great day.\nRep: You too, goodbye.",
+  "expectedExtraction": {
+    "claimNumber": "CLM-A4938201",
+    "memberId": "W283746591",
+    "patientName": "John Doe",
+    "dateOfService": "2026-03-12",
+    "billedAmount": 4200.00,
+    "allowedAmount": 3800.00,
+    "patientResponsibility": 150.00,
+    "planPaid": 3650.00,
+    "checkNumber": "CHK7728193",
+    "checkIssueDate": "2026-04-05",
+    "eftTraceNumber": "TRN884726103",
+    "claimStatusCode": "22",
+    "repName": "Janet",
+    "repId": "JN4729"
+  },
+  "expectedOutcome": "PAID_IN_FULL",
+  "expectedRequiredFieldsRetrieved": ["claimNumber", "memberId", "billedAmount", "allowedAmount", "planPaid", "patientResponsibility", "checkNumber", "checkIssueDate", "eftTraceNumber", "claimStatusCode"],
+  "expectedMissingFields": []
+}

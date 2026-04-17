@@ -1,0 +1,23 @@
+{
+  "id": "medical-pending",
+  "useCase": "medical-claim-status",
+  "callDurationSecs": 198,
+  "transcript": "Agent: Hi, this is Cadence on behalf of Riverside Health, NPI 1093847562, calling for claim status. Tax ID 32-9182736. Your rep ID please?\nRep: This is Patricia, rep ID PT5546, Cigna provider services line.\nAgent: Thanks Patricia. Looking at claim number CLM-C7382910, member ID Z1029384756, date of service March 22 2026, billed amount nine hundred seventy five dollars.\nRep: One moment. I see the claim is currently in pending status under medical review. It was received March 28 2026 and assigned for utilization review on April 2. Reviewer is processing additional documentation requests.\nAgent: Is there an estimated completion date?\nRep: We typically complete medical reviews within fourteen to twenty one business days from the documentation submission date. So expected resolution by April 23 2026.\nAgent: Has any additional documentation been requested from the provider?\nRep: Yes, a request for medical records was sent March 30 2026, request reference REQ-7728192. Provider has thirty days to respond.\nAgent: Thank you Patricia.\nRep: Have a great day.",
+  "expectedExtraction": {
+    "claimNumber": "CLM-C7382910",
+    "memberId": "Z1029384756",
+    "dateOfService": "2026-03-22",
+    "billedAmount": 975.00,
+    "claimStatus": "PENDING_MEDICAL_REVIEW",
+    "receivedDate": "2026-03-28",
+    "estimatedCompletionDate": "2026-04-23",
+    "additionalInfoRequested": true,
+    "infoRequestReference": "REQ-7728192",
+    "infoRequestDate": "2026-03-30",
+    "repName": "Patricia",
+    "repId": "PT5546"
+  },
+  "expectedOutcome": "PENDING",
+  "expectedRequiredFieldsRetrieved": ["claimNumber", "memberId", "claimStatus", "estimatedCompletionDate", "additionalInfoRequested"],
+  "expectedMissingFields": []
+}

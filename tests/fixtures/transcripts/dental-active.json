@@ -1,0 +1,51 @@
+{
+  "id": "dental-active",
+  "useCase": "dental-eligibility-verification",
+  "callDurationSecs": 528,
+  "transcript": "Agent: Hi, this is Cadence calling on behalf of Smile Bright Dental, NPI 1029384756, for an eligibility and benefits verification. Tax ID 38-2918374. Your rep ID please?\nRep: Hi, this is Linda, rep ID LN8273, Delta Dental member services.\nAgent: Thanks Linda. Verifying for member Emily Carter, member ID DD192837465, date of birth June 14 1985, group number GRP883920.\nRep: One moment. Pulling up the policy. Okay, member is Emily Carter, coverage is active effective January 1 2026 with no termination date. Plan is Delta Dental PPO Plus Premier. Group name is Acme Corporation, group number GRP883920.\nAgent: Great. Can you walk me through the benefits structure?\nRep: Yes. Annual maximum is two thousand dollars per member per calendar year. Deductible is fifty dollars individual, one hundred fifty dollars family per calendar year. Deductible has not been met for 2026, zero dollars applied. Annual maximum used to date is zero dollars, remaining two thousand dollars.\nAgent: Coverage percentages by category?\nRep: Diagnostic and preventive, one hundred percent, deductible waived. Basic restorative including fillings and extractions, eighty percent after deductible. Major services including crowns, bridges, dentures, fifty percent after deductible. Orthodontia, fifty percent up to a lifetime maximum of fifteen hundred dollars, ages eight to nineteen.\nAgent: Frequency limitations on the diagnostic side?\nRep: Routine cleanings two per calendar year, six months apart. Periodic exams two per calendar year. Bitewing x-rays one set per calendar year. Full mouth x-rays one set every five years. Fluoride applications two per calendar year for members under nineteen.\nAgent: Restorative frequencies?\nRep: Composite fillings one per surface per tooth per twenty four months. Crowns one per tooth per five years. Root canals one per tooth per lifetime.\nAgent: Waiting periods?\nRep: No waiting periods, all services are immediate.\nAgent: COB on file?\nRep: Member has primary coverage with us only. No secondary insurance reported.\nAgent: Pre-authorization requirements?\nRep: Pre-auth recommended for any service over five hundred dollars. Required for orthodontia and prosthodontics.\nAgent: Network status for our provider, NPI 1029384756?\nRep: Provider is in-network with Delta PPO Plus Premier network.\nAgent: Thank you Linda.\nRep: You're welcome, goodbye.",
+  "expectedExtraction": {
+    "memberName": "Emily Carter",
+    "memberId": "DD192837465",
+    "dob": "1985-06-14",
+    "groupNumber": "GRP883920",
+    "groupName": "Acme Corporation",
+    "planName": "Delta Dental PPO Plus Premier",
+    "coverageStatus": "ACTIVE",
+    "effectiveDate": "2026-01-01",
+    "terminationDate": null,
+    "annualMaximum": 2000.00,
+    "annualMaxRemaining": 2000.00,
+    "deductibleIndividual": 50.00,
+    "deductibleFamily": 150.00,
+    "deductibleMet": 0.00,
+    "diagnosticCoverage": 100,
+    "basicCoverage": 80,
+    "majorCoverage": 50,
+    "orthodonticCoverage": 50,
+    "orthodonticLifetimeMax": 1500.00,
+    "frequencyLimits": {
+      "cleanings": "2 per calendar year, 6 months apart",
+      "periodicExams": "2 per calendar year",
+      "bitewings": "1 set per calendar year",
+      "fmx": "1 set per 5 years",
+      "fluoride": "2 per calendar year (under 19)",
+      "fillings": "1 per surface per tooth per 24 months",
+      "crowns": "1 per tooth per 5 years",
+      "rootCanals": "1 per tooth per lifetime"
+    },
+    "waitingPeriods": "none",
+    "cobStatus": "primary only",
+    "preAuthRequired": "over $500, ortho & prosthodontics",
+    "networkStatus": "IN_NETWORK",
+    "repName": "Linda",
+    "repId": "LN8273"
+  },
+  "expectedOutcome": "ACTIVE_COVERAGE",
+  "expectedRequiredFieldsRetrieved": [
+    "memberName", "memberId", "groupNumber", "planName", "coverageStatus", "effectiveDate",
+    "annualMaximum", "annualMaxRemaining", "deductibleIndividual", "deductibleMet",
+    "diagnosticCoverage", "basicCoverage", "majorCoverage", "frequencyLimits", "waitingPeriods",
+    "networkStatus"
+  ],
+  "expectedMissingFields": []
+}

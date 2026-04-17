@@ -1,0 +1,32 @@
+{
+  "id": "dental-partial",
+  "useCase": "dental-eligibility-verification",
+  "callDurationSecs": 287,
+  "transcript": "Agent: Hi, this is Cadence calling on behalf of Coastal Dental Care, NPI 1029387465, for benefits verification. Tax ID 73-9182746. Rep ID please?\nRep: Hi, Susan here, rep ID SU3318 with Cigna Dental.\nAgent: Thanks Susan. Member is Olivia Martin, member ID CIG293847561, date of birth April 8 1990, group GRP110293.\nRep: One moment. Coverage is active. Plan is Cigna Dental PPO. Effective January 1 2024 through current date.\nAgent: Annual maximum?\nRep: Two thousand dollars per calendar year, fifteen hundred dollars currently remaining.\nAgent: Deductible?\nRep: Fifty dollars individual, met for 2026.\nAgent: Coverage percentages?\nRep: Preventive one hundred percent, basic eighty percent, major fifty percent.\nAgent: Could you give me the frequency limits for cleanings and exams?\nRep: I'm sorry, frequency details are not something I'm able to share over the phone. Please refer to the benefits booklet on the provider portal for full frequency details.\nAgent: Understood. What about waiting periods on major services?\nRep: I don't have that information available. Please consult the portal.\nAgent: Pre-auth requirements?\nRep: Recommended for major services. I cannot give specific dollar thresholds, again please refer to the portal.\nAgent: Network status for our provider, NPI 1029387465?\nRep: Provider is in-network.\nAgent: Thank you Susan.\nRep: Goodbye.",
+  "expectedExtraction": {
+    "memberName": "Olivia Martin",
+    "memberId": "CIG293847561",
+    "dob": "1990-04-08",
+    "groupNumber": "GRP110293",
+    "planName": "Cigna Dental PPO",
+    "coverageStatus": "ACTIVE",
+    "effectiveDate": "2024-01-01",
+    "annualMaximum": 2000.00,
+    "annualMaxRemaining": 1500.00,
+    "deductibleIndividual": 50.00,
+    "deductibleMet": 50.00,
+    "diagnosticCoverage": 100,
+    "basicCoverage": 80,
+    "majorCoverage": 50,
+    "preAuthRequired": "recommended for major (no specifics)",
+    "networkStatus": "IN_NETWORK",
+    "repName": "Susan",
+    "repId": "SU3318"
+  },
+  "expectedOutcome": "PARTIAL_INFO",
+  "expectedRequiredFieldsRetrieved": [
+    "memberName", "memberId", "planName", "coverageStatus", "annualMaximum", "annualMaxRemaining",
+    "deductibleIndividual", "diagnosticCoverage", "basicCoverage", "majorCoverage", "networkStatus"
+  ],
+  "expectedMissingFields": ["frequencyLimits", "waitingPeriods", "preAuthThreshold"]
+}

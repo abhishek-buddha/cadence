@@ -1,0 +1,10 @@
+{
+  "id": "medical-voicemail",
+  "useCase": "medical-claim-status",
+  "callDurationSecs": 38,
+  "transcript": "Voicemail: Hello, you have reached the provider services line for Northstar Health Plan. Our offices are currently closed. Our normal business hours are Monday through Friday eight a.m. to six p.m. Central time. If this is a claim status inquiry, please visit our provider portal at provider dot northstar health dot com or call back during business hours. Press one to leave a message, press two to repeat this menu, or hang up to disconnect. Thank you.",
+  "expectedExtraction": {},
+  "expectedOutcome": "VOICEMAIL",
+  "expectedRequiredFieldsRetrieved": [],
+  "expectedMissingFields": ["claimNumber", "memberId", "claimStatus", "allowedAmount", "patientResponsibility", "planPaid"]
+}

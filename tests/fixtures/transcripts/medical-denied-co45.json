@@ -1,0 +1,25 @@
+{
+  "id": "medical-denied-co45",
+  "useCase": "medical-claim-status",
+  "callDurationSecs": 425,
+  "transcript": "Agent: Hi, calling from Cadence on behalf of Bayside Medical, NPI 1287654321, regarding claim status. Tax ID 88-1029384. Could I have your rep ID?\nRep: Sure, this is Marcus, rep ID MC9182, BCBS provider services.\nAgent: Thanks Marcus. Claim number CLM-B2938472, member Sarah Williams, member ID YYY183746902, date of service February 28 2026, billed amount one thousand eight hundred fifty dollars.\nRep: Pulling that up now. Okay, this claim was denied on March 18 2026. The denial reason is CARC code CO-45, charge exceeds fee schedule maximum allowable. The contractual obligation is four hundred fifty dollars. RARC code N130, consult plan benefit documents for information about restrictions for this service.\nAgent: Understood. What is the recommended next step?\nRep: Provider can submit a corrected claim or file a formal appeal. Appeal deadline is sixty days from denial date, which would be May 17 2026. Appeals must be submitted in writing with documentation.\nAgent: Got it. Was an EOB issued?\nRep: Yes, EOB number EOB-449281736 was sent April 1 2026 to the billing address.\nAgent: And the claim control number for the appeal?\nRep: Internal claim control number ICN-77382910023.\nAgent: Perfect. Thank you Marcus.\nRep: You're welcome, goodbye.",
+  "expectedExtraction": {
+    "claimNumber": "CLM-B2938472",
+    "memberId": "YYY183746902",
+    "patientName": "Sarah Williams",
+    "dateOfService": "2026-02-28",
+    "billedAmount": 1850.00,
+    "denialReason": "CO-45",
+    "denialReasonText": "charge exceeds fee schedule maximum allowable",
+    "contractualObligation": 450.00,
+    "rarcCode": "N130",
+    "appealDeadline": "2026-05-17",
+    "eobNumber": "EOB-449281736",
+    "internalClaimControlNumber": "ICN-77382910023",
+    "repName": "Marcus",
+    "repId": "MC9182"
+  },
+  "expectedOutcome": "DENIED",
+  "expectedRequiredFieldsRetrieved": ["claimNumber", "memberId", "denialReason", "denialReasonText", "rarcCode", "appealDeadline", "eobNumber", "internalClaimControlNumber"],
+  "expectedMissingFields": []
+}

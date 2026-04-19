@@ -2,7 +2,16 @@ import { mutation, query, action, internalMutation, internalQuery } from './_gen
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 
-const VALID_SCOPES = ['claims:read', 'claims:write', 'cases:read', 'cases:write', 'calls:read', 'calls:write', 'admin'];
+const VALID_SCOPES = [
+  'read:claims', 'write:claims',
+  'read:cases', 'write:cases',
+  'read:calls', 'write:calls',
+  'read:reports',
+  'write:webhooks',
+  // legacy/alt forms tolerated
+  'claims:read', 'claims:write', 'cases:read', 'cases:write', 'calls:read', 'calls:write',
+  'admin',
+];
 
 function bytesToHex(b: Uint8Array): string {
   let s = '';
@@ -48,7 +57,7 @@ export const issue = mutation({
       status: 'active',
       createdAt: new Date().toISOString(),
     });
-    return { id, fullKey: key };
+    return { id, key, fullKey: key };
   },
 });
 

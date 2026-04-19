@@ -1,0 +1,275 @@
+[
+  {
+    "section": 1,
+    "title": "PIN login",
+    "status": "PASS",
+    "detail": "Logged in",
+    "evidence": null
+  },
+  {
+    "section": 1,
+    "title": "14 nav entries",
+    "status": "PASS",
+    "detail": "All 14 nav entries visible",
+    "evidence": null
+  },
+  {
+    "section": 1,
+    "title": "Session persist on refresh",
+    "status": "PASS",
+    "detail": "Session retained",
+    "evidence": null
+  },
+  {
+    "section": 2,
+    "title": "Claims list loads",
+    "status": "PASS",
+    "detail": "Loaded /claims",
+    "evidence": null
+  },
+  {
+    "section": 2,
+    "title": "Claims count ≥26",
+    "status": "PASS",
+    "detail": "Rows: 40",
+    "evidence": null
+  },
+  {
+    "section": 2,
+    "title": "Insurance with payers",
+    "status": "PASS",
+    "detail": "Loaded /insurance",
+    "evidence": null
+  },
+  {
+    "section": 2,
+    "title": "Insurance payers present",
+    "status": "PASS",
+    "detail": "Matches: 14",
+    "evidence": null
+  },
+  {
+    "section": 2,
+    "title": "Providers list",
+    "status": "PASS",
+    "detail": "Loaded /providers",
+    "evidence": null
+  },
+  {
+    "section": 2,
+    "title": "Patients list",
+    "status": "PASS",
+    "detail": "Loaded /patients",
+    "evidence": null
+  },
+  {
+    "section": 3,
+    "title": "Call History has Outcome col",
+    "status": "PASS",
+    "detail": "Loaded /call-history",
+    "evidence": null
+  },
+  {
+    "section": 3,
+    "title": "Outcome badges render",
+    "status": "PASS",
+    "detail": "Outcome values visible",
+    "evidence": null
+  },
+  {
+    "section": 4,
+    "title": "Eligibility page loads",
+    "status": "PASS",
+    "detail": "Loaded /eligibility",
+    "evidence": null
+  },
+  {
+    "section": 4,
+    "title": "Add/Import case controls",
+    "status": "PASS",
+    "detail": "Add/Import visible",
+    "evidence": null
+  },
+  {
+    "section": 5,
+    "title": "Sessions page",
+    "status": "PASS",
+    "detail": "Loaded /sessions",
+    "evidence": null
+  },
+  {
+    "section": 6,
+    "title": "Transfers page",
+    "status": "PASS",
+    "detail": "Loaded /transfers",
+    "evidence": null
+  },
+  {
+    "section": 6,
+    "title": "Transfer destinations seeded or addable",
+    "status": "PASS",
+    "detail": "Destinations UI present",
+    "evidence": null
+  },
+  {
+    "section": 7,
+    "title": "Reports page + default tab",
+    "status": "PASS",
+    "detail": "Loaded /reports",
+    "evidence": null
+  },
+  {
+    "section": 7,
+    "title": "5 report tabs present",
+    "status": "PASS",
+    "detail": "All 5",
+    "evidence": null
+  },
+  {
+    "section": 7,
+    "title": "Export CSV control",
+    "status": "PASS",
+    "detail": "Export visible",
+    "evidence": null
+  },
+  {
+    "section": 7,
+    "title": "SVG charts render",
+    "status": "PASS",
+    "detail": "SVGs: 30",
+    "evidence": null
+  },
+  {
+    "section": 8,
+    "title": "Audit page",
+    "status": "PASS",
+    "detail": "Loaded /audit",
+    "evidence": null
+  },
+  {
+    "section": 8,
+    "title": "Audit events present",
+    "status": "PASS",
+    "detail": "Rows: 50",
+    "evidence": null
+  },
+  {
+    "section": 9,
+    "title": "Users page",
+    "status": "PASS",
+    "detail": "Loaded /users",
+    "evidence": null
+  },
+  {
+    "section": 9,
+    "title": "Three roles present",
+    "status": "PASS",
+    "detail": "Found: admin,manager,viewer",
+    "evidence": null
+  },
+  {
+    "section": 10,
+    "title": "API Keys page",
+    "status": "PASS",
+    "detail": "Loaded /api-keys",
+    "evidence": null
+  },
+  {
+    "section": 10,
+    "title": "Issue API key",
+    "status": "FAIL",
+    "detail": "Could not capture issued key",
+    "evidence": null
+  },
+  {
+    "section": 11,
+    "title": "Webhooks page",
+    "status": "PASS",
+    "detail": "Loaded /webhooks",
+    "evidence": null
+  },
+  {
+    "section": 12,
+    "title": "GET /v1/health (no auth)",
+    "status": "PASS",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/health → 200 (want 200)",
+    "evidence": "{\"status\":\"healthy\",\"uptime\":219990,\"version\":\"1.0.0\"}"
+  },
+  {
+    "section": 12,
+    "title": "GET /v1/payers (no auth → 401)",
+    "status": "PASS",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/payers → 401 (want 401)",
+    "evidence": "{\"error\":{\"code\":\"unauthorized\",\"message\":\"Invalid API key\"}}"
+  },
+  {
+    "section": 12,
+    "title": "GET /v1/claim-cases (no auth → 401)",
+    "status": "PASS",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/claim-cases?limit=10 → 401 (want 401)",
+    "evidence": "{\"error\":{\"code\":\"unauthorized\",\"message\":\"Invalid API key\"}}"
+  },
+  {
+    "section": 12,
+    "title": "GET /v1/eligibility-cases (no auth → 401)",
+    "status": "PASS",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/eligibility-cases → 401 (want 401)",
+    "evidence": "{\"error\":{\"code\":\"unauthorized\",\"message\":\"Invalid API key\"}}"
+  },
+  {
+    "section": 12,
+    "title": "GET /v1/reports/success-rate (no auth → 401)",
+    "status": "PASS",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/reports/success-rate → 401 (want 401)",
+    "evidence": "{\"error\":{\"code\":\"unauthorized\",\"message\":\"Invalid API key\"}}"
+  },
+  {
+    "section": 12,
+    "title": "REST authenticated checks",
+    "status": "SKIPPED",
+    "detail": "No API key captured in §10",
+    "evidence": null
+  },
+  {
+    "section": 13,
+    "title": "Initiate Call button on claim detail",
+    "status": "PASS",
+    "detail": "Button present",
+    "evidence": null
+  },
+  {
+    "section": 13,
+    "title": "Live voice E2E",
+    "status": "SKIPPED",
+    "detail": "Requires user physical phone — out of scope for overnight",
+    "evidence": null
+  },
+  {
+    "section": 14,
+    "title": "Medical bulk import",
+    "status": "SKIPPED",
+    "detail": "Would duplicate rows in prod; upload UI verified in §2",
+    "evidence": null
+  },
+  {
+    "section": 14,
+    "title": "Dental bulk import",
+    "status": "SKIPPED",
+    "detail": "Would duplicate rows in prod; import UI verified in §4",
+    "evidence": null
+  },
+  {
+    "section": 15,
+    "title": "Mobile 375px no horizontal scroll",
+    "status": "PASS",
+    "detail": "No overflow",
+    "evidence": null
+  },
+  {
+    "section": 15,
+    "title": "Console errors across run",
+    "status": "PASS",
+    "detail": "Errors: 1 → [CONVEX M(apiKeys:issue)] [Request ID: 2a460be533863810] Server Error",
+    "evidence": null
+  }
+]

@@ -1,0 +1,272 @@
+[
+  {
+    "section": "Dashboard /",
+    "name": "Outcome distribution categories present",
+    "status": "PASS",
+    "detail": "4 outcome keywords found"
+  },
+  {
+    "section": "Dashboard /",
+    "name": "Aging buckets visible",
+    "status": "PASS",
+    "detail": "aging ranges seen"
+  },
+  {
+    "section": "Dashboard /",
+    "name": "Recent calls ≥5 entries",
+    "status": "PASS",
+    "detail": "CLMrefs=5"
+  },
+  {
+    "section": "Dashboard /",
+    "name": "All 6 KPI card labels present",
+    "status": "PASS",
+    "detail": "kpis=6/6"
+  },
+  {
+    "section": "Claims /claims",
+    "name": "Claims rows present",
+    "status": "PASS",
+    "detail": "rows=40"
+  },
+  {
+    "section": "Claims /claims",
+    "name": "Headers include claim/status/amount",
+    "status": "PASS",
+    "detail": "|claim #|cpt code|insurance|amount|status|latest update"
+  },
+  {
+    "section": "Claims /claims",
+    "name": "Status filter dropdown narrows list",
+    "status": "PASS",
+    "detail": "changed to Denied"
+  },
+  {
+    "section": "Claims /claims",
+    "name": "Row click navigates to detail",
+    "status": "PASS",
+    "detail": "url=https://cadence-new.onrender.com/claims/jd73968gbqmp9fd2f8697rzbcs851d3k"
+  },
+  {
+    "section": "Claims /claims",
+    "name": "Detail shows Call Insurance button",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Claims /claims",
+    "name": "Add Claim modal opens",
+    "status": "PASS",
+    "detail": "opened"
+  },
+  {
+    "section": "Claims /claims",
+    "name": "Upload Claims UI opens",
+    "status": "PASS",
+    "detail": "opened"
+  },
+  {
+    "section": "Patients /patients",
+    "name": "Page loads",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Patients /patients",
+    "name": "Patient rows present",
+    "status": "PASS",
+    "detail": "rows=9"
+  },
+  {
+    "section": "Insurance /insurance",
+    "name": "≥4 payers visible",
+    "status": "PASS",
+    "detail": "found=aetna,bcbs,acme"
+  },
+  {
+    "section": "Providers /providers",
+    "name": "Provider list renders",
+    "status": "PASS",
+    "detail": "rows=5"
+  },
+  {
+    "section": "Call History /calls",
+    "name": "Page loads with outcome column",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Call History /calls",
+    "name": "Call rows present",
+    "status": "PASS",
+    "detail": "claimRefs=50 showing=50"
+  },
+  {
+    "section": "Call History /calls",
+    "name": "Outcome filter options visible",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Eligibility /eligibility",
+    "name": "Page loads",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Eligibility /eligibility",
+    "name": "Add Case modal opens",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Eligibility /eligibility",
+    "name": "Import Cases UI opens",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Sessions /sessions",
+    "name": "New Session wizard opens",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Reports /reports",
+    "name": "5 report tabs present",
+    "status": "PASS",
+    "detail": "found=success rate|data accuracy|turnaround|exception|volume"
+  },
+  {
+    "section": "Reports /reports",
+    "name": "Tab clickable: Data Accuracy",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Reports /reports",
+    "name": "Tab clickable: Turnaround",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Reports /reports",
+    "name": "Tab clickable: Exception",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Reports /reports",
+    "name": "Tab clickable: Volume",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Reports /reports",
+    "name": "SVG charts render",
+    "status": "PASS",
+    "detail": "svgs=28"
+  },
+  {
+    "section": "Reports /reports",
+    "name": "Export CSV control present",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Transfers /transfers",
+    "name": "Seeded destinations visible",
+    "status": "PASS",
+    "detail": "seen"
+  },
+  {
+    "section": "Transfers /transfers",
+    "name": "Add Destination form opens",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Audit /audit",
+    "name": "Audit rows present",
+    "status": "PASS",
+    "detail": "rows=50"
+  },
+  {
+    "section": "Audit /audit",
+    "name": "Export CSV control present",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Users /users",
+    "name": "3 roles present",
+    "status": "PASS",
+    "detail": "found=admin,manager,viewer"
+  },
+  {
+    "section": "Users /users",
+    "name": "Invite User control present",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "API Keys /api-keys",
+    "name": "Page loads",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "API Keys /api-keys",
+    "name": "Issue New Key flow shows full key once",
+    "status": "PASS",
+    "detail": "prefix cad_4fa58f..."
+  },
+  {
+    "section": "Webhooks /webhooks",
+    "name": "Page loads",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Webhooks /webhooks",
+    "name": "Add Subscription form opens",
+    "status": "PASS",
+    "detail": ""
+  },
+  {
+    "section": "Settings /settings",
+    "name": "Page loads without crash",
+    "status": "PASS",
+    "detail": "len=999"
+  },
+  {
+    "section": "Cross-cutting",
+    "name": "Zero failed same-origin requests on Dashboard",
+    "status": "PASS",
+    "detail": "failed=0"
+  },
+  {
+    "section": "Cross-cutting",
+    "name": "Mobile 375px no horizontal scroll",
+    "status": "PASS",
+    "detail": "ok"
+  },
+  {
+    "section": "Cross-cutting",
+    "name": "Refresh on sub-route stays on sub-route",
+    "status": "PASS",
+    "detail": "url=https://cadence-new.onrender.com/eligibility"
+  },
+  {
+    "section": "Cross-cutting",
+    "name": "Browser back works",
+    "status": "PASS",
+    "detail": "url=https://cadence-new.onrender.com/claims"
+  },
+  {
+    "section": "Cross-cutting",
+    "name": "Console errors across run",
+    "status": "PASS",
+    "detail": "errors=0"
+  }
+]

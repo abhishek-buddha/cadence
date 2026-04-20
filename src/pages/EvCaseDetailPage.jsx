@@ -310,7 +310,7 @@ export default function EvCaseDetailPage() {
   const hasActiveCall =
     callState === 'calling' || callState === 'in_progress' || !!activeCall;
 
-  const canRunCall = dentalCase.status === 'awaiting_verification' || dentalCase.status === 'failed';
+  const canRunCall = ['awaiting_verification', 'failed', 'unknown', 'requires_human'].includes(dentalCase.status);
 
   // Build a map: callId -> evResult (oldest result corresponds to latestEvResult.callId, but
   // backend can return many)

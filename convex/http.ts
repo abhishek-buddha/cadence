@@ -506,6 +506,8 @@ http.route({
 
       const internalCallId = dynamicVars.internal_call_id;
       const internalClaimId = dynamicVars.internal_claim_id;
+      // Dental EV calls set internal_case_id (not internal_claim_id)
+      const internalCaseId = dynamicVars.internal_case_id;
 
       // Build transcript from array
       const transcriptArr = body.data?.transcript || body.transcript || [];
@@ -526,6 +528,7 @@ http.route({
       // Try to find the call record
       let callId = internalCallId;
       let claimId = internalClaimId;
+      let dentalCaseId: any = internalCaseId;
       let userId = '';
 
       if (callId) {
@@ -533,6 +536,7 @@ http.route({
         const call = await ctx.runQuery(api.calls.getById, { id: callId });
         if (call) {
           claimId = claimId || call.claimId;
+          dentalCaseId = dentalCaseId || call.dentalCaseId;
           userId = call.userId;
         }
       } else if (conversationId) {
@@ -543,6 +547,7 @@ http.route({
         if (call) {
           callId = call._id;
           claimId = call.claimId;
+          dentalCaseId = dentalCaseId || call.dentalCaseId;
           userId = call.userId;
         }
       }
@@ -575,6 +580,17 @@ http.route({
           });
         } catch (analysisError: any) {
           console.error('Transcript analysis failed:', analysisError.message);
+        }
+      }
+
+      // Trigger dental EV analysis if this was a dental call
+      if (dentalCaseId && transcript && !claimId) {
+        try {
+          await ctx.runAction(api.dentalCallActions.analyzeEvTranscript, {
+            callId,
+          });
+        } catch (analysisError: any) {
+          console.error('EV transcript analysis failed:', analysisError.message);
         }
       }
 

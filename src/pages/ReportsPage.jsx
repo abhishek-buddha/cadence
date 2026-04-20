@@ -151,8 +151,8 @@ function SuccessRateTab({ filters }) {
 
   const payerData = useMemo(
     () => (byPayer ?? []).map((row) => ({
-      label: row.payerName || row.payerId || 'Unknown',
-      value: Math.round((row.successRate || 0) * 100),
+      label: row.payerName || 'Unknown',
+      value: Math.round(row.pct || 0),
     })),
     [byPayer]
   );
@@ -160,7 +160,7 @@ function SuccessRateTab({ filters }) {
   const weekData = useMemo(
     () => (byWeek ?? []).map((row) => ({
       label: row.weekStart || row.label || '',
-      value: Math.round((row.successRate || 0) * 100),
+      value: Math.round(row.pct || row.successRatePct || 0),
     })),
     [byWeek]
   );
@@ -171,10 +171,10 @@ function SuccessRateTab({ filters }) {
       `cadence-success-rate-by-payer-${new Date().toISOString().split('T')[0]}.csv`,
       ['Payer', 'Total Calls', 'Successful', 'Success Rate %'],
       (byPayer || []).map((row) => [
-        row.payerName || row.payerId || 'Unknown',
-        row.totalCalls ?? 0,
-        row.successfulCalls ?? 0,
-        Math.round((row.successRate || 0) * 100),
+        row.payerName || 'Unknown',
+        row.total ?? 0,
+        row.successful ?? 0,
+        Math.round(row.pct || 0),
       ])
     );
   }
@@ -188,19 +188,19 @@ function SuccessRateTab({ filters }) {
           <div className="bg-white border border-border rounded-xl p-5">
             <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Overall Success Rate</p>
             <p className="text-3xl font-display font-bold text-gray-900">
-              {Math.round((overall.successRate || 0) * 100)}%
+              {(overall.successRatePct || 0).toFixed(1)}%
             </p>
           </div>
           <div className="bg-white border border-border rounded-xl p-5">
             <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Total Calls</p>
             <p className="text-3xl font-display font-bold text-gray-900 font-data">
-              {(overall.totalCalls || 0).toLocaleString()}
+              {(overall.total || 0).toLocaleString()}
             </p>
           </div>
           <div className="bg-white border border-border rounded-xl p-5">
             <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Successful Calls</p>
             <p className="text-3xl font-display font-bold text-success font-data">
-              {(overall.successfulCalls || 0).toLocaleString()}
+              {(overall.successful || 0).toLocaleString()}
             </p>
           </div>
         </div>
@@ -224,10 +224,10 @@ function SuccessRateTab({ filters }) {
           <DataTable
             headers={['Payer', 'Total Calls', 'Successful', 'Success Rate']}
             rows={(byPayer || []).map((row) => [
-              row.payerName || row.payerId || 'Unknown',
-              (row.totalCalls ?? 0).toLocaleString(),
-              (row.successfulCalls ?? 0).toLocaleString(),
-              `${Math.round((row.successRate || 0) * 100)}%`,
+              row.payerName || 'Unknown',
+              (row.total ?? 0).toLocaleString(),
+              (row.successful ?? 0).toLocaleString(),
+              `${Math.round(row.pct || 0)}%`,
             ])}
           />
         </div>
@@ -326,23 +326,32 @@ function DataAccuracyTab({ filters }) {
 // Tab content: Turnaround Time
 // ---------------------------------------------------------------------------
 function TurnaroundTimeTab({ filters }) {
-  const data = useQuery(api.reports?.turnaroundTime, filters);
+  // turnaroundTime takes no filter args — pass empty object to avoid Convex validation errors
+  const data = useQuery(api.reports?.turnaroundTime, {});
   const isLoading = data === undefined;
 
-  const distributionData = useMemo(
-    () => (data?.distribution ?? []).map((row) => ({
-      label: row.bucket,
-      value: row.count,
+  // Backend returns Array<{ useCase, count, p50, p95, p99 }>
+  const rows = data ?? [];
+
+  const chartData = useMemo(
+    () => rows.map((row) => ({
+      label: (row.useCase || 'unknown').replace(/_/g, ' '),
+      value: row.p50 || 0,
     })),
-    [data]
+    [rows]
   );
 
+  // Aggregate p50/p95/p99 across all use cases (weighted by count)
+  const totalCount = rows.reduce((s, r) => s + (r.count || 0), 0);
+  const overallP50 = rows.length > 0 ? Math.round(rows.reduce((s, r) => s + (r.p50 || 0) * (r.count || 0), 0) / (totalCount || 1)) : 0;
+  const overallP95 = rows.length > 0 ? Math.max(...rows.map((r) => r.p95 || 0)) : 0;
+  const overallP99 = rows.length > 0 ? Math.max(...rows.map((r) => r.p99 || 0)) : 0;
+
   function exportData() {
-    if (!data?.distribution) return;
     downloadCsv(
       `cadence-turnaround-time-${new Date().toISOString().split('T')[0]}.csv`,
-      ['Bucket', 'Calls'],
-      data.distribution.map((row) => [row.bucket, row.count ?? 0])
+      ['Use Case', 'Calls', 'P50 (s)', 'P95 (s)', 'P99 (s)'],
+      rows.map((row) => [row.useCase || 'unknown', row.count ?? 0, row.p50 ?? 0, row.p95 ?? 0, row.p99 ?? 0])
     );
   }
 
@@ -350,38 +359,26 @@ function TurnaroundTimeTab({ filters }) {
 
   return (
     <div className="space-y-6">
-      {data?.summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {rows.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white border border-border rounded-xl p-5">
-            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Avg Duration</p>
-            <p className="text-2xl font-display font-bold text-gray-900 font-data">
-              {Math.round(data.summary.avgSeconds || 0)}s
-            </p>
+            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Median (P50)</p>
+            <p className="text-2xl font-display font-bold text-gray-900 font-data">{overallP50}s</p>
           </div>
           <div className="bg-white border border-border rounded-xl p-5">
-            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Median</p>
-            <p className="text-2xl font-display font-bold text-gray-900 font-data">
-              {Math.round(data.summary.medianSeconds || 0)}s
-            </p>
-          </div>
-          <div className="bg-white border border-border rounded-xl p-5">
-            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">P90</p>
-            <p className="text-2xl font-display font-bold text-warn font-data">
-              {Math.round(data.summary.p90Seconds || 0)}s
-            </p>
+            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">P95</p>
+            <p className="text-2xl font-display font-bold text-warn font-data">{overallP95}s</p>
           </div>
           <div className="bg-white border border-border rounded-xl p-5">
             <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">P99</p>
-            <p className="text-2xl font-display font-bold text-danger font-data">
-              {Math.round(data.summary.p99Seconds || 0)}s
-            </p>
+            <p className="text-2xl font-display font-bold text-danger font-data">{overallP99}s</p>
           </div>
         </div>
       )}
 
       <ChartCard
-        title="Call Duration Distribution"
-        subtitle="Number of calls by duration bucket"
+        title="Call Duration by Use Case"
+        subtitle="Median call duration (seconds) per use case"
         action={
           <button
             onClick={exportData}
@@ -392,11 +389,17 @@ function TurnaroundTimeTab({ filters }) {
           </button>
         }
       >
-        <BarChart data={distributionData} yAxisLabel="Calls" />
+        <BarChart data={chartData} yAxisLabel="Seconds (P50)" />
         <div className="mt-4">
           <DataTable
-            headers={['Bucket', 'Calls']}
-            rows={(data?.distribution || []).map((row) => [row.bucket, (row.count ?? 0).toLocaleString()])}
+            headers={['Use Case', 'Calls', 'P50 (s)', 'P95 (s)', 'P99 (s)']}
+            rows={rows.map((row) => [
+              (row.useCase || 'unknown').replace(/_/g, ' '),
+              (row.count ?? 0).toLocaleString(),
+              row.p50 ?? '--',
+              row.p95 ?? '--',
+              row.p99 ?? '--',
+            ])}
           />
         </div>
       </ChartCard>
@@ -408,41 +411,42 @@ function TurnaroundTimeTab({ filters }) {
 // Tab content: Exception Report
 // ---------------------------------------------------------------------------
 function ExceptionReportTab({ filters }) {
-  const data = useQuery(api.reports?.exceptionReport, filters);
+  // exceptionReport takes no filter args
+  const data = useQuery(api.reports?.exceptionReport, {});
   const isLoading = data === undefined;
 
-  const reasonData = useMemo(
-    () => (data?.byReason ?? []).map((row) => ({
-      label: row.reason,
-      value: row.count,
-    })),
-    [data]
-  );
+  // Backend returns Array<{ exception, payer, payerName, count, lastSeenAt }>
+  const exceptions = data ?? [];
+
+  const reasonData = useMemo(() => {
+    const grouped = {};
+    exceptions.forEach((row) => {
+      const key = (row.exception || 'unknown').replace(/_/g, ' ');
+      grouped[key] = (grouped[key] || 0) + (row.count || 1);
+    });
+    return Object.entries(grouped).map(([label, value]) => ({ label, value }));
+  }, [exceptions]);
 
   function exportData() {
-    if (!data?.exceptions) return;
     downloadCsv(
       `cadence-exception-report-${new Date().toISOString().split('T')[0]}.csv`,
-      ['Date', 'Payer', 'Reason', 'Severity', 'Reference'],
-      data.exceptions.map((row) => [
-        row.timestamp ? new Date(row.timestamp).toISOString() : '',
-        row.payer || '',
-        row.reason || '',
-        row.severity || '',
-        row.reference || '',
+      ['Exception Type', 'Payer', 'Count', 'Last Seen'],
+      exceptions.map((row) => [
+        (row.exception || '').replace(/_/g, ' '),
+        row.payerName || row.payer || '--',
+        row.count ?? 1,
+        row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString() : '--',
       ])
     );
   }
 
   if (isLoading) return <LoadingPlaceholder />;
 
-  const exceptions = data?.exceptions || [];
-
   return (
     <div className="space-y-6">
       <ChartCard
-        title="Exceptions by Reason"
-        subtitle="Calls that failed or required human escalation"
+        title="Exceptions by Type"
+        subtitle="Calls that failed or required human escalation (last 24h)"
         action={
           <button
             onClick={exportData}
@@ -456,22 +460,21 @@ function ExceptionReportTab({ filters }) {
         <PieChart data={reasonData} />
       </ChartCard>
 
-      <ChartCard title="Recent Exceptions" subtitle="Most recent failed or escalated calls">
+      <ChartCard title="Exception Details" subtitle="Payers with exceptions in the last 24h">
         {exceptions.length === 0 ? (
           <EmptyState
             icon={AlertOctagon}
             title="No exceptions"
-            description="All calls completed successfully in this date range."
+            description="No long holds or high partial-rate payers in the last 24 hours."
           />
         ) : (
           <DataTable
-            headers={['Date', 'Payer', 'Reason', 'Severity', 'Reference']}
+            headers={['Exception Type', 'Payer', 'Count', 'Last Seen']}
             rows={exceptions.map((row) => [
-              row.timestamp ? new Date(row.timestamp).toLocaleString() : '--',
-              row.payer || '--',
-              row.reason || '--',
-              row.severity || '--',
-              row.reference || '--',
+              (row.exception || '--').replace(/_/g, ' '),
+              row.payerName || row.payer || '--',
+              (row.count ?? 1).toLocaleString(),
+              row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString() : '--',
             ])}
           />
         )}
@@ -484,28 +487,26 @@ function ExceptionReportTab({ filters }) {
 // Tab content: Volume by Tier
 // ---------------------------------------------------------------------------
 function VolumeByTierTab({ filters }) {
-  const data = useQuery(api.reports?.volumeByTier, filters);
+  // volumeByTier takes no filter args
+  const data = useQuery(api.reports?.volumeByTier, {});
   const isLoading = data === undefined;
 
-  const tierData = useMemo(
-    () => (data?.tiers ?? []).map((row) => ({
-      label: row.tier,
-      value: row.count,
-    })),
-    [data]
-  );
+  // Backend returns Array<{ payer, payerName, count, tier }>
+  // Group by tier for the pie chart
+  const tierData = useMemo(() => {
+    const grouped = {};
+    (data ?? []).forEach((row) => {
+      const t = row.tier || 'low';
+      grouped[t] = (grouped[t] || 0) + (row.count || 0);
+    });
+    return Object.entries(grouped).map(([label, value]) => ({ label, value }));
+  }, [data]);
 
   function exportData() {
-    if (!data?.tiers) return;
     downloadCsv(
       `cadence-volume-by-tier-${new Date().toISOString().split('T')[0]}.csv`,
-      ['Tier', 'Calls', 'Avg Cost ($)', 'Total Cost ($)'],
-      data.tiers.map((row) => [
-        row.tier,
-        row.count ?? 0,
-        ((row.avgCostCents || 0) / 100).toFixed(2),
-        ((row.totalCostCents || 0) / 100).toFixed(2),
-      ])
+      ['Payer', 'Tier', 'Calls This Month'],
+      (data ?? []).map((row) => [row.payerName || row.payer || '--', row.tier || 'low', row.count ?? 0])
     );
   }
 
@@ -515,7 +516,7 @@ function VolumeByTierTab({ filters }) {
     <div className="space-y-6">
       <ChartCard
         title="Call Volume by Tier"
-        subtitle="Distribution of calls across complexity / cost tiers"
+        subtitle="Distribution of calls this month by payer volume tier"
         action={
           <button
             onClick={exportData}
@@ -529,12 +530,11 @@ function VolumeByTierTab({ filters }) {
         <PieChart data={tierData} />
         <div className="mt-4">
           <DataTable
-            headers={['Tier', 'Calls', 'Avg Cost', 'Total Cost']}
-            rows={(data?.tiers || []).map((row) => [
-              row.tier,
+            headers={['Payer', 'Tier', 'Calls This Month']}
+            rows={(data ?? []).map((row) => [
+              row.payerName || row.payer || '--',
+              row.tier || 'low',
               (row.count ?? 0).toLocaleString(),
-              `$${((row.avgCostCents || 0) / 100).toFixed(2)}`,
-              `$${((row.totalCostCents || 0) / 100).toFixed(2)}`,
             ])}
           />
         </div>
@@ -557,9 +557,9 @@ export default function ReportsPage() {
 
   const filters = useMemo(() => {
     const args = {};
-    if (dateFrom) args.from = dateFrom;
-    if (dateTo) args.to = dateTo;
-    if (payerId) args.insuranceContactId = payerId;
+    if (dateFrom) args.fromDate = dateFrom;
+    if (dateTo) args.toDate = dateTo;
+    if (payerId) args.payerId = payerId;
     if (useCase) args.useCase = useCase;
     return args;
   }, [dateFrom, dateTo, payerId, useCase]);

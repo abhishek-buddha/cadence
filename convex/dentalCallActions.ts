@@ -19,16 +19,11 @@ export const initiateEvCall = action({
 
     // 2. Create call record
     const callId: any = await ctx.runMutation(api.calls.create, {
-      claimId: undefined as any,
+      dentalCaseId: args.dentalCaseId,
+      useCase: 'dental_ev',
       insuranceContactId: dentalCase.insuranceContactId,
       status: 'initiating',
       startedAt: new Date().toISOString(),
-    });
-
-    // Patch dental-specific fields onto the call (calls.create has a narrow arg set)
-    await ctx.runMutation(api.calls.updateStatus, {
-      id: callId,
-      status: 'initiating',
     });
 
     // ElevenLabs config — dental agent ID with fallback to general agent

@@ -130,11 +130,11 @@ export const initiateCall = action({
       }
 
       // Step 3: Attach a passive Twilio monitor stream for browser audio listening
-      // Retry up to 6 times (every 5s for 30s) until call is in-progress
+      // First attempt after 1s (fast calls), then every 5s up to 6 total attempts
       if (callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
         const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
         for (let attempt = 0; attempt < 6; attempt++) {
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 1000 : 5000));
           try {
             // Check if call is still active before attempting stream
             const callStatusRes = await fetch(

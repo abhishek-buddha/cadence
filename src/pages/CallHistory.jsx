@@ -36,16 +36,21 @@ function formatDate(isoString) {
 function CallRow({ call }) {
   const [expanded, setExpanded] = useState(false);
 
-  // Fetch related data only when expanded to keep things efficient
-  const claim = useQuery(api.claims.getById, expanded ? { id: call.claimId } : 'skip');
+  const isDentalCall = !!call.dentalCaseId && !call.claimId;
+
+  // Fetch related data only when expanded — guard claimId/dentalCaseId to avoid Convex validation errors
+  const claim = useQuery(api.claims.getById, (expanded && call.claimId) ? { id: call.claimId } : 'skip');
+  const dentalCase = useQuery(api.dentalCases?.getById, (expanded && call.dentalCaseId) ? { id: call.dentalCaseId } : 'skip');
   const insurance = useQuery(
     api.insuranceContacts.getById,
     expanded ? { id: call.insuranceContactId } : 'skip'
   );
-  const callResult = useQuery(api.callResults.getByCall, expanded ? { callId: call._id } : 'skip');
+  const callResult = useQuery(api.callResults.getByCall, (expanded && !isDentalCall) ? { callId: call._id } : 'skip');
+  const evResult = useQuery(api.evResults?.getByCall, (expanded && isDentalCall) ? { callId: call._id } : 'skip');
 
-  // For the table row, reuse the expanded data or fetch only when needed
+  // For the table row — safe guards so undefined IDs never reach Convex
   const claimPreview = useQuery(api.claims.getById, call.claimId ? { id: call.claimId } : 'skip');
+  const dentalCasePreview = useQuery(api.dentalCases?.getById, (call.dentalCaseId && !call.claimId) ? { id: call.dentalCaseId } : 'skip');
   const insurancePreview = useQuery(api.insuranceContacts.getById, call.insuranceContactId ? { id: call.insuranceContactId } : 'skip');
 
   return (
@@ -62,7 +67,7 @@ function CallRow({ call }) {
           {formatDate(call.startedAt)}
         </span>
         <span className="px-4 py-3 text-sm font-data text-accent min-w-[120px]">
-          {claimPreview?.claimNumber ?? '...'}
+          {claimPreview?.claimNumber ?? dentalCasePreview?.caseNumber ?? (call.claimId || call.dentalCaseId ? '...' : '--')}
         </span>
         <span className="px-4 py-3 text-sm text-gray-600 flex-1 truncate">
           {insurancePreview?.name ?? '...'}
@@ -85,13 +90,20 @@ function CallRow({ call }) {
             {/* Claim and Insurance Info */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1">Claim</h4>
+                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1">
+                  {isDentalCall ? 'EV Case' : 'Claim'}
+                </h4>
                 <p className="text-sm text-gray-900 font-data">
-                  {claim?.claimNumber ?? '--'}
+                  {isDentalCall ? (dentalCase?.caseNumber ?? '--') : (claim?.claimNumber ?? '--')}
                 </p>
-                {claim && (
+                {!isDentalCall && claim && (
                   <p className="text-xs text-muted mt-0.5">
                     DOS: {claim.dateOfService} | Status: {claim.status}
+                  </p>
+                )}
+                {isDentalCall && dentalCase && (
+                  <p className="text-xs text-muted mt-0.5">
+                    DOS: {dentalCase.proposedDateOfService} | Status: {dentalCase.status}
                   </p>
                 )}
               </div>
@@ -188,8 +200,65 @@ function CallRow({ call }) {
               </div>
             )}
 
+            {/* EV Results (dental calls) */}
+            {isDentalCall && evResult && (
+              <div>
+                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5">EV Results</h4>
+                <div className="bg-white border border-border rounded-lg p-3">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                    {evResult.isActive != null && (
+                      <div className="flex justify-between col-span-2">
+                        <span className="text-xs text-muted">Coverage</span>
+                        <span className={`text-xs font-medium ${evResult.isActive ? 'text-success' : 'text-danger'}`}>
+                          {evResult.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    )}
+                    {evResult.deductibleAnnualCents != null && (
+                      <div className="flex justify-between">
+                        <span className="text-xs text-muted">Deductible</span>
+                        <span className="text-xs text-gray-900 font-data">
+                          ${((evResult.deductibleMetCents || 0) / 100).toFixed(0)} / ${(evResult.deductibleAnnualCents / 100).toFixed(0)}
+                        </span>
+                      </div>
+                    )}
+                    {evResult.annualMaximumCents != null && (
+                      <div className="flex justify-between">
+                        <span className="text-xs text-muted">Annual Max</span>
+                        <span className="text-xs text-gray-900 font-data">${(evResult.annualMaximumCents / 100).toFixed(0)}</span>
+                      </div>
+                    )}
+                    {evResult.coinsurancePct != null && (
+                      <div className="flex justify-between">
+                        <span className="text-xs text-muted">Coinsurance</span>
+                        <span className="text-xs text-gray-900 font-data">{evResult.coinsurancePct}%</span>
+                      </div>
+                    )}
+                    {evResult.networkStatus && (
+                      <div className="flex justify-between">
+                        <span className="text-xs text-muted">Network</span>
+                        <span className="text-xs text-gray-900">{evResult.networkStatus.replace(/_/g, ' ')}</span>
+                      </div>
+                    )}
+                    {evResult.referenceNumber && (
+                      <div className="flex justify-between">
+                        <span className="text-xs text-muted">Reference #</span>
+                        <span className="text-xs text-gray-900 font-data">{evResult.referenceNumber}</span>
+                      </div>
+                    )}
+                    {evResult.nextSteps && (
+                      <div className="flex justify-between col-span-2">
+                        <span className="text-xs text-muted">Next Steps</span>
+                        <span className="text-xs text-gray-600 text-right max-w-[60%]">{evResult.nextSteps}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* No transcript or results */}
-            {!call.transcript && !callResult && (
+            {!call.transcript && !callResult && !evResult && (
               <p className="text-sm text-muted italic">No transcript or extracted data available for this call.</p>
             )}
           </div>

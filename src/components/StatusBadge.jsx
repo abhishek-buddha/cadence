@@ -15,6 +15,14 @@ const statusConfig = {
   pending_review: { bg: 'bg-warn/10', text: 'text-warn', dot: 'bg-warn', label: 'Pending Review' },
   no_record: { bg: 'bg-gray-500/10', text: 'text-gray-500', dot: 'bg-gray-400', label: 'No Record' },
   unknown: { bg: 'bg-gray-500/10', text: 'text-gray-500', dot: 'bg-gray-400', label: 'Unknown' },
+  // Dental EV case statuses
+  awaiting_verification: { bg: 'bg-warn/10', text: 'text-warn', dot: 'bg-warn', label: 'Awaiting Verification' },
+  verifying: { bg: 'bg-accent/10', text: 'text-accent', dot: 'bg-accent', label: 'Verifying' },
+  verified: { bg: 'bg-success/10', text: 'text-success', dot: 'bg-success', label: 'Verified' },
+  requires_human: { bg: 'bg-purple-500/10', text: 'text-purple-600', dot: 'bg-purple-500', label: 'Requires Human' },
+  // Session statuses
+  queued: { bg: 'bg-gray-500/10', text: 'text-gray-500', dot: 'bg-gray-400', label: 'Queued' },
+  paused: { bg: 'bg-warn/10', text: 'text-warn', dot: 'bg-warn', label: 'Paused' },
 };
 
 export default function StatusBadge({ status, size = 'sm' }) {

@@ -281,7 +281,7 @@ export default function EvCaseDetailPage() {
     setCallState('calling');
     setCallError(null);
     try {
-      await initiateEvCall({ caseId: id });
+      await initiateEvCall({ dentalCaseId: id });
       setCallState('idle');
     } catch (err) {
       setCallState('error');

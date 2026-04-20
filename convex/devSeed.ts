@@ -539,12 +539,47 @@ export const cleanTestData = internalMutation({
       claimsDeleted++;
     }
 
+    // 6. Delete revoked webhook subscriptions
+    let webhooksDeleted = 0;
+    const allWebhooks = await ctx.db.query('webhookSubscriptions').collect();
+    for (const wh of allWebhooks) {
+      if (wh.status === 'revoked') {
+        // Delete associated delivery records first
+        const deliveries = await ctx.db
+          .query('webhookDeliveries')
+          .withIndex('by_subscriptionId', (q) => q.eq('subscriptionId', wh._id))
+          .collect();
+        for (const d of deliveries) await ctx.db.delete(d._id);
+        await ctx.db.delete(wh._id);
+        webhooksDeleted++;
+      }
+    }
+
+    // 7. Delete test/audit API keys (keep only keys with lastUsedAt set — those are real integrations)
+    let apiKeysDeleted = 0;
+    const allKeys = await ctx.db.query('apiKeys').collect();
+    for (const key of allKeys) {
+      // Delete keys that: have never been used AND name contains "test" or "apikey" or "audit"
+      const isTestKey = !key.lastUsedAt && (
+        key.name?.toLowerCase().includes('test') ||
+        key.name?.toLowerCase().includes('apikey') ||
+        key.name?.toLowerCase().includes('audit') ||
+        key.name?.toLowerCase().includes('runner')
+      );
+      if (isTestKey || key.status === 'revoked') {
+        await ctx.db.delete(key._id);
+        apiKeysDeleted++;
+      }
+    }
+
     return {
       dentalCasesDeleted: dentalDeleted,
       claimsDeleted,
       sessionsDeleted,
       evResultsDeleted,
       callsDeleted,
+      webhooksDeleted,
+      apiKeysDeleted,
     };
   },
 });

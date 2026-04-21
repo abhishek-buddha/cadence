@@ -310,7 +310,9 @@ export default function EvCaseDetailPage() {
   const hasActiveCall =
     callState === 'calling' || callState === 'in_progress' || !!activeCall;
 
-  const canRunCall = ['awaiting_verification', 'failed', 'unknown', 'requires_human'].includes(dentalCase.status);
+  // Allow retry for all non-verified statuses — including 'verifying' which can get
+  // stuck if a call completes but the webhook never fires (e.g. wrong webhook URL).
+  const canRunCall = !['verified', 'in_progress'].includes(dentalCase.status);
 
   // Build a map: callId -> evResult (oldest result corresponds to latestEvResult.callId, but
   // backend can return many)

@@ -644,14 +644,14 @@ export const endCall = action({
 
     const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
     const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
-    // 2. If we have a Twilio call SID, terminate via Twilio API
+    // 2. Terminate via Twilio API if we have a SID
     if (call.twilioCallSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
       try {
         const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${call.twilioCallSid}.json`;
         const params = new URLSearchParams();
         params.append('Status', 'completed');
-
         await fetch(twilioUrl, {
           method: 'POST',
           headers: {
@@ -665,14 +665,75 @@ export const endCall = action({
       }
     }
 
-    // 3. Mark call as completed in Convex regardless
+    // 3. Fetch transcript from ElevenLabs (wait 3s for it to finalize)
+    let transcriptStr = '';
+    let duration: number | undefined;
+
+    if (call.elevenLabsConversationId && ELEVENLABS_API_KEY) {
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        const res = await fetch(
+          `https://api.elevenlabs.io/v1/convai/conversations/${call.elevenLabsConversationId}`,
+          { headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          duration = data.metadata?.call_duration_secs;
+
+          transcriptStr = (data.transcript || [])
+            .map((t: any) => {
+              const toolCalls = t.tool_calls?.filter((tc: any) => tc.tool_has_been_called) || [];
+              const dtmf = toolCalls.find((tc: any) => tc.tool_name === 'play_keypad_touch_tone');
+              if (dtmf) {
+                try {
+                  const params = JSON.parse(dtmf.params_as_json);
+                  return `agent: [pressed ${params.dtmf_tones}] ${params.reason || ''}`.trim();
+                } catch { return null; }
+              }
+              if (!t.message || t.message === '...') return null;
+              return `${t.role}: ${t.message}`;
+            })
+            .filter(Boolean)
+            .join('\n');
+        }
+      } catch (e: any) {
+        console.error('Failed to fetch ElevenLabs transcript on endCall:', e.message);
+      }
+    }
+
+    // 4. Mark call completed — with transcript if we got it
+    const computedDuration = call.startedAt
+      ? Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000)
+      : undefined;
+
     await ctx.runMutation(api.calls.updateStatus, {
       id: args.callId,
       status: 'completed',
       completedAt: new Date().toISOString(),
-      errorMessage: 'Call ended by user',
+      duration: duration || computedDuration,
+      transcript: transcriptStr || undefined,
     });
 
-    return { success: true };
+    // 5. Trigger transcript analysis based on call type
+    if (transcriptStr) {
+      try {
+        if (call.claimId) {
+          await ctx.runAction(api.callActions.analyzeTranscript, {
+            callId: args.callId,
+            claimId: call.claimId,
+            transcript: transcriptStr,
+            userId: call.userId,
+          });
+        } else if (call.dentalCaseId) {
+          await ctx.runAction(api.dentalCallActions.analyzeEvTranscript, {
+            callId: args.callId,
+          });
+        }
+      } catch (analysisErr: any) {
+        console.error('Transcript analysis failed after endCall:', analysisErr.message);
+      }
+    }
+
+    return { success: true, hasTranscript: !!transcriptStr };
   },
 });

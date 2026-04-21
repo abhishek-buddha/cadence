@@ -102,6 +102,66 @@ export const initiateEvCall = action({
         lastCalledAt: new Date().toISOString(),
       });
 
+      // Tell bridge server to monitor this conversation for real-time audio/events
+      const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+      const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL || 'https://colorless-cardinal-959.convex.site';
+      if (conversationId) {
+        try {
+          const bridgeHttpUrl = BRIDGE_URL.replace('wss://', 'https://').replace('ws://', 'http://');
+          await fetch(`${bridgeHttpUrl}/start-monitor`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversationId, callId, convexSiteUrl: CONVEX_SITE_URL }),
+          });
+        } catch (e: any) {
+          console.error('Failed to start bridge monitor (non-fatal):', e.message);
+        }
+      }
+
+      // Attach passive Twilio stream for browser audio — first attempt at 1s, then every 5s
+      const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+      const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+      if (callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+        const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+        for (let attempt = 0; attempt < 6; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 1000 : 5000));
+          try {
+            const callStatusRes = await fetch(
+              `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}.json`,
+              { headers: { 'Authorization': authHeader } }
+            );
+            if (callStatusRes.ok) {
+              const callData = await callStatusRes.json();
+              const status = callData.status;
+              if (status === 'completed' || status === 'failed' || status === 'canceled') {
+                console.log(`[dental-stream] Call already ended (${status}), skipping stream`);
+                break;
+              }
+              if (status !== 'in-progress') {
+                console.log(`[dental-stream] Not in-progress yet (${status}), retrying...`);
+                continue;
+              }
+            }
+            const streamUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}/Streams.json`;
+            const streamParams = new URLSearchParams();
+            streamParams.append('Url', `${BRIDGE_URL}/monitor`);
+            streamParams.append('Track', 'both_tracks');
+            streamParams.append('Name', `dental-monitor-${callId}`);
+            streamParams.append('Parameter1.Name', 'callId');
+            streamParams.append('Parameter1.Value', callId);
+            const streamRes = await fetch(streamUrl, {
+              method: 'POST',
+              headers: { 'Authorization': authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: streamParams.toString(),
+            });
+            console.log(`[dental-stream] Attempt ${attempt + 1}: ${streamRes.status} for callSid=${callSid}`);
+            if (streamRes.ok) break;
+          } catch (streamErr: any) {
+            console.error(`[dental-stream] Attempt ${attempt + 1} failed:`, streamErr.message);
+          }
+        }
+      }
+
       return { callId, conversationId, twilioCallSid: callSid };
     } catch (error: any) {
       await ctx.runMutation(api.calls.updateStatus, {

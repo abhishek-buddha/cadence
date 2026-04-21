@@ -638,9 +638,9 @@ http.route({
           <Say voice="Polly.Joanna">Thank you for calling Acme Health Insurance, a preferred provider organization.
             Please listen carefully as our menu options have recently changed.
             For claims and billing, press 1 or say claims.
-            For member services, press 2 or say member services.
-            For provider relations, press 3 or say provider.
-            For pharmacy, press 4.
+            For eligibility and benefits verification, press 2 or say eligibility.
+            For member services, press 3 or say member services.
+            For provider relations, press 4 or say provider.
             To repeat this menu, press 9.</Say>
         </Gather>
         <Say voice="Polly.Joanna">We did not receive a response. Goodbye.</Say>
@@ -663,7 +663,25 @@ http.route({
     const digits = params.get('Digits') || '';
     const speech = (params.get('SpeechResult') || '').toLowerCase();
 
-    // Accept ANY input to move to claims submenu (production IVRs route by digit)
+    // Route to eligibility or claims based on what was said / pressed
+    const isEligibility = digits === '2' ||
+      speech.includes('eligib') || speech.includes('benefit') || speech.includes('verif') || speech.includes('dental');
+
+    if (isEligibility) {
+      return twimlResponse(`
+        <Response>
+          <Gather input="speech dtmf" numDigits="1" timeout="15" speechTimeout="3" action="${siteUrl}/test-ivr-dental-hold${fwdParam}" method="POST">
+            <Say voice="Polly.Joanna">You have reached the eligibility and benefits department.
+              For dental eligibility verification, press 1 or say dental.
+              For medical eligibility, press 2 or say medical.
+              To speak with an eligibility specialist, press 0.</Say>
+          </Gather>
+          <Say voice="Polly.Joanna">We did not receive a response. Goodbye.</Say>
+          <Hangup/>
+        </Response>
+      `);
+    }
+
     if (digits || speech) {
       return twimlResponse(`
         <Response>
@@ -762,6 +780,114 @@ http.route({
       <Response>
         <Gather input="speech" timeout="60" speechTimeout="auto" action="${siteUrl}/test-ivr-agent" method="POST">
           <Say voice="Polly.Matthew">Sure, I can help with that. Could you give me the claim number so I can look it up?</Say>
+          <Pause length="60"/>
+        </Gather>
+      </Response>
+    `);
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// Dental EV hold — routes to simulated eligibility specialist
+// ---------------------------------------------------------------------------
+http.route({
+  path: '/test-ivr-dental-hold',
+  method: 'POST',
+  handler: httpAction(async (_, request) => {
+    const url = new URL(request.url);
+    const siteUrl = url.origin;
+
+    return twimlResponse(`
+      <Response>
+        <Say voice="Polly.Joanna">Please hold while we connect you to the next available dental eligibility specialist.
+          Your estimated wait time is approximately one minute.</Say>
+        <Pause length="3"/>
+        <Say voice="Polly.Joanna">Thank you for your patience.</Say>
+        <Pause length="2"/>
+        <Gather input="speech" timeout="180" speechTimeout="auto" action="${siteUrl}/test-ivr-dental-agent" method="POST">
+          <Say voice="Polly.Amy">Hi, thank you for holding. This is Sarah with the Acme Health Insurance dental eligibility department. How can I assist you today?</Say>
+          <Pause length="120"/>
+        </Gather>
+        <Say voice="Polly.Amy">Thank you for calling. Goodbye.</Say>
+        <Hangup/>
+      </Response>
+    `);
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// Dental EV agent — simulated eligibility specialist providing benefit data
+// ---------------------------------------------------------------------------
+http.route({
+  path: '/test-ivr-dental-agent',
+  method: 'POST',
+  handler: httpAction(async (_, request) => {
+    const url = new URL(request.url);
+    const siteUrl = url.origin;
+    const body = await request.text();
+    const params = new URLSearchParams(body);
+    const speech = (params.get('SpeechResult') || '').toLowerCase();
+
+    // AI says goodbye or thanks
+    if (speech.includes('thank') || speech.includes('bye') || speech.includes('that') ||
+        speech.includes('no') || speech.includes('good') || speech.includes('great')) {
+      return twimlResponse(`
+        <Response>
+          <Say voice="Polly.Amy">You are very welcome. Thank you for calling Acme Health Insurance dental eligibility.
+            Have a wonderful day. Goodbye!</Say>
+          <Hangup/>
+        </Response>
+      `);
+    }
+
+    // AI provides patient info and CDT codes — respond with full benefit data
+    if (speech.includes('patient') || speech.includes('member') || speech.includes('smith') ||
+        speech.includes('d01') || speech.includes('d11') || speech.includes('cdt') ||
+        speech.includes('verify') || speech.includes('eligib') || speech.includes('benefit') ||
+        speech.includes('hospital') || speech.includes('calling')) {
+      return twimlResponse(`
+        <Response>
+          <Gather input="speech" timeout="60" speechTimeout="auto" action="${siteUrl}/test-ivr-dental-agent" method="POST">
+            <Say voice="Polly.Amy">Thank you, let me pull up those benefits. One moment please.</Say>
+            <Pause length="3"/>
+            <Say voice="Polly.Amy">Alright, I have the information.
+              For member John Smith, date of birth March 15, 1985, member ID W-1-2-3-4-5-6-7-8-9,
+              dental coverage is currently active under their PPO plan, effective January 1st, 2026.
+
+              For deductibles: the annual deductible is $1,500, and $50 has been met so far this year.
+
+              The annual maximum benefit is $2,000, with $1,850 remaining for the year.
+
+              In-network coinsurance is 80 percent, meaning the plan covers 80 percent of the allowed amount.
+              Out-of-network coinsurance is 50 percent.
+              There is no copay for preventive services.
+
+              Network status: City General Hospital is in-network with Acme Health Insurance.
+
+              For procedure D-0-1-5-0, comprehensive oral evaluation, this is a preventive service covered at 100 percent in-network.
+              Frequency limit is once per calendar year. There is no record of this procedure in 2026, so the patient is eligible.
+
+              For procedure D-1-1-1-0, adult prophylaxis, this is covered twice per calendar year.
+              The patient has not had this procedure in 2026 and is eligible.
+
+              No waiting periods apply to this member.
+
+              Your verification reference number is E-V dash 2-0-2-6 dash 0-4-2-1 dash 8-8-3-4.
+
+              Is there anything else you need for this verification?</Say>
+            <Pause length="60"/>
+          </Gather>
+        </Response>
+      `);
+    }
+
+    // Default — ask for patient info
+    return twimlResponse(`
+      <Response>
+        <Gather input="speech" timeout="60" speechTimeout="auto" action="${siteUrl}/test-ivr-dental-agent" method="POST">
+          <Say voice="Polly.Amy">Of course, I can verify dental eligibility for you.
+            Could you please provide the patient name, date of birth, member ID,
+            and the procedure codes you would like to verify?</Say>
           <Pause length="60"/>
         </Gather>
       </Response>

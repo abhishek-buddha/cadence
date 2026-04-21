@@ -5,7 +5,8 @@ RUN npm ci
 COPY . .
 ARG VITE_CONVEX_URL=https://colorless-cardinal-959.convex.cloud
 ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
-RUN npm run build
+ARG CONVEX_DEPLOY_KEY
+RUN CONVEX_DEPLOY_KEY=$CONVEX_DEPLOY_KEY npx convex deploy --cmd 'npm run build' -y
 
 FROM nginx:1.25-alpine
 COPY --from=build /app/dist /usr/share/nginx/html

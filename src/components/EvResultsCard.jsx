@@ -194,10 +194,10 @@ export default function EvResultsCard({ result }) {
           <div className="bg-surface border border-border rounded-lg p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <CalendarRange className="w-3 h-3 text-muted" />
-              <span className="text-xs text-muted uppercase tracking-wider font-medium">Plan Type</span>
+              <span className="text-xs text-muted uppercase tracking-wider font-medium">AI Confidence</span>
             </div>
-            <p className="text-sm text-gray-900">
-              {planType || <Missing />}
+            <p className="text-sm font-data text-gray-900">
+              {confidence != null ? `${Math.round(confidence * 100)}%` : <Missing />}
             </p>
           </div>
         </div>

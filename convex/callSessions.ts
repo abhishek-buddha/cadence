@@ -443,6 +443,56 @@ MANDATORY RULES:
 
     await ctx.runMutation(api.callSessions.updateStatus, { id: args.sessionId, status: 'in_progress' });
 
+    // Start bridge monitor for real-time audio in browser
+    if (conversationId) {
+      try {
+        const bridgeHttpUrl = BRIDGE_URL.replace('wss://', 'https://').replace('ws://', 'http://');
+        await fetch(`${bridgeHttpUrl}/start-monitor`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversationId, callId, convexSiteUrl: CONVEX_SITE_URL }),
+        });
+      } catch (e: any) {
+        console.error('Failed to start bridge monitor (non-fatal):', e.message);
+      }
+    }
+
+    // Attach Twilio stream for in-browser audio — first attempt at 1s
+    const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+    const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+    if (callSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+      const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await new Promise(r => setTimeout(r, attempt === 0 ? 1000 : 5000));
+        try {
+          const callStatusRes = await fetch(
+            `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}.json`,
+            { headers: { 'Authorization': authHeader } }
+          );
+          if (callStatusRes.ok) {
+            const callData = await callStatusRes.json();
+            if (['completed', 'failed', 'canceled'].includes(callData.status)) break;
+            if (callData.status !== 'in-progress') continue;
+          }
+          const streamUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${callSid}/Streams.json`;
+          const streamParams = new URLSearchParams();
+          streamParams.append('Url', `${BRIDGE_URL}/monitor`);
+          streamParams.append('Track', 'both_tracks');
+          streamParams.append('Name', `session-monitor-${callId}`);
+          streamParams.append('Parameter1.Name', 'callId');
+          streamParams.append('Parameter1.Value', callId);
+          const streamRes = await fetch(streamUrl, {
+            method: 'POST',
+            headers: { 'Authorization': authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: streamParams.toString(),
+          });
+          if (streamRes.ok) { console.log(`[session] Audio stream attached on attempt ${attempt + 1}`); break; }
+        } catch (e: any) {
+          console.error(`[session] Stream attempt ${attempt + 1} failed:`, e.message);
+        }
+      }
+    }
+
     return { callId, conversationId, twilioCallSid: callSid };
   },
 });

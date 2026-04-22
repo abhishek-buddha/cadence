@@ -356,6 +356,25 @@ export const executeSession = action({
       value: callId,
     });
 
+    // Multi-patient handoff prompt injected automatically for all session calls
+    const multiPatientPrompt = itemsData.length > 1 ? `
+
+## CRITICAL — MULTI-PATIENT SESSION (${itemsData.length} PATIENTS)
+This call covers ${itemsData.length} patients. You MUST ask about ALL of them before ending.
+
+Patients in this session:
+${patientsSummary}
+
+MANDATORY RULES:
+1. Complete patient 1 fully (get status + reference number)
+2. Then say EXACTLY: "Thank you. May we look up our next patient?"
+3. If rep agrees → call next_patient tool IMMEDIATELY
+4. next_patient returns the next patient's details — use them
+5. Repeat for every patient until all ${itemsData.length} are done
+6. ONLY then say goodbye and end the call
+7. NEVER end the call after just one patient — you have ${itemsData.length - 1} more to check
+8. Get a SEPARATE reference number for each patient` : '';
+
     // Launch ElevenLabs call
     const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
       method: 'POST',
@@ -392,6 +411,16 @@ export const executeSession = action({
             refuse_patient_url: `${CONVEX_SITE_URL}/session-tool/refuse-patient`,
           },
         },
+        // Inject multi-patient instructions as prompt override for session calls
+        ...(multiPatientPrompt ? {
+          conversation_config_override: {
+            agent: {
+              prompt: {
+                prompt: multiPatientPrompt,
+              },
+            },
+          },
+        } : {}),
       }),
     });
 

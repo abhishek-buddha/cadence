@@ -262,26 +262,30 @@ export const executeSession = action({
     const insurance: any = await ctx.runQuery(api.insuranceContacts.getById, { id: session.insuranceContactId });
     if (!insurance) throw new Error('Insurance contact not found');
 
-    // Fetch all items with their patient + claim/case data
+    // Fetch all items with their patient + claim/case data via getWithItems query
+    const withItems: any = await ctx.runQuery(api.callSessions.getWithItems, { id: args.sessionId });
+    if (!withItems) throw new Error('Could not load session items');
+
+    const allPatients: any[] = await ctx.runQuery(api.patients.list);
+    const patientMap = new Map((allPatients || []).map((p: any) => [p._id, p]));
+
     const itemsData: any[] = [];
-    for (const ref of (session.itemRefs ?? [])) {
-      const item: any = await ctx.db.get(ref);
+    for (const rawItem of (withItems.items ?? [])) {
+      const item = rawItem.entity;
       if (!item) continue;
-      const patient: any = item.patientId ? await ctx.db.get(item.patientId) : null;
+      const patient: any = item.patientId ? patientMap.get(item.patientId) : null;
       const isClaim = 'claimNumber' in item;
+      const ref = rawItem.ref;
       itemsData.push({
         ref,
-        item,
-        patient,
         isClaim,
-        label: isClaim ? item.claimNumber : item.caseNumber,
         patientName: patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown',
         patientDob: patient?.dateOfBirth || 'Unknown',
         memberId: patient?.memberId || 'Unknown',
         groupNumber: patient?.groupNumber || 'N/A',
         claimNumber: isClaim ? item.claimNumber : null,
         dateOfService: isClaim ? item.dateOfService : item.proposedDateOfService,
-        billedAmount: isClaim ? (item.amount / 100).toFixed(2) : null,
+        billedAmount: isClaim && item.amount != null ? Number(item.amount).toFixed(2) : null,
         cptCodes: isClaim ? (item.cptCodes || []).join(', ') || 'N/A' : null,
         cdtCodes: !isClaim ? (item.cdtCodes || []).join(', ') || 'N/A' : null,
         caseId: !isClaim ? ref : null,
@@ -290,10 +294,8 @@ export const executeSession = action({
 
     if (itemsData.length === 0) throw new Error('Session has no valid items');
 
-    // Get provider for practice info
-    const identity = await ctx.auth.getUserIdentity();
-    const userId = identity?.subject || 'default';
-    const providers = await ctx.db.query('providers').withIndex('by_userId', (q) => q.eq('userId', userId)).collect();
+    // Get provider for practice info via query
+    const providers: any[] = await ctx.runQuery(api.providers.list);
     const provider: any = providers[0];
     if (!provider) throw new Error('No provider found');
 

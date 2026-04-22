@@ -18,7 +18,7 @@ const INPUT_CLASS =
 const LABEL_CLASS = 'block text-xs uppercase tracking-wider text-muted font-medium mb-1.5';
 
 const USE_CASE_OPTIONS = [
-  { value: 'claim_followup', label: 'Claim Follow-up', description: 'Status check on submitted claims' },
+  { value: 'medical_claim', label: 'Claim Follow-up', description: 'Status check on submitted claims' },
   { value: 'dental_ev', label: 'Dental Eligibility Verification', description: 'Benefit verification for dental services' },
 ];
 
@@ -62,7 +62,7 @@ export default function CreateSessionModal({ open, onClose }) {
   const createSession = useMutation(api.callSessions?.create);
 
   const [step, setStep] = useState(1);
-  const [useCase, setUseCase] = useState('claim_followup');
+  const [useCase, setUseCase] = useState('medical_claim');
   const [payerId, setPayerId] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,7 +72,7 @@ export default function CreateSessionModal({ open, onClose }) {
 
   function reset() {
     setStep(1);
-    setUseCase('claim_followup');
+    setUseCase('medical_claim');
     setPayerId('');
     setSelectedItemIds([]);
     setSearchQuery('');

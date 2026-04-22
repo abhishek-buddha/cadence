@@ -116,10 +116,29 @@ export default function BulkImportEvCasesModal({ open, onClose }) {
     setError(null);
 
     try {
-      const validCases = aiResult.cases.filter((c) => {
-        const hasErrors = (c.flags || []).some((f) => getFlagSeverity(f) === 'error');
-        return !hasErrors;
-      });
+      const validCases = aiResult.cases
+        .filter((c) => {
+          const hasErrors = (c.flags || []).some((f) => getFlagSeverity(f) === 'error');
+          return !hasErrors;
+        })
+        .map((c) => ({
+          // Required fields
+          patientFirstName: c.patientFirstName || c.patientName?.split(' ')[0] || 'Unknown',
+          patientLastName: c.patientLastName || c.patientName?.split(' ').slice(1).join(' ') || 'Unknown',
+          memberId: c.memberId || `AUTO-${Date.now()}`,
+          insuranceName: c.insuranceName || 'Unknown Insurance',
+          cdtCodes: Array.isArray(c.cdtCodes) ? c.cdtCodes.filter(Boolean) : [],
+          proposedDateOfService: c.proposedDateOfService || new Date().toISOString().split('T')[0],
+          // Optional fields — convert null to undefined for Convex validator
+          patientDOB: c.patientDOB || undefined,
+          groupNumber: c.groupNumber || undefined,
+          planName: c.planName || undefined,
+          matchedPatientId: c.matchedPatientId || undefined,
+          matchedInsuranceId: c.matchedInsuranceId || undefined,
+          matchedProviderId: c.matchedProviderId || undefined,
+          matchedPlanId: c.matchedPlanId || undefined,
+          notes: c.notes || undefined,
+        }));
 
       if (validCases.length === 0) {
         setError('No valid cases to import. Fix the flagged errors and try again.');

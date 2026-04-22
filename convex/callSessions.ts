@@ -1,5 +1,6 @@
-import { mutation, query } from './_generated/server';
+import { action, mutation, query } from './_generated/server';
 import { v } from 'convex/values';
+import { api } from './_generated/api';
 
 const MAX_ITEMS_PER_SESSION = 5;
 const VALID_STATUSES = ['queued', 'in_progress', 'completed', 'paused', 'failed'];
@@ -242,5 +243,175 @@ export const getActiveCall = query({
         ['initiating', 'ringing', 'in_progress'].includes(c.status)
       ) ?? null
     );
+  },
+});
+
+// ===========================================================================
+// executeSession — starts a multi-patient call for the session.
+// Makes ONE outbound call that covers all patients sequentially.
+// ===========================================================================
+export const executeSession = action({
+  args: { sessionId: v.id('callSessions') },
+  handler: async (ctx, args) => {
+    const session = await ctx.runQuery(api.callSessions.getById, { id: args.sessionId });
+    if (!session) throw new Error('Session not found');
+    if (session.status !== 'queued' && session.status !== 'paused') {
+      throw new Error(`Cannot start session in status "${session.status}"`);
+    }
+
+    const insurance: any = await ctx.runQuery(api.insuranceContacts.getById, { id: session.insuranceContactId });
+    if (!insurance) throw new Error('Insurance contact not found');
+
+    // Fetch all items with their patient + claim/case data
+    const itemsData: any[] = [];
+    for (const ref of (session.itemRefs ?? [])) {
+      const item: any = await ctx.db.get(ref);
+      if (!item) continue;
+      const patient: any = item.patientId ? await ctx.db.get(item.patientId) : null;
+      const isClaim = 'claimNumber' in item;
+      itemsData.push({
+        ref,
+        item,
+        patient,
+        isClaim,
+        label: isClaim ? item.claimNumber : item.caseNumber,
+        patientName: patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown',
+        patientDob: patient?.dateOfBirth || 'Unknown',
+        memberId: patient?.memberId || 'Unknown',
+        groupNumber: patient?.groupNumber || 'N/A',
+        claimNumber: isClaim ? item.claimNumber : null,
+        dateOfService: isClaim ? item.dateOfService : item.proposedDateOfService,
+        billedAmount: isClaim ? (item.amount / 100).toFixed(2) : null,
+        cptCodes: isClaim ? (item.cptCodes || []).join(', ') || 'N/A' : null,
+        cdtCodes: !isClaim ? (item.cdtCodes || []).join(', ') || 'N/A' : null,
+        caseId: !isClaim ? ref : null,
+      });
+    }
+
+    if (itemsData.length === 0) throw new Error('Session has no valid items');
+
+    // Get provider for practice info
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject || 'default';
+    const providers = await ctx.db.query('providers').withIndex('by_userId', (q) => q.eq('userId', userId)).collect();
+    const provider: any = providers[0];
+    if (!provider) throw new Error('No provider found');
+
+    // Build patients summary for multi-patient prompt
+    const patientsSummary = itemsData.map((d, i) =>
+      `${i + 1}. ${d.patientName} | DOB: ${d.patientDob} | Member ID: ${d.memberId}` +
+      (d.claimNumber ? ` | Claim: ${d.claimNumber} | DOS: ${d.dateOfService}` : ` | CDT: ${d.cdtCodes} | DOS: ${d.dateOfService}`)
+    ).join('\n');
+
+    // Use patient 1 as the initial dynamic variables
+    const first = itemsData[0];
+    const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL || 'https://colorless-cardinal-959.convex.site';
+
+    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+    const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
+    const AGENT_PHONE_NUMBER_ID = process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID;
+    if (!ELEVENLABS_API_KEY || !AGENT_ID || !AGENT_PHONE_NUMBER_ID) {
+      throw new Error('ElevenLabs not configured');
+    }
+
+    // Create call record for the session
+    const callId: any = await ctx.runMutation(api.calls.create, {
+      claimId: first.isClaim ? (first.ref as any) : undefined,
+      dentalCaseId: !first.isClaim ? (first.ref as any) : undefined,
+      sessionId: args.sessionId,
+      useCase: session.useCase,
+      insuranceContactId: session.insuranceContactId,
+      status: 'initiating',
+      startedAt: new Date().toISOString(),
+    });
+
+    // Store full session item list in callSettings so next_patient tool can read it
+    await ctx.runMutation(api.calls.setCallSetting, {
+      key: `session:${args.sessionId}:items`,
+      value: JSON.stringify(itemsData.map((d) => ({
+        patientName: d.patientName,
+        patientDob: d.patientDob,
+        memberId: d.memberId,
+        groupNumber: d.groupNumber,
+        claimNumber: d.claimNumber,
+        caseId: d.caseId,
+        dateOfService: d.dateOfService,
+        billedAmount: d.billedAmount,
+        cptCodes: d.cptCodes,
+        cdtCodes: d.cdtCodes,
+        isClaim: d.isClaim,
+        ref: d.ref,
+      }))),
+    });
+
+    await ctx.runMutation(api.calls.setCallSetting, {
+      key: `session:${args.sessionId}:currentIndex`,
+      value: '0',
+    });
+
+    await ctx.runMutation(api.calls.setCallSetting, {
+      key: `session:${args.sessionId}:callId`,
+      value: callId,
+    });
+
+    // Launch ElevenLabs call
+    const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
+      body: JSON.stringify({
+        agent_id: AGENT_ID,
+        agent_phone_number_id: AGENT_PHONE_NUMBER_ID,
+        to_number: insurance.phone,
+        conversation_initiation_client_data: {
+          dynamic_variables: {
+            practice_name: provider.practiceName,
+            npi: provider.npi,
+            tax_id: provider.taxId,
+            callback_number: provider.phone,
+            // Patient 1 starts as the active patient
+            patient_name: first.patientName,
+            patient_dob: first.patientDob,
+            member_id: first.memberId,
+            group_number: first.groupNumber,
+            claim_number: first.claimNumber || 'N/A',
+            date_of_service: first.dateOfService,
+            billed_amount: first.billedAmount || 'N/A',
+            cpt_codes: first.cptCodes || 'N/A',
+            cdt_codes: first.cdtCodes || 'N/A',
+            insurance_name: insurance.name,
+            insurance_phone: insurance.phone,
+            ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses.',
+            // Multi-patient session context
+            patient_count: String(itemsData.length),
+            patients_summary: patientsSummary,
+            session_id: args.sessionId,
+            internal_call_id: callId,
+            next_patient_url: `${CONVEX_SITE_URL}/session-tool/next-patient`,
+            refuse_patient_url: `${CONVEX_SITE_URL}/session-tool/refuse-patient`,
+          },
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      await ctx.runMutation(api.calls.updateStatus, { id: callId, status: 'failed', errorMessage: err });
+      throw new Error(`ElevenLabs error: ${err}`);
+    }
+
+    const result = await response.json();
+    const callSid = result.call_sid || result.callSid;
+    const conversationId = result.conversation_id || result.conversationId;
+
+    await ctx.runMutation(api.calls.updateStatus, {
+      id: callId,
+      status: 'in_progress',
+      twilioCallSid: callSid || undefined,
+      elevenLabsConversationId: conversationId || undefined,
+    });
+
+    await ctx.runMutation(api.callSessions.updateStatus, { id: args.sessionId, status: 'in_progress' });
+
+    return { callId, conversationId, twilioCallSid: callSid };
   },
 });

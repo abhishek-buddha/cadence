@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
-import { useQuery } from 'convex/react';
+import { useMemo, useState } from 'react';
+import { useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { List, ChevronRight } from 'lucide-react';
+import { List, ChevronRight, Play, Loader2 } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import OutcomeBadge from './OutcomeBadge';
 import LiveCallMonitor from './LiveCallMonitor';
@@ -43,6 +43,23 @@ function formatItem(entity, idx) {
 }
 
 export default function SessionDetailPanel({ session }) {
+  const executeSession = useAction(api.callSessions?.executeSession);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState(null);
+
+  async function handleStartSession() {
+    if (!session?._id || starting) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      await executeSession({ sessionId: session._id });
+    } catch (err) {
+      setStartError(err.message || 'Failed to start session');
+    } finally {
+      setStarting(false);
+    }
+  }
+
   // Use the already-deployed getWithItems query (returns { session, insurance, items })
   // where each item = { ref, entity, result, lastCall }
   const withItems = useQuery(
@@ -90,6 +107,16 @@ export default function SessionDetailPanel({ session }) {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {(session.status === 'queued' || session.status === 'paused') && (
+              <button
+                onClick={handleStartSession}
+                disabled={starting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-60"
+              >
+                {starting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                {starting ? 'Starting...' : 'Start Session'}
+              </button>
+            )}
             <StatusBadge status={session.status || 'unknown'} />
             {session.aggregateOutcome && (
               <OutcomeBadge outcome={session.aggregateOutcome} missingFields={session.missingFields} />
@@ -97,6 +124,9 @@ export default function SessionDetailPanel({ session }) {
           </div>
         </div>
         <ProgressBar current={completedCount} total={itemList.length} />
+        {startError && (
+          <p className="text-xs text-danger mt-2">{startError}</p>
+        )}
       </div>
 
       {/* Active live call */}

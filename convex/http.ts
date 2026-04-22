@@ -896,6 +896,123 @@ http.route({
 });
 
 // ===========================================================================
+// SESSION TOOLS — called by ElevenLabs client tools mid-call
+// next_patient: returns next patient's data so AI can continue without hanging up
+// refuse_patient: marks remaining patients as refused when rep won't do more
+// ===========================================================================
+
+http.route({
+  path: '/session-tool/next-patient',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      // ElevenLabs sends agent dynamic variables in the tool call
+      const sessionId = body?.agent_dynamic_variables?.session_id ||
+        body?.dynamic_variables?.session_id || body?.session_id;
+
+      if (!sessionId) {
+        return new Response(JSON.stringify({ error: 'Missing session_id' }), {
+          status: 400, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Get current index and advance
+      const currentIndexStr = await ctx.runQuery(api.calls.getCallSetting, {
+        key: `session:${sessionId}:currentIndex`,
+      });
+      const currentIndex = parseInt(currentIndexStr || '0', 10);
+      const nextIndex = currentIndex + 1;
+
+      // Get full items list
+      const itemsJson = await ctx.runQuery(api.calls.getCallSetting, {
+        key: `session:${sessionId}:items`,
+      });
+      if (!itemsJson) {
+        return new Response(JSON.stringify({ error: 'Session items not found' }), {
+          status: 404, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      const items = JSON.parse(itemsJson);
+      if (nextIndex >= items.length) {
+        return new Response(JSON.stringify({
+          status: 'all_patients_done',
+          message: 'All patients in this session have been processed.',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // Advance index
+      await ctx.runMutation(api.calls.setCallSetting, {
+        key: `session:${sessionId}:currentIndex`,
+        value: String(nextIndex),
+      });
+
+      const next = items[nextIndex];
+
+      // Return next patient's data — ElevenLabs injects these as updated dynamic variables
+      return new Response(JSON.stringify({
+        patient_name: next.patientName,
+        patient_dob: next.patientDob,
+        member_id: next.memberId,
+        group_number: next.groupNumber || 'N/A',
+        claim_number: next.claimNumber || 'N/A',
+        date_of_service: next.dateOfService,
+        billed_amount: next.billedAmount || 'N/A',
+        cpt_codes: next.cptCodes || 'N/A',
+        cdt_codes: next.cdtCodes || 'N/A',
+        patient_index: nextIndex + 1,
+        patients_remaining: items.length - nextIndex - 1,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    } catch (err: any) {
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: '/session-tool/refuse-patient',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const sessionId = body?.agent_dynamic_variables?.session_id ||
+        body?.dynamic_variables?.session_id || body?.session_id;
+      const itemIndex = body?.item_index ?? body?.parameters?.item_index;
+      const reason = body?.reason || body?.parameters?.reason || 'refused_by_rep';
+
+      if (!sessionId) {
+        return new Response(JSON.stringify({ error: 'Missing session_id' }), {
+          status: 400, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Log the refusal — store in callSettings for now
+      const refusalsKey = `session:${sessionId}:refusals`;
+      const existing = await ctx.runQuery(api.calls.getCallSetting, { key: refusalsKey });
+      const refusals = existing ? JSON.parse(existing) : [];
+      refusals.push({ itemIndex, reason, at: new Date().toISOString() });
+      await ctx.runMutation(api.calls.setCallSetting, {
+        key: refusalsKey,
+        value: JSON.stringify(refusals),
+      });
+
+      console.log(`[session-tool] Session ${sessionId} item ${itemIndex} refused: ${reason}`);
+
+      return new Response(JSON.stringify({ recorded: true, reason }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (err: any) {
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
+
+// ===========================================================================
 // PUBLIC REST API — /v1/*
 // All endpoints (except /v1/health, /v1/version, /v1/openapi.json) require
 // Bearer token via Authorization header. Audit-logged on every request.

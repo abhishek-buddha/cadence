@@ -127,7 +127,7 @@ export default function CreateSessionModal({ open, onClose }) {
       await createSession({
         useCase,
         insuranceContactId: payerId,
-        itemIds: selectedItemIds,
+        itemRefs: selectedItemIds,
       });
       setDone(true);
     } catch (err) {

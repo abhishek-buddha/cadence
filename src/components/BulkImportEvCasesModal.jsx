@@ -21,8 +21,8 @@ function getFlagSeverity(flag) {
 }
 
 export default function BulkImportEvCasesModal({ open, onClose }) {
-  const processExcelData = useAction(api.dentalCases?.processExcelData);
-  const bulkImport = useMutation(api.dentalCases?.bulkImport);
+  const processExcelData = useAction(api.dentalImport?.processExcelData);
+  const bulkImport = useMutation(api.dentalImport?.bulkImport);
   const fileInputRef = useRef(null);
 
   const [stage, setStage] = useState('idle');
@@ -82,7 +82,7 @@ export default function BulkImportEvCasesModal({ open, onClose }) {
       setStage('ai_processing');
 
       if (!processExcelData) {
-        throw new Error('Dental import module not yet available.');
+        throw new Error('Import module not loaded. Please refresh the page and try again.');
       }
       const result = await processExcelData({ headers, rows, sheetName });
       setAiResult(result);

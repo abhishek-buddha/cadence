@@ -467,3 +467,143 @@ export const executeSession = action({
     return { callId, conversationId, twilioCallSid: callSid };
   },
 });
+
+// ===========================================================================
+// analyzeSessionTranscript — splits a multi-patient transcript by patient
+// segment and runs separate claim/EV analysis for each item in the session.
+// Also sets the session aggregate outcome when all items are processed.
+// ===========================================================================
+export const analyzeSessionTranscript = action({
+  args: {
+    sessionId: v.id('callSessions'),
+    callId: v.id('calls'),
+    transcript: v.string(),
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_API_KEY) throw new Error('Missing OpenAI API key');
+
+    // Load session + patient list from callSettings
+    const session: any = await ctx.runQuery(api.callSessions.getById, { id: args.sessionId });
+    if (!session) throw new Error('Session not found');
+
+    const itemsJson = await ctx.runQuery(api.calls.getCallSetting, {
+      key: `session:${args.sessionId}:items`,
+    });
+    if (!itemsJson) {
+      // Fallback: single-patient analysis on first item
+      if (session.useCase === 'medical_claim' && session.itemRefs?.[0]) {
+        await ctx.runAction(api.callActions.analyzeTranscript, {
+          callId: args.callId,
+          claimId: session.itemRefs[0] as any,
+          transcript: args.transcript,
+          userId: args.userId,
+        });
+      }
+      return;
+    }
+
+    const items: any[] = JSON.parse(itemsJson);
+    const today = new Date().toISOString().split('T')[0];
+
+    // Ask GPT to split the transcript into per-patient segments
+    const splitResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-5.2',
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `You are a medical billing transcript analyst. A single phone call covered multiple patients sequentially.
+Split this transcript into per-patient segments.
+
+Patients covered in this call (in order):
+${items.map((it, i) => `${i + 1}. ${it.patientName} | Member: ${it.memberId} | ${it.isClaim ? `Claim: ${it.claimNumber}` : `CDT: ${it.cdtCodes}`} | DOS: ${it.dateOfService}`).join('\n')}
+
+Return JSON:
+{
+  "segments": [
+    { "patientIndex": 0, "patientName": "...", "transcript": "the relevant portion of the transcript for this patient" },
+    { "patientIndex": 1, "patientName": "...", "transcript": "..." }
+  ]
+}
+
+Rules:
+- patientIndex is 0-based (0 = first patient)
+- Each segment should include the full conversation about that patient
+- Include the IVR navigation in segment 0 only
+- If a patient was not discussed (rep refused), return an empty transcript for them`,
+          },
+          { role: 'user', content: args.transcript },
+        ],
+      }),
+    });
+
+    let segments: any[] = [];
+    if (splitResponse.ok) {
+      try {
+        const splitResult = await splitResponse.json();
+        const parsed = JSON.parse(splitResult.choices[0].message.content);
+        segments = parsed.segments || [];
+      } catch { segments = []; }
+    }
+
+    // If splitting failed, use full transcript for first item only
+    if (segments.length === 0 && items.length > 0) {
+      segments = [{ patientIndex: 0, patientName: items[0].patientName, transcript: args.transcript }];
+    }
+
+    const outcomes: string[] = [];
+
+    // Run analysis for each segment
+    for (const seg of segments) {
+      const item = items[seg.patientIndex];
+      if (!item || !seg.transcript) continue;
+
+      try {
+        if (item.isClaim && item.ref) {
+          await ctx.runAction(api.callActions.analyzeTranscript, {
+            callId: args.callId,
+            claimId: item.ref as any,
+            transcript: seg.transcript,
+            userId: args.userId,
+          });
+        } else if (!item.isClaim && item.ref) {
+          // For dental EV items in a session, update the call's dentalCaseId temporarily
+          // and trigger EV analysis
+          await ctx.runAction(api.dentalCallActions.analyzeEvTranscript, {
+            callId: args.callId,
+          });
+        }
+        outcomes.push('successful');
+      } catch (e: any) {
+        console.error(`Session item ${seg.patientIndex} analysis failed:`, e.message);
+        outcomes.push('failed');
+      }
+    }
+
+    // Set session aggregate outcome
+    const hasSuccessful = outcomes.includes('successful');
+    const allSuccessful = outcomes.length > 0 && outcomes.every((o) => o === 'successful');
+    const aggregateOutcome = allSuccessful ? 'successful' : hasSuccessful ? 'partial' : 'failed';
+
+    try {
+      await ctx.runMutation(api.callSessions.setAggregateOutcome, {
+        id: args.sessionId,
+        aggregateOutcome,
+      });
+      await ctx.runMutation(api.callSessions.updateStatus, {
+        id: args.sessionId,
+        status: 'completed',
+      });
+    } catch (e: any) {
+      console.error('Failed to set session aggregate outcome:', e.message);
+    }
+
+    return { segmentsAnalyzed: segments.length, aggregateOutcome };
+  },
+});

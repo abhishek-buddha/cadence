@@ -508,6 +508,8 @@ http.route({
       const internalClaimId = dynamicVars.internal_claim_id;
       // Dental EV calls set internal_case_id (not internal_claim_id)
       const internalCaseId = dynamicVars.internal_case_id;
+      // Session calls set session_id
+      const sessionId = dynamicVars.session_id;
 
       // Build transcript from array
       const transcriptArr = body.data?.transcript || body.transcript || [];
@@ -591,6 +593,20 @@ http.route({
           });
         } catch (analysisError: any) {
           console.error('EV transcript analysis failed:', analysisError.message);
+        }
+      }
+
+      // Trigger multi-patient session analysis if this was a session call
+      if (sessionId && transcript) {
+        try {
+          await ctx.runAction(api.callSessions.analyzeSessionTranscript, {
+            sessionId,
+            callId,
+            transcript,
+            userId,
+          });
+        } catch (analysisError: any) {
+          console.error('Session transcript analysis failed:', analysisError.message);
         }
       }
 

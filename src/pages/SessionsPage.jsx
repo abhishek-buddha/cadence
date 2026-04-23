@@ -1,12 +1,14 @@
 import { useState, useMemo, Fragment } from 'react';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { Users, Plus, ChevronRight, ChevronDown } from 'lucide-react';
+import { Users, Plus, ChevronRight, ChevronDown, ChevronLeft, Trash2 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import OutcomeBadge from '../components/OutcomeBadge';
 import EmptyState from '../components/EmptyState';
 import CreateSessionModal from '../components/CreateSessionModal';
 import SessionDetailPanel from '../components/SessionDetailPanel';
+
+const STATUS_ORDER = ['queued', 'in_progress', 'paused', 'completed', 'failed'];
 
 function formatDate(ts) {
   if (!ts) return '--';
@@ -37,6 +39,21 @@ export default function SessionsPage() {
   const insuranceContacts = useQuery(api.insuranceContacts.list);
   const [createOpen, setCreateOpen] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+
+  const deleteSession = useMutation(api.callSessions.remove);
+  const updateStatus = useMutation(api.callSessions.updateStatus);
+
+  function handleDelete(e, id) {
+    e.stopPropagation();
+    if (window.confirm('Delete this session?')) deleteSession({ id });
+  }
+
+  function handleStatusStep(e, session, dir) {
+    e.stopPropagation();
+    const idx = STATUS_ORDER.indexOf(session.status);
+    const next = STATUS_ORDER[idx + dir];
+    if (next) updateStatus({ id: session._id, status: next });
+  }
 
   const isLoading = sessions === undefined;
 
@@ -84,6 +101,7 @@ export default function SessionsPage() {
               <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Status</th>
               <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Aggregate Outcome</th>
               <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Created</th>
+              <th className="px-4 py-3.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -91,7 +109,7 @@ export default function SessionsPage() {
               Array.from({ length: 5 }).map((_, i) => <ShimmerRow key={i} />)
             ) : sessions.length === 0 ? (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={9}>
                   <EmptyState
                     icon={Users}
                     title="No sessions yet"
@@ -152,10 +170,37 @@ export default function SessionsPage() {
                       <td className="px-4 py-3.5 text-xs text-gray-600 font-data text-right whitespace-nowrap">
                         {formatDate(session.createdAt || session._creationTime)}
                       </td>
+                      <td className="px-3 py-3.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <button
+                            title="Previous status"
+                            disabled={STATUS_ORDER.indexOf(session.status) <= 0}
+                            onClick={(e) => handleStatusStep(e, session, -1)}
+                            className="p-1 rounded hover:bg-gray-100 text-muted disabled:opacity-30 transition-colors"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            title="Next status"
+                            disabled={STATUS_ORDER.indexOf(session.status) >= STATUS_ORDER.length - 1}
+                            onClick={(e) => handleStatusStep(e, session, 1)}
+                            className="p-1 rounded hover:bg-gray-100 text-muted disabled:opacity-30 transition-colors"
+                          >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            title="Delete session"
+                            onClick={(e) => handleDelete(e, session._id)}
+                            className="p-1 rounded hover:bg-red-50 text-muted hover:text-danger transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                     {isExpanded && (
                       <tr className="bg-surface/40">
-                        <td colSpan={8} className="px-6 py-4">
+                        <td colSpan={9} className="px-6 py-4">
                           <SessionDetailPanel session={expandedSession} />
                         </td>
                       </tr>

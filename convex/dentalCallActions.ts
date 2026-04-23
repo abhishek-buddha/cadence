@@ -40,6 +40,12 @@ export const initiateEvCall = action({
       throw new Error('ElevenLabs not configured');
     }
 
+    // Store forwarding number so the test IVR can route to the correct human agent line
+    await ctx.runMutation(api.calls.setCallSetting, {
+      key: 'forwardNumber',
+      value: insurance.humanAgentNumber || '',
+    });
+
     try {
       const dynamicVars: Record<string, string> = {
         practice_name: provider.practiceName,
@@ -57,6 +63,7 @@ export const initiateEvCall = action({
         internal_case_id: args.dentalCaseId,
         insurance_name: insurance.name,
         insurance_phone: insurance.phone,
+        human_agent_number: insurance.humanAgentNumber || '',
         ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses. Speak your selections clearly instead of pressing keys.',
       };
 

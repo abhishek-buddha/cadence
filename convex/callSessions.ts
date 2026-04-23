@@ -141,6 +141,15 @@ export const updateStatus = mutation({
   },
 });
 
+export const remove = mutation({
+  args: { id: v.id('callSessions') },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.id);
+    if (!session) throw new Error('Session not found');
+    await ctx.db.delete(args.id);
+  },
+});
+
 export const setAggregateOutcome = mutation({
   args: {
     id: v.id('callSessions'),
@@ -310,8 +319,11 @@ export const executeSession = action({
     const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL || 'https://colorless-cardinal-959.convex.site';
 
     const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-    const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
+    const AGENT_ID = session.useCase === 'dental_ev'
+      ? (process.env.ELEVENLABS_DENTAL_AGENT_ID || process.env.ELEVENLABS_AGENT_ID)
+      : process.env.ELEVENLABS_AGENT_ID;
     const AGENT_PHONE_NUMBER_ID = process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID;
+    const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
     if (!ELEVENLABS_API_KEY || !AGENT_ID || !AGENT_PHONE_NUMBER_ID) {
       throw new Error('ElevenLabs not configured');
     }
@@ -356,6 +368,12 @@ export const executeSession = action({
       value: callId,
     });
 
+    // Store forwarding number so the test IVR can route to the correct human agent line
+    await ctx.runMutation(api.calls.setCallSetting, {
+      key: 'forwardNumber',
+      value: insurance.humanAgentNumber || '',
+    });
+
     // Launch ElevenLabs call
     // conversation_config_override removed — it was replacing the agent system prompt entirely.
     // Multi-patient logic is handled by the agent system prompt + next_patient tool.
@@ -384,6 +402,7 @@ export const executeSession = action({
             cdt_codes: first.cdtCodes || 'N/A',
             insurance_name: insurance.name,
             insurance_phone: insurance.phone,
+            human_agent_number: insurance.humanAgentNumber || '',
             ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses.',
             // Multi-patient session context — read by agent system prompt
             patient_count: String(itemsData.length),

@@ -923,50 +923,55 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     try {
       const body = await request.json();
-      // ElevenLabs sends agent dynamic variables in the tool call
+      console.log('[next-patient] raw body:', JSON.stringify(body));
+
       const sessionId = body?.agent_dynamic_variables?.session_id ||
         body?.dynamic_variables?.session_id || body?.session_id;
 
+      console.log('[next-patient] extracted session_id:', sessionId);
+
       if (!sessionId) {
+        console.error('[next-patient] missing session_id — tool call body had keys:', Object.keys(body || {}));
         return new Response(JSON.stringify({ error: 'Missing session_id' }), {
           status: 400, headers: { 'Content-Type': 'application/json' },
         });
       }
 
-      // Get current index and advance
       const currentIndexStr = await ctx.runQuery(api.calls.getCallSetting, {
         key: `session:${sessionId}:currentIndex`,
       });
       const currentIndex = parseInt(currentIndexStr || '0', 10);
       const nextIndex = currentIndex + 1;
 
-      // Get full items list
       const itemsJson = await ctx.runQuery(api.calls.getCallSetting, {
         key: `session:${sessionId}:items`,
       });
       if (!itemsJson) {
+        console.error(`[next-patient] session:${sessionId}:items not found in callSettings`);
         return new Response(JSON.stringify({ error: 'Session items not found' }), {
           status: 404, headers: { 'Content-Type': 'application/json' },
         });
       }
 
       const items = JSON.parse(itemsJson);
+      console.log(`[next-patient] session=${sessionId} currentIndex=${currentIndex} nextIndex=${nextIndex} totalItems=${items.length}`);
+
       if (nextIndex >= items.length) {
+        console.log(`[next-patient] session=${sessionId} all ${items.length} patients done`);
         return new Response(JSON.stringify({
           status: 'all_patients_done',
           message: 'All patients in this session have been processed.',
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
-      // Advance index
       await ctx.runMutation(api.calls.setCallSetting, {
         key: `session:${sessionId}:currentIndex`,
         value: String(nextIndex),
       });
 
       const next = items[nextIndex];
+      console.log(`[next-patient] session=${sessionId} advancing to patient ${nextIndex}: ${next.patientName}`);
 
-      // Return next patient's data — ElevenLabs injects these as updated dynamic variables
       return new Response(JSON.stringify({
         patient_name: next.patientName,
         patient_dob: next.patientDob,
@@ -981,6 +986,7 @@ http.route({
         patients_remaining: items.length - nextIndex - 1,
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     } catch (err: any) {
+      console.error('[next-patient] unexpected error:', err.message);
       return new Response(JSON.stringify({ error: err.message }), {
         status: 500, headers: { 'Content-Type': 'application/json' },
       });

@@ -303,6 +303,8 @@ export const executeSession = action({
 
     if (itemsData.length === 0) throw new Error('Session has no valid items');
 
+    console.log(`[session:${args.sessionId}] items loaded: ${itemsData.length}`, itemsData.map((d, i) => `  [${i}] ${d.patientName} | memberId=${d.memberId} | ${d.isClaim ? `claim=${d.claimNumber}` : `cdtCodes=${d.cdtCodes}`}`).join('\n'));
+
     // Get provider for practice info via query
     const providers: any[] = await ctx.runQuery(api.providers.list);
     const provider: any = providers[0];
@@ -332,6 +334,8 @@ export const executeSession = action({
       `${i + 1}. ${d.patientName} | DOB: ${d.patientDob} | Member ID: ${d.memberId}` +
       (d.claimNumber ? ` | Claim: ${d.claimNumber} | DOS: ${d.dateOfService}` : ` | CDT: ${d.cdtCodes} | DOS: ${d.dateOfService}`)
     ).join('\n');
+
+    console.log(`[session:${args.sessionId}] all_patients_data (${allPatientsData.length} chars):\n${allPatientsData}`);
 
     // Use patient 1 as the initial dynamic variables
     const first = itemsData[0];
@@ -393,9 +397,9 @@ export const executeSession = action({
       value: insurance.humanAgentNumber || '',
     });
 
+    console.log(`[session:${args.sessionId}] launching ElevenLabs call — agentId=${AGENT_ID} to=${insurance.phone} patient_count=${itemsData.length} session_id=${args.sessionId}`);
+
     // Launch ElevenLabs call
-    // conversation_config_override removed — it was replacing the agent system prompt entirely.
-    // Multi-patient logic is handled by the agent system prompt + next_patient tool.
     const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
@@ -436,6 +440,7 @@ export const executeSession = action({
 
     if (!response.ok) {
       const err = await response.text();
+      console.error(`[session:${args.sessionId}] ElevenLabs call failed: ${response.status} ${err}`);
       await ctx.runMutation(api.calls.updateStatus, { id: callId, status: 'failed', errorMessage: err });
       throw new Error(`ElevenLabs error: ${err}`);
     }
@@ -443,6 +448,8 @@ export const executeSession = action({
     const result = await response.json();
     const callSid = result.call_sid || result.callSid;
     const conversationId = result.conversation_id || result.conversationId;
+
+    console.log(`[session:${args.sessionId}] ElevenLabs call started — callSid=${callSid} conversationId=${conversationId} callId=${callId}`);
 
     await ctx.runMutation(api.calls.updateStatus, {
       id: callId,
@@ -523,6 +530,8 @@ export const analyzeSessionTranscript = action({
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     if (!OPENAI_API_KEY) throw new Error('Missing OpenAI API key');
 
+    console.log(`[session-analysis:${args.sessionId}] transcript received — ${args.transcript.length} chars, callId=${args.callId}`);
+
     // Load session + patient list from callSettings
     const session: any = await ctx.runQuery(api.callSessions.getById, { id: args.sessionId });
     if (!session) throw new Error('Session not found');
@@ -531,6 +540,7 @@ export const analyzeSessionTranscript = action({
       key: `session:${args.sessionId}:items`,
     });
     if (!itemsJson) {
+      console.warn(`[session-analysis:${args.sessionId}] no items found in callSettings — falling back to single-patient analysis`);
       // Fallback: single-patient analysis on first item
       if (session.useCase === 'medical_claim' && session.itemRefs?.[0]) {
         await ctx.runAction(api.callActions.analyzeTranscript, {
@@ -544,6 +554,7 @@ export const analyzeSessionTranscript = action({
     }
 
     const items: any[] = JSON.parse(itemsJson);
+    console.log(`[session-analysis:${args.sessionId}] items from callSettings: ${items.length}`, items.map((it, i) => `[${i}] ${it.patientName}`).join(', '));
     const today = new Date().toISOString().split('T')[0];
 
     // Ask GPT to split the transcript into per-patient segments
@@ -591,8 +602,11 @@ Rules:
       } catch { segments = []; }
     }
 
+    console.log(`[session-analysis:${args.sessionId}] GPT split result: ${segments.length} segment(s)`, segments.map((s: any) => `[${s.patientIndex}] ${s.patientName} (${s.transcript?.length ?? 0} chars)`).join(', '));
+
     // If splitting failed, use full transcript for first item only
     if (segments.length === 0 && items.length > 0) {
+      console.warn(`[session-analysis:${args.sessionId}] GPT split returned 0 segments — falling back to full transcript for item 0`);
       segments = [{ patientIndex: 0, patientName: items[0].patientName, transcript: args.transcript }];
     }
 
@@ -601,8 +615,12 @@ Rules:
     // Run analysis for each segment
     for (const seg of segments) {
       const item = items[seg.patientIndex];
-      if (!item || !seg.transcript) continue;
+      if (!item || !seg.transcript) {
+        console.warn(`[session-analysis:${args.sessionId}] skipping segment patientIndex=${seg.patientIndex} — item=${!!item} transcriptLen=${seg.transcript?.length ?? 0}`);
+        continue;
+      }
 
+      console.log(`[session-analysis:${args.sessionId}] analyzing segment [${seg.patientIndex}] ${seg.patientName} — ${seg.transcript.length} chars, isClaim=${item.isClaim}`);
       try {
         if (item.isClaim && item.ref) {
           await ctx.runAction(api.callActions.analyzeTranscript, {
@@ -612,15 +630,14 @@ Rules:
             userId: args.userId,
           });
         } else if (!item.isClaim && item.ref) {
-          // For dental EV items in a session, update the call's dentalCaseId temporarily
-          // and trigger EV analysis
           await ctx.runAction(api.dentalCallActions.analyzeEvTranscript, {
             callId: args.callId,
           });
         }
+        console.log(`[session-analysis:${args.sessionId}] segment [${seg.patientIndex}] analysis complete`);
         outcomes.push('successful');
       } catch (e: any) {
-        console.error(`Session item ${seg.patientIndex} analysis failed:`, e.message);
+        console.error(`[session-analysis:${args.sessionId}] segment [${seg.patientIndex}] analysis failed:`, e.message);
         outcomes.push('failed');
       }
     }
@@ -629,6 +646,7 @@ Rules:
     const hasSuccessful = outcomes.includes('successful');
     const allSuccessful = outcomes.length > 0 && outcomes.every((o) => o === 'successful');
     const aggregateOutcome = allSuccessful ? 'successful' : hasSuccessful ? 'partial' : 'failed';
+    console.log(`[session-analysis:${args.sessionId}] outcomes: [${outcomes.join(', ')}] → aggregateOutcome=${aggregateOutcome}`);
 
     try {
       await ctx.runMutation(api.callSessions.setAggregateOutcome, {

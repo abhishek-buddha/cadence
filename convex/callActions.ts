@@ -652,7 +652,7 @@ export const endCall = action({
         const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls/${call.twilioCallSid}.json`;
         const params = new URLSearchParams();
         params.append('Status', 'completed');
-        await fetch(twilioUrl, {
+        const twilioRes = await fetch(twilioUrl, {
           method: 'POST',
           headers: {
             'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`),
@@ -660,8 +660,31 @@ export const endCall = action({
           },
           body: params.toString(),
         });
+        console.log(`[endCall] Twilio hangup ${call.twilioCallSid} → ${twilioRes.status}`);
+        if (!twilioRes.ok) {
+          const body = await twilioRes.text();
+          console.error(`[endCall] Twilio hangup failed (${twilioRes.status}):`, body);
+        }
       } catch (e: any) {
-        console.error('Failed to terminate Twilio call:', e.message);
+        console.error('[endCall] Failed to terminate Twilio call:', e.message);
+      }
+    } else {
+      console.warn('[endCall] No twilioCallSid or missing Twilio credentials — skipping hangup', {
+        hasSid: !!call.twilioCallSid,
+        hasCreds: !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN),
+      });
+    }
+
+    // 2b. Signal ElevenLabs to end the conversation explicitly
+    if (call.elevenLabsConversationId && ELEVENLABS_API_KEY) {
+      try {
+        const elRes = await fetch(
+          `https://api.elevenlabs.io/v1/convai/conversations/${call.elevenLabsConversationId}`,
+          { method: 'DELETE', headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
+        );
+        console.log(`[endCall] ElevenLabs conversation end ${call.elevenLabsConversationId} → ${elRes.status}`);
+      } catch (e: any) {
+        console.error('[endCall] Failed to end ElevenLabs conversation:', e.message);
       }
     }
 
@@ -717,7 +740,14 @@ export const endCall = action({
     // 5. Trigger transcript analysis based on call type
     if (transcriptStr) {
       try {
-        if (call.claimId) {
+        if (call.sessionId) {
+          await ctx.runAction(api.callSessions.analyzeSessionTranscript, {
+            sessionId: call.sessionId,
+            callId: args.callId,
+            transcript: transcriptStr,
+            userId: call.userId || 'default',
+          });
+        } else if (call.claimId) {
           await ctx.runAction(api.callActions.analyzeTranscript, {
             callId: args.callId,
             claimId: call.claimId,

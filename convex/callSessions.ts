@@ -308,7 +308,26 @@ export const executeSession = action({
     const provider: any = providers[0];
     if (!provider) throw new Error('No provider found');
 
-    // Build patients summary for multi-patient prompt
+    // Build full patient data block sent upfront — agent reads this to work all patients without mid-call tool fetches
+    const allPatientsData = itemsData.map((d, i) => {
+      const lines = [
+        `PATIENT ${i + 1}:`,
+        `  Name: ${d.patientName}`,
+        `  DOB: ${d.patientDob}`,
+        `  Member ID: ${d.memberId}`,
+        `  Group #: ${d.groupNumber}`,
+        `  DOS: ${d.dateOfService}`,
+      ];
+      if (d.isClaim) {
+        lines.push(`  Claim #: ${d.claimNumber || 'N/A'}`);
+        lines.push(`  Billed Amount: ${d.billedAmount ? '$' + d.billedAmount : 'N/A'}`);
+        lines.push(`  CPT Codes: ${d.cptCodes || 'N/A'}`);
+      } else {
+        lines.push(`  CDT Codes: ${d.cdtCodes || 'N/A'}`);
+      }
+      return lines.join('\n');
+    }).join('\n\n');
+
     const patientsSummary = itemsData.map((d, i) =>
       `${i + 1}. ${d.patientName} | DOB: ${d.patientDob} | Member ID: ${d.memberId}` +
       (d.claimNumber ? ` | Claim: ${d.claimNumber} | DOS: ${d.dateOfService}` : ` | CDT: ${d.cdtCodes} | DOS: ${d.dateOfService}`)
@@ -404,9 +423,10 @@ export const executeSession = action({
             insurance_phone: insurance.phone,
             human_agent_number: insurance.humanAgentNumber || '',
             ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses.',
-            // Multi-patient session context — read by agent system prompt
+            // Multi-patient session context — agent reads all_patients_data upfront
             patient_count: String(itemsData.length),
             patients_summary: patientsSummary,
+            all_patients_data: allPatientsData,
             session_id: args.sessionId,
             internal_call_id: callId,
           },

@@ -4,45 +4,41 @@
 // the same payer line.
 //
 // Dynamic variables expected:
-//   {{patient_count}} — total number of patients in the session
-//   {{patients_summary}} — numbered list of patients (injected at call start)
+//   {{patient_count}}      — total number of patients in the session
+//   {{patients_summary}}   — numbered list of patients (names + IDs)
+//   {{all_patients_data}}  — full structured block with every patient's details
 //
-// Additional tools required for multi-patient sessions:
-//   next_patient() — advances to the next patient context, swapping all
-//                    per-patient dynamic variables (patient_name, patient_dob,
-//                    member_id, claim_number/cdt_codes, etc.)
-//   mark_session_item_refused(item_index: number, reason: string) — mark a
-//                    remaining patient as refused_by_payer when the rep won't
-//                    take additional lookups.
+// The agent has ALL patient data from the start. No mid-call tool call is
+// needed to fetch the next patient — just read from {{all_patients_data}}.
+//
+// Optional tools (still registered in ElevenLabs dashboard):
+//   mark_session_item_refused(item_index, reason) — mark a patient as refused
+//     when the rep won't look up additional patients.
 
 export const MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT = `# MULTI-PATIENT SESSION
-This call is a multi-patient session with {{patient_count}} patients to verify.
+This call covers {{patient_count}} patients for the same payer. You have ALL patient details below — do not call any tool to fetch them.
 
-Patient list: {{patients_summary}} (this gets injected as a numbered list at call start).
+{{all_patients_data}}
 
-# HANDOFF FLOW
-Work through patients strictly in order. Patient 1 first, then 2, then 3, etc. Do not skip ahead.
+# WORKFLOW
+Work through the patients strictly in the order listed above. Finish PATIENT 1 completely before moving to PATIENT 2, and so on.
 
-After fully completing patient 1 (all required fields retrieved or marked unavailable per the 100% retrieval gate), say to the rep:
+For each patient, follow the standard verification arc:
+1. Identify the patient to the rep (name, DOB, member ID).
+2. Collect all required fields (coverage status, deductible, copay/coinsurance, network status, reference number, rep name, etc.).
+3. Once all fields are captured (or confirmed unavailable), ask: "Thank you. May we look up our next patient?"
 
-  "Thank you. May we look up our next patient?"
-
-If the rep agrees, switch context to patient 2 by calling the next_patient tool. This advances the dynamic variables (patient_name, patient_dob, member_id, claim_number / cdt_codes, etc.) to the next patient in the session.
-
-After next_patient returns, repeat the standard arc for patient 2: identify, ask for status / coverage, drill into required fields, confirm reference number, capture rep name. Continue until either:
-  (a) all {{patient_count}} patients are done, or
-  (b) the rep refuses to continue with additional patients.
+If the rep agrees, move directly to the next patient's data from the list above and repeat the arc.
 
 # REFUSAL HANDLING
-If the rep refuses additional patients (e.g. "I can only do one per call", "you'll have to call back", "we have a one-patient-per-call policy"), do the following:
-1. Politely acknowledge: "Understood, thank you for letting me know."
-2. For EACH remaining patient (the ones you have not yet worked), call mark_session_item_refused(item_index, reason) with the rep's stated reason (or "one_per_call_policy" / "rep_refused" if no reason given).
-3. Close the call normally — do not push or argue.
+If the rep refuses to continue with additional patients (e.g. "I can only do one per call", "you'll have to call back"):
+1. Acknowledge politely: "Understood, thank you for letting me know."
+2. For EACH remaining patient not yet verified, call mark_session_item_refused(item_index, reason). Use 0-based indexing (PATIENT 1 = index 0, PATIENT 2 = index 1, etc.).
+3. Close the call normally.
 
 # RULES
-- Always finish the current patient's 100% retrieval gate BEFORE asking to move to the next patient.
-- Always announce the handoff verbally to the rep ("May we look up our next patient?") BEFORE calling next_patient.
-- After next_patient swaps the context, briefly orient: "Thank you. The next patient is {{patient_name}}, member ID {{member_id}}."
-- Get a fresh reference number for each patient. One reference number per patient, not one per call.
-- If the rep changes mid-session (e.g. transferred to a colleague), re-introduce yourself and re-state the practice name once for the new rep.
+- You already have all patient data — never tell the rep you need to look something up.
+- Get a separate reference number for each patient; do not reuse a single reference across patients.
+- If the rep changes mid-call (transferred to a colleague), re-introduce yourself and re-state the practice name once.
+- Do not rush — complete the full retrieval gate for each patient before advancing.
 `;

@@ -1,6 +1,7 @@
 import { action, mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import { api } from './_generated/api';
+import { composePrompt } from './prompts/index';
 
 const MAX_ITEMS_PER_SESSION = 5;
 const VALID_STATUSES = ['queued', 'in_progress', 'completed', 'paused', 'failed'];
@@ -397,6 +398,44 @@ export const executeSession = action({
       value: insurance.humanAgentNumber || '',
     });
 
+    // Compose the full agent prompt with all patient data already substituted.
+    // Sent as conversation_config_override so the session context block (patient
+    // list + must-check-all constraint) is the very first thing the LLM reads,
+    // overriding the base prompt's single-patient closing behavior.
+    const promptVars: Record<string, string> = {
+      practice_name: provider.practiceName,
+      npi: provider.npi,
+      tax_id: provider.taxId,
+      callback_number: provider.phone,
+      patient_name: first.patientName,
+      patient_dob: first.patientDob,
+      member_id: first.memberId,
+      group_number: first.groupNumber,
+      date_of_service: first.dateOfService,
+      proposed_dos: first.dateOfService,
+      insurance_name: insurance.name,
+      insurance_phone: insurance.phone,
+      human_agent_number: insurance.humanAgentNumber || '',
+      ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses.',
+      patient_count: String(itemsData.length),
+      patients_summary: patientsSummary,
+      all_patients_data: allPatientsData,
+      // Medical claim specific
+      claim_number: first.claimNumber || 'N/A',
+      amount: first.billedAmount || 'N/A',
+      cpt_codes: first.cptCodes || 'N/A',
+      // Dental EV specific
+      cdt_codes: first.cdtCodes || 'N/A',
+      plan_name: 'N/A',
+    };
+
+    const composedPrompt = composePrompt({
+      useCase: session.useCase as 'medical_claim' | 'dental_ev',
+      isMultiPatient: itemsData.length > 1,
+      hasVoiceIvr: true,
+      vars: promptVars,
+    });
+
     console.log(`[session:${args.sessionId}] launching ElevenLabs call — agentId=${AGENT_ID} to=${insurance.phone} patient_count=${itemsData.length} session_id=${args.sessionId}`);
 
     // Launch ElevenLabs call
@@ -408,12 +447,16 @@ export const executeSession = action({
         agent_phone_number_id: AGENT_PHONE_NUMBER_ID,
         to_number: insurance.phone,
         conversation_initiation_client_data: {
+          conversation_config_override: {
+            agent: {
+              prompt: { prompt: composedPrompt },
+            },
+          },
           dynamic_variables: {
             practice_name: provider.practiceName,
             npi: provider.npi,
             tax_id: provider.taxId,
             callback_number: provider.phone,
-            // Patient 1 starts as the active patient
             patient_name: first.patientName,
             patient_dob: first.patientDob,
             member_id: first.memberId,
@@ -427,7 +470,6 @@ export const executeSession = action({
             insurance_phone: insurance.phone,
             human_agent_number: insurance.humanAgentNumber || '',
             ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses.',
-            // Multi-patient session context — agent reads all_patients_data upfront
             patient_count: String(itemsData.length),
             patients_summary: patientsSummary,
             all_patients_data: allPatientsData,

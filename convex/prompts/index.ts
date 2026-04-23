@@ -35,6 +35,12 @@ export interface ComposePromptOptions {
   useCase: UseCase;
   isMultiPatient?: boolean;
   hasVoiceIvr?: boolean;
+  /** Runtime values to substitute for {{placeholders}} in the composed prompt.
+   *  When provided and isMultiPatient=true, a concrete session context block
+   *  is prepended before the base prompt so the LLM reads the patient list
+   *  before anything else — preventing the base prompt's single-patient
+   *  closing behavior from winning. */
+  vars?: Record<string, string>;
 }
 
 /**
@@ -42,11 +48,13 @@ export interface ComposePromptOptions {
  * together the use-case base prompt, optional fragments, and the universal
  * transfer-trigger guidance.
  *
- * Order matters: base first (sets identity + objective), then optional
- * behavioral fragments (multi-patient, IVR), then universal transfer rules.
+ * When vars are provided for a multi-patient call, a concrete session context
+ * block (patient count + full patient list, already substituted) is prepended
+ * as the very first section. This ensures the multi-patient constraint outweighs
+ * the base prompt's default single-patient closing behavior.
  */
 export function composePrompt(options: ComposePromptOptions): string {
-  const { useCase, isMultiPatient = false, hasVoiceIvr = false } = options;
+  const { useCase, isMultiPatient = false, hasVoiceIvr = false, vars = {} } = options;
 
   let base: string;
   switch (useCase) {
@@ -62,7 +70,22 @@ export function composePrompt(options: ComposePromptOptions): string {
     }
   }
 
-  const sections: string[] = [base];
+  const sections: string[] = [];
+
+  // For runtime multi-patient calls (vars provided): inject a concrete context
+  // block FIRST so patient count and names are at the top of the LLM context.
+  // Not injected for setup-script calls (no vars) — those get {{placeholders}}.
+  if (isMultiPatient && vars.patient_count && vars.all_patients_data) {
+    sections.push(
+      `# SESSION CONTEXT — MULTIPLE PATIENTS\n` +
+      `You have ${vars.patient_count} patients/claims to verify in this single call. ` +
+      `You MUST check ALL ${vars.patient_count} before ending the call.\n` +
+      `Do NOT say "that's all" or use end_call after only the first patient.\n\n` +
+      vars.all_patients_data
+    );
+  }
+
+  sections.push(base);
 
   if (isMultiPatient) {
     sections.push(MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT);
@@ -75,5 +98,13 @@ export function composePrompt(options: ComposePromptOptions): string {
   // Transfer guidance is universal — applies to every agent, every use case.
   sections.push(TRANSFER_TRIGGER_GUIDANCE);
 
-  return sections.join('\n\n');
+  let prompt = sections.join('\n\n');
+
+  // Substitute all {{placeholders}} with runtime values when provided.
+  // Using split/join instead of replaceAll to safely handle $ in dollar amounts.
+  for (const [key, value] of Object.entries(vars)) {
+    prompt = prompt.split(`{{${key}}}`).join(value);
+  }
+
+  return prompt;
 }

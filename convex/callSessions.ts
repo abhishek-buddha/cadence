@@ -491,6 +491,15 @@ export const executeSession = action({
     const callSid = result.call_sid || result.callSid;
     const conversationId = result.conversation_id || result.conversationId;
 
+    console.log(`[session:${args.sessionId}] ElevenLabs raw response:`, JSON.stringify(result));
+
+    if (!conversationId) {
+      const errMsg = `ElevenLabs returned ${response.status} but no conversation_id. Body: ${JSON.stringify(result)}`;
+      console.error(`[session:${args.sessionId}] ${errMsg}`);
+      await ctx.runMutation(api.calls.updateStatus, { id: callId, status: 'failed', errorMessage: errMsg });
+      throw new Error(errMsg);
+    }
+
     console.log(`[session:${args.sessionId}] ElevenLabs call started — callSid=${callSid} conversationId=${conversationId} callId=${callId}`);
 
     await ctx.runMutation(api.calls.updateStatus, {

@@ -2,6 +2,7 @@ import { action } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { classifyDentalCallOutcome } from './outcomeClassifier';
+import { composePrompt, buildIvrContextSection } from './prompts/index';
 
 export const initiateEvCall = action({
   args: {
@@ -47,6 +48,8 @@ export const initiateEvCall = action({
     });
 
     try {
+      const voiceIvrPhrasesJson = JSON.stringify(insurance.voiceIvrPhrases || []);
+
       const dynamicVars: Record<string, string> = {
         practice_name: provider.practiceName,
         npi: provider.npi,
@@ -65,7 +68,26 @@ export const initiateEvCall = action({
         insurance_phone: insurance.phone,
         human_agent_number: insurance.humanAgentNumber || '',
         ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses. Speak your selections clearly instead of pressing keys.',
+        voice_ivr_phrases: voiceIvrPhrasesJson,
       };
+
+      const composedPrompt = composePrompt({
+        useCase: 'dental_ev',
+        hasVoiceIvr: !!insurance.voiceIvrEnabled,
+        ivrContext: buildIvrContextSection(insurance.ivrInstructions, insurance.ivrSteps),
+        vars: {
+          practice_name: provider.practiceName,
+          patient_name: `${patient.firstName} ${patient.lastName}`,
+          patient_dob: patient.dateOfBirth,
+          member_id: patient.memberId,
+          plan_name: plan?.planName ?? 'N/A',
+          group_number: patient.groupNumber || plan?.groupNumber || 'N/A',
+          proposed_dos: dentalCase.proposedDateOfService,
+          cdt_codes: (dentalCase.cdtCodes || []).join(', ') || 'N/A',
+          insurance_name: insurance.name,
+          voice_ivr_phrases: voiceIvrPhrasesJson,
+        },
+      });
 
       const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
         method: 'POST',
@@ -77,7 +99,14 @@ export const initiateEvCall = action({
           agent_id: AGENT_ID,
           agent_phone_number_id: AGENT_PHONE_NUMBER_ID,
           to_number: insurance.phone,
-          conversation_initiation_client_data: { dynamic_variables: dynamicVars },
+          conversation_initiation_client_data: {
+            conversation_config_override: {
+              agent: {
+                prompt: { prompt: composedPrompt },
+              },
+            },
+            dynamic_variables: dynamicVars,
+          },
         }),
       });
 

@@ -2,6 +2,7 @@ import { action, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { classifyMedicalCallOutcome } from './outcomeClassifier';
+import { composePrompt, buildIvrContextSection } from './prompts/index';
 
 export const initiateCall = action({
   args: {
@@ -56,6 +57,38 @@ export const initiateCall = action({
     }
 
     try {
+      // Compose the per-call system prompt with this payer's IVR context
+      // (free-text instructions + configured DTMF steps) and voice-phrase
+      // table baked in as literal text — not left as unresolved {{}} tokens,
+      // since the base prompt templates don't declare those placeholders.
+      const ivrContext = buildIvrContextSection(insurance.ivrInstructions, insurance.ivrSteps);
+      const voiceIvrPhrasesJson = JSON.stringify(insurance.voiceIvrPhrases || []);
+
+      const promptVars: Record<string, string> = {
+        practice_name: provider.practiceName,
+        npi: provider.npi,
+        tax_id: provider.taxId,
+        callback_number: provider.phone,
+        patient_name: `${patient.firstName} ${patient.lastName}`,
+        patient_dob: patient.dateOfBirth,
+        member_id: patient.memberId,
+        group_number: patient.groupNumber || 'N/A',
+        claim_number: claim.claimNumber,
+        date_of_service: claim.dateOfService,
+        amount: (claim.amount / 100).toFixed(2),
+        cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
+        insurance_name: insurance.name,
+        insurance_phone: insurance.phone,
+        voice_ivr_phrases: voiceIvrPhrasesJson,
+      };
+
+      const composedPrompt = composePrompt({
+        useCase: 'medical_claim',
+        hasVoiceIvr: !!insurance.voiceIvrEnabled,
+        ivrContext,
+        vars: promptVars,
+      });
+
       // Step 1: Call ElevenLabs native outbound call — handles IVR navigation natively
       const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
         method: 'POST',
@@ -68,6 +101,11 @@ export const initiateCall = action({
           agent_phone_number_id: AGENT_PHONE_NUMBER_ID,
           to_number: insurance.phone,
           conversation_initiation_client_data: {
+            conversation_config_override: {
+              agent: {
+                prompt: { prompt: composedPrompt },
+              },
+            },
             dynamic_variables: {
               practice_name: provider.practiceName,
               npi: provider.npi,
@@ -86,6 +124,7 @@ export const initiateCall = action({
               insurance_name: insurance.name,
               insurance_phone: insurance.phone,
               ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses. Speak your selections clearly instead of pressing keys.',
+              voice_ivr_phrases: voiceIvrPhrasesJson,
             },
           },
         }),

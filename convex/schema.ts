@@ -42,6 +42,11 @@ export default defineSchema({
       responseText: v.string(),
     }))),
     payerKind: v.optional(v.string()), // "medical" | "dental"
+    // Staleness tracking: when someone last confirmed ivrInstructions/ivrSteps/
+    // voiceIvrPhrases against the real payer's live IVR. Cleared automatically
+    // when any of those fields are edited, since an edit invalidates the prior
+    // confirmation until it's re-checked against the real call.
+    ivrVerifiedAt: v.optional(v.string()),
     userId: v.string(),
     createdAt: v.string(),
     updatedAt: v.string(),

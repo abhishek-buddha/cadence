@@ -27,6 +27,7 @@ export const create = mutation({
       responseText: v.string(),
     }))),
     payerKind: v.optional(v.string()),
+    ivrVerifiedAt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -86,13 +87,32 @@ export const update = mutation({
       responseText: v.string(),
     }))),
     payerKind: v.optional(v.string()),
+    ivrVerifiedAt: v.optional(v.string()),
+    // When true, clears ivrVerifiedAt even though the field itself is
+    // otherwise omitted (omitted = "leave alone" for every other field here).
+    // Set by the frontend when ivrInstructions/ivrSteps/voiceIvrPhrases changed,
+    // since an edit invalidates the prior real-call confirmation.
+    clearIvrVerification: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
+    const { id, clearIvrVerification, ...updates } = args;
     const filtered = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
+    if (clearIvrVerification) {
+      filtered.ivrVerifiedAt = undefined;
+    }
     await ctx.db.patch(id, { ...filtered, updatedAt: new Date().toISOString() });
+  },
+});
+
+export const markIvrVerified = mutation({
+  args: { id: v.id('insuranceContacts') },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      ivrVerifiedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
   },
 });
 

@@ -22,6 +22,8 @@ export { DENTAL_EV_AGENT_PROMPT } from './dentalEv';
 export { MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT } from './multiPatientHandoff';
 export { VOICE_IVR_NAVIGATION_GUIDANCE } from './voiceIvrNavigation';
 export { TRANSFER_TRIGGER_GUIDANCE } from './transferTrigger';
+export { buildIvrContextSection } from './ivrContext';
+export type { IvrStep } from './ivrContext';
 
 import { MEDICAL_CLAIM_AGENT_PROMPT } from './medicalClaim';
 import { DENTAL_EV_AGENT_PROMPT } from './dentalEv';
@@ -35,6 +37,11 @@ export interface ComposePromptOptions {
   useCase: UseCase;
   isMultiPatient?: boolean;
   hasVoiceIvr?: boolean;
+  /** Pre-rendered payer IVR context section (free-text instructions +/or
+   *  structured DTMF steps) from buildIvrContextSection(). Included whenever
+   *  non-empty, independent of hasVoiceIvr — that flag only gates the
+   *  phrase-table fragment below. */
+  ivrContext?: string;
   /** Runtime values to substitute for {{placeholders}} in the composed prompt.
    *  When provided and isMultiPatient=true, a concrete session context block
    *  is prepended before the base prompt so the LLM reads the patient list
@@ -54,7 +61,7 @@ export interface ComposePromptOptions {
  * the base prompt's default single-patient closing behavior.
  */
 export function composePrompt(options: ComposePromptOptions): string {
-  const { useCase, isMultiPatient = false, hasVoiceIvr = false, vars = {} } = options;
+  const { useCase, isMultiPatient = false, hasVoiceIvr = false, ivrContext = '', vars = {} } = options;
 
   let base: string;
   switch (useCase) {
@@ -86,6 +93,10 @@ export function composePrompt(options: ComposePromptOptions): string {
   }
 
   sections.push(base);
+
+  if (ivrContext) {
+    sections.push(ivrContext);
+  }
 
   if (isMultiPatient) {
     sections.push(MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT);

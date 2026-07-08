@@ -1,7 +1,7 @@
 import { action, mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import { api } from './_generated/api';
-import { composePrompt } from './prompts/index';
+import { composePrompt, buildIvrContextSection } from './prompts/index';
 
 const MAX_ITEMS_PER_SESSION = 5;
 const VALID_STATUSES = ['queued', 'in_progress', 'completed', 'paused', 'failed'];
@@ -402,6 +402,8 @@ export const executeSession = action({
     // Sent as conversation_config_override so the session context block (patient
     // list + must-check-all constraint) is the very first thing the LLM reads,
     // overriding the base prompt's single-patient closing behavior.
+    const voiceIvrPhrasesJson = JSON.stringify(insurance.voiceIvrPhrases || []);
+
     const promptVars: Record<string, string> = {
       practice_name: provider.practiceName,
       npi: provider.npi,
@@ -417,6 +419,7 @@ export const executeSession = action({
       insurance_phone: insurance.phone,
       human_agent_number: insurance.humanAgentNumber || '',
       ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses.',
+      voice_ivr_phrases: voiceIvrPhrasesJson,
       patient_count: String(itemsData.length),
       patients_summary: patientsSummary,
       all_patients_data: allPatientsData,
@@ -432,7 +435,8 @@ export const executeSession = action({
     const composedPrompt = composePrompt({
       useCase: session.useCase as 'medical_claim' | 'dental_ev',
       isMultiPatient: itemsData.length > 1,
-      hasVoiceIvr: true,
+      hasVoiceIvr: !!insurance.voiceIvrEnabled,
+      ivrContext: buildIvrContextSection(insurance.ivrInstructions, insurance.ivrSteps),
       vars: promptVars,
     });
 
@@ -470,6 +474,7 @@ export const executeSession = action({
             insurance_phone: insurance.phone,
             human_agent_number: insurance.humanAgentNumber || '',
             ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses.',
+            voice_ivr_phrases: voiceIvrPhrasesJson,
             patient_count: String(itemsData.length),
             patients_summary: patientsSummary,
             all_patients_data: allPatientsData,

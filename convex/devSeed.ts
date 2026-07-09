@@ -4,7 +4,11 @@ import { internalMutation } from './_generated/server';
 export const seedDemoData = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const userId = 'demo-user';
+    // Must match the app's actual query userId (ctx.auth.getUserIdentity()
+    // returns null with the current demo-grade auth, so every query resolves
+    // to 'default') — seeding under any other id makes the data invisible
+    // to the app even though it exists in the table.
+    const userId = 'default';
     const now = new Date().toISOString();
 
     // Marker check: skip if already seeded
@@ -279,7 +283,7 @@ export const wipeAndReseed = internalMutation({
       for (const row of all) await ctx.db.delete(row._id);
     }
     // Re-run seed by inlining (cannot call another mutation from within a mutation).
-    const userId = 'demo-user';
+    const userId = 'default';
     const now = new Date().toISOString();
 
     const medicalIvrSteps = [

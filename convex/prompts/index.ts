@@ -22,6 +22,7 @@ export { DENTAL_EV_AGENT_PROMPT } from './dentalEv';
 export { MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT } from './multiPatientHandoff';
 export { VOICE_IVR_NAVIGATION_GUIDANCE } from './voiceIvrNavigation';
 export { TRANSFER_TRIGGER_GUIDANCE } from './transferTrigger';
+export { IVR_ONLY_MODE_GUIDANCE } from './ivrOnlyMode';
 export { buildIvrContextSection } from './ivrContext';
 export type { IvrStep } from './ivrContext';
 
@@ -30,6 +31,7 @@ import { DENTAL_EV_AGENT_PROMPT } from './dentalEv';
 import { MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT } from './multiPatientHandoff';
 import { VOICE_IVR_NAVIGATION_GUIDANCE } from './voiceIvrNavigation';
 import { TRANSFER_TRIGGER_GUIDANCE } from './transferTrigger';
+import { IVR_ONLY_MODE_GUIDANCE } from './ivrOnlyMode';
 
 export type UseCase = 'medical_claim' | 'dental_ev';
 
@@ -42,6 +44,11 @@ export interface ComposePromptOptions {
    *  non-empty, independent of hasVoiceIvr — that flag only gates the
    *  phrase-table fragment below. */
   ivrContext?: string;
+  /** When true, the payer has a dedicated human-agent number configured, so the
+   *  agent should navigate the IVR only and end the call at the human handoff
+   *  point instead of speaking with a live representative. Prepends
+   *  IVR_ONLY_MODE_GUIDANCE as the highest-priority section. */
+  endAtHumanHandoff?: boolean;
   /** Runtime values to substitute for {{placeholders}} in the composed prompt.
    *  When provided and isMultiPatient=true, a concrete session context block
    *  is prepended before the base prompt so the LLM reads the patient list
@@ -61,7 +68,7 @@ export interface ComposePromptOptions {
  * the base prompt's default single-patient closing behavior.
  */
 export function composePrompt(options: ComposePromptOptions): string {
-  const { useCase, isMultiPatient = false, hasVoiceIvr = false, ivrContext = '', vars = {} } = options;
+  const { useCase, isMultiPatient = false, hasVoiceIvr = false, ivrContext = '', endAtHumanHandoff = false, vars = {} } = options;
 
   let base: string;
   switch (useCase) {
@@ -78,6 +85,13 @@ export function composePrompt(options: ComposePromptOptions): string {
   }
 
   const sections: string[] = [];
+
+  // Highest priority: when the payer has a dedicated human-agent number, the
+  // agent navigates the IVR only and ends at the human handoff. Prepended first
+  // and worded to override the retrieval gate + transfer guidance below.
+  if (endAtHumanHandoff) {
+    sections.push(IVR_ONLY_MODE_GUIDANCE);
+  }
 
   // For runtime multi-patient calls (vars provided): inject a concrete context
   // block FIRST so patient count and names are at the top of the LLM context.

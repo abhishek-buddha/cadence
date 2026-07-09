@@ -82,10 +82,16 @@ export const initiateCall = action({
         voice_ivr_phrases: voiceIvrPhrasesJson,
       };
 
+      // If this payer has a dedicated human-agent number configured, the agent
+      // navigates the IVR only and ends the call at the human handoff instead of
+      // speaking with a live representative. No number → normal full call.
+      const endAtHumanHandoff = !!(insurance.humanAgentNumber && insurance.humanAgentNumber.trim());
+
       const composedPrompt = composePrompt({
         useCase: 'medical_claim',
         hasVoiceIvr: !!insurance.voiceIvrEnabled,
         ivrContext,
+        endAtHumanHandoff,
         vars: promptVars,
       });
 

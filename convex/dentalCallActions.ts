@@ -140,7 +140,7 @@ export const initiateEvCall = action({
 
       // Tell bridge server to monitor this conversation for real-time audio/events
       const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
-      const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL || 'https://colorless-cardinal-959.convex.site';
+      const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL;
       if (conversationId) {
         try {
           const bridgeHttpUrl = BRIDGE_URL.replace('wss://', 'https://').replace('ws://', 'http://');

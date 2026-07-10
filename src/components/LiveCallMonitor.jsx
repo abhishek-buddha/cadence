@@ -142,10 +142,20 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       }));
   }, [polledData]);
 
-  // Use ref-based frozen duration (set synchronously) with fallback to state-based
+  // Use ref-based frozen duration (set synchronously) with fallbacks. The ref is
+  // only set when THIS component's own poll detects "done". When completion
+  // instead arrives via the call doc (post-call webhook or a prior update flips
+  // call.status to completed/failed), freeze on the best duration we can derive
+  // — the polled duration, the persisted call.duration, or completedAt−startedAt
+  // — so the timer stops instead of ticking forever behind a "Completed" banner.
+  const derivedDbDuration = call?.duration != null
+    ? call.duration
+    : (call?.completedAt && call?.startedAt
+        ? Math.max(0, Math.floor((new Date(call.completedAt).getTime() - new Date(call.startedAt).getTime()) / 1000))
+        : null);
   const frozenDuration = callDoneDurationRef.current != null
     ? callDoneDurationRef.current
-    : (isCompleted && polledData?.duration ? polledData.duration : null);
+    : (isCompleted ? (polledData?.duration ?? derivedDbDuration) : null);
   const elapsed = useElapsedTimer(call?.startedAt, frozenDuration);
 
   useEffect(() => {

@@ -4,7 +4,7 @@
 - React 19 + Vite 7 + TailwindCSS 3 (frontend)
 - Convex 1.31+ (real-time backend, deployment `colorless-cardinal-959` / production)
 - ElevenLabs Conversational AI (voice agents)
-- OpenAI GPT-4o family (transcript analysis & extraction)
+- OpenAI GPT-4o-mini family (transcript analysis & extraction)
 - Twilio Voice (telephony, outbound calls)
 - Auth: PIN gate (`AccessCodePage`, default PIN `472394`), AuthContext (demo-grade RBAC)
 - No React StrictMode (causes double-mount with persistent voice/WS state)

@@ -340,7 +340,7 @@ export const executeSession = action({
 
     // Use patient 1 as the initial dynamic variables
     const first = itemsData[0];
-    const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL || 'https://colorless-cardinal-959.convex.site';
+    const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL;
 
     const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
     const AGENT_ID = session.useCase === 'dental_ev'

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Building2, Plus, Pencil, Trash2, Phone, X, Grid3x3, ShieldCheck, ShieldAlert, ShieldQuestion } from 'lucide-react';
 import Modal from '../components/Modal';
@@ -69,12 +69,17 @@ export default function InsuranceDirectory() {
   const updateContact = useMutation(api.insuranceContacts.update);
   const removeContact = useMutation(api.insuranceContacts.remove);
   const markIvrVerified = useMutation(api.insuranceContacts.markIvrVerified);
+  const generatePlaybook = useAction(api.insuranceContacts.generatePlaybookFromTranscript);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [marking, setMarking] = useState(false);
+  // Transcript → playbook authoring aid (see IVR Instructions section below)
+  const [transcriptInput, setTranscriptInput] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState(null);
   const originalIvrKeyRef = useRef(null);
 
   const isLoading = contacts === undefined;
@@ -82,6 +87,8 @@ export default function InsuranceDirectory() {
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setTranscriptInput('');
+    setGenError(null);
     setModalOpen(true);
   }
 
@@ -106,6 +113,8 @@ export default function InsuranceDirectory() {
       ivrVerifiedAt: contact.ivrVerifiedAt ?? null,
     });
     originalIvrKeyRef.current = ivrConfigKey(contact.ivrInstructions, contact.ivrSteps, contact.voiceIvrPhrases);
+    setTranscriptInput(contact.ivrSourceTranscript ?? '');
+    setGenError(null);
     setModalOpen(true);
   }
 
@@ -113,6 +122,8 @@ export default function InsuranceDirectory() {
     setModalOpen(false);
     setEditing(null);
     setForm(EMPTY_FORM);
+    setTranscriptInput('');
+    setGenError(null);
     originalIvrKeyRef.current = null;
   }
 
@@ -131,6 +142,20 @@ export default function InsuranceDirectory() {
 
   function setField(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handleGeneratePlaybook() {
+    if (!transcriptInput.trim() || generating) return;
+    setGenerating(true);
+    setGenError(null);
+    try {
+      const { playbook } = await generatePlaybook({ transcript: transcriptInput });
+      setField('ivrInstructions', playbook);
+    } catch (err) {
+      setGenError(err?.message || 'Failed to generate playbook from transcript.');
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function addIvrStep() {
@@ -205,6 +230,7 @@ export default function InsuranceDirectory() {
         ivrSequence: cleanSteps.length ? stepsToSequence(cleanSteps) : undefined,
         voiceIvrEnabled: form.voiceIvrEnabled,
         voiceIvrPhrases: cleanPhrases.length ? cleanPhrases : undefined,
+        ivrSourceTranscript: transcriptInput.trim() || undefined,
       };
 
       if (editing) {
@@ -459,6 +485,34 @@ export default function InsuranceDirectory() {
             </div>
           </div>
 
+          {/* Authoring aid: generate a playbook from a real call transcript */}
+          <div className="border border-border-light rounded-lg p-4 space-y-3 bg-gray-50/50">
+            <div>
+              <label className={labelClass}>Generate playbook from a call transcript (optional)</label>
+              <p className="text-xs text-muted mt-1 mb-2">
+                Paste the transcript of a real call with this payer's IVR. An AI distills it into a
+                step-by-step navigation playbook and fills the IVR Instructions field below, which you
+                can then edit before saving.
+              </p>
+              <textarea
+                value={transcriptInput}
+                onChange={(e) => setTranscriptInput(e.target.value)}
+                className={inputClass}
+                rows={4}
+                placeholder={'User: Thank you for calling... Please say or enter your NPI or Tax ID.\nAgent: [enters Tax ID]\n...'}
+              />
+            </div>
+            {genError && <p className="text-xs text-red-600">{genError}</p>}
+            <button
+              type="button"
+              onClick={handleGeneratePlaybook}
+              disabled={generating || !transcriptInput.trim()}
+              className="px-3 py-1.5 text-sm rounded-md bg-accent text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent/90 transition-colors"
+            >
+              {generating ? 'Generating…' : 'Generate playbook →'}
+            </button>
+          </div>
+
           <div>
             <label className={labelClass}>IVR Instructions (spoken script)</label>
             <textarea
@@ -470,6 +524,7 @@ export default function InsuranceDirectory() {
             />
             <p className="text-xs text-muted mt-1">
               Fed to the AI agent as context so it can speak its way through the menu on a normal call.
+              Write it manually, or generate it from a transcript above.
             </p>
           </div>
 

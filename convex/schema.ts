@@ -42,6 +42,10 @@ export default defineSchema({
       responseText: v.string(),
     }))),
     payerKind: v.optional(v.string()), // "medical" | "dental"
+    // Raw call transcript the user pasted to auto-generate ivrInstructions.
+    // Kept for audit / re-generation; not sent to the agent (only the distilled
+    // ivrInstructions playbook is).
+    ivrSourceTranscript: v.optional(v.string()),
     // Staleness tracking: when someone last confirmed ivrInstructions/ivrSteps/
     // voiceIvrPhrases against the real payer's live IVR. Cleared automatically
     // when any of those fields are edited, since an edit invalidates the prior

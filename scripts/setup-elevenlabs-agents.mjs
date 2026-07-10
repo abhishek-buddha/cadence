@@ -236,7 +236,7 @@ const AGENT_DEFINITIONS = [
   {
     key: 'medical',
     name: 'Cadence — Medical Claim Follow-Up',
-    prompt: composePrompt({ useCase: 'medical_claim' }),
+    prompt: composePrompt({ useCase: 'medical_claim', hasVoiceIvr: true }),
     envIdVar: 'ELEVENLABS_MEDICAL_AGENT_ID',
   },
   {

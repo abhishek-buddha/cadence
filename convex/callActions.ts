@@ -88,7 +88,42 @@ export const initiateCall = action({
       // specific reaches the agent purely as dynamic variable data substituted
       // into that fixed prompt's {{placeholders}}, same as patient_name etc.
       const ivrInstructionsVar = buildIvrInstructionsVar(insurance.ivrInstructions, insurance.ivrSteps);
-      const voiceIvrPhrasesJson = JSON.stringify(insurance.voiceIvrPhrases || []);
+
+      // All payer-/claim-specific values sent to the agent as dynamic variables.
+      const dynamicVars: Record<string, string> = {
+        practice_name: provider.practiceName,
+        npi: provider.npi,
+        tax_id: provider.taxId,
+        callback_number: provider.phone,
+        patient_name: `${patient.firstName} ${patient.lastName}`,
+        patient_dob: patient.dateOfBirth,
+        member_id: patient.memberId,
+        group_number: patient.groupNumber || 'N/A',
+        claim_number: claim.claimNumber,
+        date_of_service: claim.dateOfService,
+        amount: (claim.amount / 100).toFixed(2),
+        cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
+        internal_call_id: callId,
+        internal_claim_id: args.claimId,
+        insurance_name: insurance.name,
+        insurance_phone: insurance.phone,
+        ivr_instructions: ivrInstructionsVar,
+        human_agent_number: insurance.humanAgentNumber || 'N/A',
+      };
+
+      // Voice-IVR auto-response rules: substitute the claim values into each
+      // response before sending, so the agent speaks the real Tax ID / member ID
+      // etc. instead of the literal "{{placeholder}}". (ElevenLabs does not
+      // recursively substitute {{vars}} that sit inside a dynamic-variable value,
+      // so we render them here.)
+      const renderVars = (str: string): string =>
+        String(str || '').replace(/\{\{(\w+)\}\}/g, (m, k) =>
+          dynamicVars[k] != null ? dynamicVars[k] : m);
+      const renderedPhrases = (insurance.voiceIvrPhrases || []).map((p: any) => ({
+        promptContains: p.promptContains,
+        responseText: renderVars(p.responseText),
+      }));
+      dynamicVars.voice_ivr_phrases = JSON.stringify(renderedPhrases);
 
       // Step 1: Call ElevenLabs native outbound call — handles IVR navigation natively
       const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
@@ -102,27 +137,7 @@ export const initiateCall = action({
           agent_phone_number_id: AGENT_PHONE_NUMBER_ID,
           to_number: insurance.phone,
           conversation_initiation_client_data: {
-            dynamic_variables: {
-              practice_name: provider.practiceName,
-              npi: provider.npi,
-              tax_id: provider.taxId,
-              callback_number: provider.phone,
-              patient_name: `${patient.firstName} ${patient.lastName}`,
-              patient_dob: patient.dateOfBirth,
-              member_id: patient.memberId,
-              group_number: patient.groupNumber || 'N/A',
-              claim_number: claim.claimNumber,
-              date_of_service: claim.dateOfService,
-              amount: (claim.amount / 100).toFixed(2),
-              cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
-              internal_call_id: callId,
-              internal_claim_id: args.claimId,
-              insurance_name: insurance.name,
-              insurance_phone: insurance.phone,
-              ivr_instructions: ivrInstructionsVar,
-              voice_ivr_phrases: voiceIvrPhrasesJson,
-              human_agent_number: insurance.humanAgentNumber || 'N/A',
-            },
+            dynamic_variables: dynamicVars,
           },
         }),
       });

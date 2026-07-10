@@ -111,18 +111,22 @@ export const initiateCall = action({
         human_agent_number: insurance.humanAgentNumber || 'N/A',
       };
 
-      // Voice-IVR auto-response rules: substitute the claim values into each
-      // response before sending, so the agent speaks the real Tax ID / member ID
-      // etc. instead of the literal "{{placeholder}}". (ElevenLabs does not
-      // recursively substitute {{vars}} that sit inside a dynamic-variable value,
-      // so we render them here.)
+      // Voice-IVR auto-response rules — ONLY when the payer has voice IVR enabled.
+      // (Previously these were sent regardless of the toggle, so turning voice IVR
+      // OFF didn't stop the agent from speaking configured phrases.) When enabled,
+      // substitute the claim values into each response before sending, so the agent
+      // speaks the real Tax ID / member ID etc. instead of the literal
+      // "{{placeholder}}" (ElevenLabs does not recursively substitute {{vars}} that
+      // sit inside a dynamic-variable value, so we render them here).
       const renderVars = (str: string): string =>
         String(str || '').replace(/\{\{(\w+)\}\}/g, (m, k) =>
           dynamicVars[k] != null ? dynamicVars[k] : m);
-      const renderedPhrases = (insurance.voiceIvrPhrases || []).map((p: any) => ({
-        promptContains: p.promptContains,
-        responseText: renderVars(p.responseText),
-      }));
+      const renderedPhrases = insurance.voiceIvrEnabled
+        ? (insurance.voiceIvrPhrases || []).map((p: any) => ({
+            promptContains: p.promptContains,
+            responseText: renderVars(p.responseText),
+          }))
+        : [];
       dynamicVars.voice_ivr_phrases = JSON.stringify(renderedPhrases);
 
       // Step 1: Call ElevenLabs native outbound call — handles IVR navigation natively

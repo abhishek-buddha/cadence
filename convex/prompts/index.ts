@@ -23,7 +23,7 @@ export { MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT } from './multiPatientHandoff';
 export { VOICE_IVR_NAVIGATION_GUIDANCE } from './voiceIvrNavigation';
 export { TRANSFER_TRIGGER_GUIDANCE } from './transferTrigger';
 export { IVR_ONLY_MODE_GUIDANCE } from './ivrOnlyMode';
-export { buildIvrContextSection } from './ivrContext';
+export { buildIvrContextSection, buildIvrInstructionsVar } from './ivrContext';
 export type { IvrStep } from './ivrContext';
 
 import { MEDICAL_CLAIM_AGENT_PROMPT } from './medicalClaim';

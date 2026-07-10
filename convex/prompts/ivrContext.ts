@@ -10,10 +10,10 @@ export interface IvrStep {
   label?: string;
 }
 
-export function buildIvrContextSection(
+function renderIvrParts(
   ivrInstructions: string | undefined,
   ivrSteps: IvrStep[] | undefined
-): string {
+): string[] {
   const parts: string[] = [];
 
   if (ivrInstructions && ivrInstructions.trim()) {
@@ -32,7 +32,27 @@ export function buildIvrContextSection(
     );
   }
 
-  if (!parts.length) return '';
+  return parts;
+}
 
+export function buildIvrContextSection(
+  ivrInstructions: string | undefined,
+  ivrSteps: IvrStep[] | undefined
+): string {
+  const parts = renderIvrParts(ivrInstructions, ivrSteps);
+  if (!parts.length) return '';
   return `# PAYER IVR CONTEXT\n${parts.join('\n\n')}`;
+}
+
+// Same content as buildIvrContextSection but without the section header —
+// for use as a dynamic-variable VALUE substituted into a static prompt
+// section that already has its own header (e.g. {{ivr_instructions}} in
+// medicalClaim.ts). No prompt override involved; this is plain data.
+export function buildIvrInstructionsVar(
+  ivrInstructions: string | undefined,
+  ivrSteps: IvrStep[] | undefined
+): string {
+  const parts = renderIvrParts(ivrInstructions, ivrSteps);
+  if (!parts.length) return 'No specific IVR playbook configured for this payer — use your best judgment to navigate.';
+  return parts.join('\n\n');
 }

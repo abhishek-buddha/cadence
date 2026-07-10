@@ -2,7 +2,7 @@ import { action, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { classifyMedicalCallOutcome } from './outcomeClassifier';
-import { composePrompt, buildIvrContextSection } from './prompts/index';
+import { buildIvrInstructionsVar } from './prompts/index';
 
 export const initiateCall = action({
   args: {
@@ -57,43 +57,12 @@ export const initiateCall = action({
     }
 
     try {
-      // Compose the per-call system prompt with this payer's IVR context
-      // (free-text instructions + configured DTMF steps) and voice-phrase
-      // table baked in as literal text — not left as unresolved {{}} tokens,
-      // since the base prompt templates don't declare those placeholders.
-      const ivrContext = buildIvrContextSection(insurance.ivrInstructions, insurance.ivrSteps);
+      // No prompt override — the agent's system prompt is fixed and permanent
+      // (set once via scripts/setup-elevenlabs-agents.mjs). Everything payer-
+      // specific reaches the agent purely as dynamic variable data substituted
+      // into that fixed prompt's {{placeholders}}, same as patient_name etc.
+      const ivrInstructionsVar = buildIvrInstructionsVar(insurance.ivrInstructions, insurance.ivrSteps);
       const voiceIvrPhrasesJson = JSON.stringify(insurance.voiceIvrPhrases || []);
-
-      const promptVars: Record<string, string> = {
-        practice_name: provider.practiceName,
-        npi: provider.npi,
-        tax_id: provider.taxId,
-        callback_number: provider.phone,
-        patient_name: `${patient.firstName} ${patient.lastName}`,
-        patient_dob: patient.dateOfBirth,
-        member_id: patient.memberId,
-        group_number: patient.groupNumber || 'N/A',
-        claim_number: claim.claimNumber,
-        date_of_service: claim.dateOfService,
-        amount: (claim.amount / 100).toFixed(2),
-        cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
-        insurance_name: insurance.name,
-        insurance_phone: insurance.phone,
-        voice_ivr_phrases: voiceIvrPhrasesJson,
-      };
-
-      // If this payer has a dedicated human-agent number configured, the agent
-      // navigates the IVR only and ends the call at the human handoff instead of
-      // speaking with a live representative. No number → normal full call.
-      const endAtHumanHandoff = !!(insurance.humanAgentNumber && insurance.humanAgentNumber.trim());
-
-      const composedPrompt = composePrompt({
-        useCase: 'medical_claim',
-        hasVoiceIvr: !!insurance.voiceIvrEnabled,
-        ivrContext,
-        endAtHumanHandoff,
-        vars: promptVars,
-      });
 
       // Step 1: Call ElevenLabs native outbound call — handles IVR navigation natively
       const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
@@ -107,11 +76,6 @@ export const initiateCall = action({
           agent_phone_number_id: AGENT_PHONE_NUMBER_ID,
           to_number: insurance.phone,
           conversation_initiation_client_data: {
-            conversation_config_override: {
-              agent: {
-                prompt: { prompt: composedPrompt },
-              },
-            },
             dynamic_variables: {
               practice_name: provider.practiceName,
               npi: provider.npi,
@@ -123,14 +87,15 @@ export const initiateCall = action({
               group_number: patient.groupNumber || 'N/A',
               claim_number: claim.claimNumber,
               date_of_service: claim.dateOfService,
-              billed_amount: (claim.amount / 100).toFixed(2),
+              amount: (claim.amount / 100).toFixed(2),
               cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
               internal_call_id: callId,
               internal_claim_id: args.claimId,
               insurance_name: insurance.name,
               insurance_phone: insurance.phone,
-              ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses. Speak your selections clearly instead of pressing keys.',
+              ivr_instructions: ivrInstructionsVar,
               voice_ivr_phrases: voiceIvrPhrasesJson,
+              human_agent_number: insurance.humanAgentNumber || 'N/A',
             },
           },
         }),
@@ -233,6 +198,121 @@ export const initiateCall = action({
         id: args.claimId,
         lastCalledAt: new Date().toISOString(),
         status: claim.status === 'pending' ? 'in_progress' : claim.status,
+      });
+
+      return { success: true, callId, twilioCallSid: callSid, conversationId };
+    } catch (error: any) {
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'failed',
+        errorMessage: error.message,
+      });
+      throw error;
+    }
+  },
+});
+
+// Follow-up call placed after a call to the real payer number ends with
+// claimStatus "ivr_only" (agent navigated the IVR, then ended the call at
+// the human-handoff point per HUMAN HANDOFF in the medical claim prompt,
+// instead of waiting on hold). Dials the payer's humanAgentNumber directly —
+// same agent, same static prompt, just different dynamic-variable data:
+// ivr_instructions tells it there's no IVR on this leg, and human_agent_number
+// is "N/A" so it doesn't try to end the call again looking for a handoff cue.
+export const initiateHumanAgentCall = action({
+  args: {
+    claimId: v.id('claims'),
+    parentCallId: v.id('calls'),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; callId: string; twilioCallSid?: string; conversationId?: string }> => {
+    const data: any = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
+    if (!data || !data.claim) throw new Error('Claim not found');
+
+    const { claim, patient, insurance, provider } = data;
+    if (!patient || !insurance || !provider) {
+      throw new Error('Missing patient, insurance, or provider data for this claim');
+    }
+    if (!insurance.humanAgentNumber || !insurance.humanAgentNumber.trim()) {
+      throw new Error('No humanAgentNumber configured for this insurance contact');
+    }
+
+    const callId: any = await ctx.runMutation(api.calls.create, {
+      claimId: args.claimId,
+      insuranceContactId: claim.insuranceContactId,
+      status: 'initiating',
+      startedAt: new Date().toISOString(),
+      parentCallId: args.parentCallId,
+    });
+
+    await ctx.runMutation(internal.callActions.patchCallUseCase, {
+      callId,
+      useCase: 'medical_claim',
+    });
+
+    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+    const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
+    const AGENT_PHONE_NUMBER_ID = process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID;
+
+    if (!ELEVENLABS_API_KEY || !AGENT_ID || !AGENT_PHONE_NUMBER_ID) {
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'failed',
+        errorMessage: 'Missing ElevenLabs credentials in environment variables',
+      });
+      throw new Error('ElevenLabs not configured');
+    }
+
+    try {
+      const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': ELEVENLABS_API_KEY,
+        },
+        body: JSON.stringify({
+          agent_id: AGENT_ID,
+          agent_phone_number_id: AGENT_PHONE_NUMBER_ID,
+          to_number: insurance.humanAgentNumber,
+          conversation_initiation_client_data: {
+            dynamic_variables: {
+              practice_name: provider.practiceName,
+              npi: provider.npi,
+              tax_id: provider.taxId,
+              callback_number: provider.phone,
+              patient_name: `${patient.firstName} ${patient.lastName}`,
+              patient_dob: patient.dateOfBirth,
+              member_id: patient.memberId,
+              group_number: patient.groupNumber || 'N/A',
+              claim_number: claim.claimNumber,
+              date_of_service: claim.dateOfService,
+              amount: (claim.amount / 100).toFixed(2),
+              cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
+              internal_call_id: callId,
+              internal_claim_id: args.claimId,
+              insurance_name: insurance.name,
+              insurance_phone: insurance.phone,
+              ivr_instructions: 'You are already through to a live representative directly — there is no IVR to navigate on this call. Proceed straight to the conversation arc.',
+              voice_ivr_phrases: '[]',
+              human_agent_number: 'N/A',
+            },
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`ElevenLabs API error ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+      const callSid = result.call_sid || result.callSid;
+      const conversationId = result.conversation_id || result.conversationId;
+
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'in_progress',
+        twilioCallSid: callSid || undefined,
+        elevenLabsConversationId: conversationId || undefined,
       });
 
       return { success: true, callId, twilioCallSid: callSid, conversationId };
@@ -545,6 +625,27 @@ SPECIAL STATUSES:
       });
     } catch (e: any) {
       console.error('Webhook dispatch failed (non-fatal):', e.message);
+    }
+
+    // If this call only reached the payer's IVR (per HUMAN HANDOFF in the
+    // agent prompt, it ends the call at the human-handoff point rather than
+    // waiting on hold) and this payer has a human-agent number configured,
+    // place a separate follow-up call to that number now. Guarded by
+    // parentCallId to prevent a follow-up call from ever triggering another
+    // follow-up call (it has no IVR to navigate, so this shouldn't happen,
+    // but the guard makes that structurally impossible either way).
+    if (extraction.claimStatus === 'ivr_only' && !callRow?.parentCallId) {
+      const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
+      if (humanAgentNumber && humanAgentNumber.trim()) {
+        try {
+          await ctx.runAction(api.callActions.initiateHumanAgentCall, {
+            claimId: args.claimId,
+            parentCallId: args.callId,
+          });
+        } catch (e: any) {
+          console.error('Human-agent follow-up call failed (non-fatal):', e.message);
+        }
+      }
     }
 
     return extraction;

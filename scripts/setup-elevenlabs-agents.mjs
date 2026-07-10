@@ -13,6 +13,9 @@
 //   - transfer_to_human(reason)
 //   - hold_check()
 //   - play_keypad_touch_tone(digits)
+//   - transfer_to_number(phone_number) — live call handoff to a payer's
+//     human-agent line (insuranceContacts.humanAgentNumber), independent of
+//     transfer_to_human which escalates to a Cadence operator.
 //
 // Usage:
 //   # Create new agents (default mode):
@@ -158,6 +161,14 @@ const SHARED_TOOLS = [
       required: ['digits'],
     },
   },
+  // transfer_to_number intentionally NOT defined here. ElevenLabs "system"
+  // tools are fixed built-in types with their own specific `params` shape
+  // (confirmed by inspecting the live agent's play_keypad_touch_tone tool —
+  // it's `params: { system_tool_type: '...', ...tool-specific fields }`, not
+  // an open JSON-schema function like webhook tools use). Guessing that shape
+  // via trial and error against a live agent is unsafe. Add "Transfer to
+  // Number" through the ElevenLabs dashboard UI instead — it has a proper
+  // form for this tool and will get the schema right automatically.
   {
     type: 'webhook',
     name: 'next_patient',
@@ -289,14 +300,48 @@ async function createAgent(apiKey, def) {
   return json.agent_id || json.id;
 }
 
+async function getAgent(apiKey, agentId) {
+  const res = await fetch(`${API_BASE}/convai/agents/${agentId}`, {
+    headers: { 'xi-api-key': apiKey },
+  });
+  if (!res.ok) {
+    throw new Error(`Fetch failed for agent ${agentId} (${res.status}): ${await res.text()}`);
+  }
+  return res.json();
+}
+
+// updateAgent is deliberately surgical: it fetches the agent's CURRENT config
+// and ONLY changes prompt.prompt — the tools array is left completely
+// untouched. Round-tripping tools through GET→PATCH failed validation (even
+// for an already-working tool), which means ElevenLabs' write schema differs
+// from its read schema in ways this script doesn't know precisely. Rather
+// than guess and risk corrupting a working tool config, tool changes
+// (including adding transfer_to_number) should be done via the ElevenLabs
+// dashboard UI directly.
 async function updateAgent(apiKey, agentId, def) {
+  const existing = await getAgent(apiKey, agentId);
+
+  const body = {
+    conversation_config: {
+      ...existing.conversation_config,
+      agent: {
+        ...existing.conversation_config.agent,
+        prompt: {
+          ...existing.conversation_config.agent.prompt,
+          prompt: def.prompt,
+        },
+      },
+    },
+  };
+  delete body.conversation_config.agent.prompt.tools;
+
   const res = await fetch(`${API_BASE}/convai/agents/${agentId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
       'xi-api-key': apiKey,
     },
-    body: JSON.stringify(buildAgentBody(def)),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     throw new Error(

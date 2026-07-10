@@ -1,6 +1,7 @@
 import { httpRouter } from 'convex/server';
 import { httpAction } from './_generated/server';
 import { api, internal } from './_generated/api';
+import { extractHandoffDetected } from './callActions';
 
 const MAX_HOLD_ATTEMPTS = 30; // 30 × 60s = 30 minutes max hold
 const API_VERSION = '1.0.0';
@@ -579,6 +580,7 @@ http.route({
             claimId,
             transcript,
             userId,
+            handoffDetected: extractHandoffDetected(Array.isArray(transcriptArr) ? transcriptArr : []),
           });
         } catch (analysisError: any) {
           console.error('Transcript analysis failed:', analysisError.message);

@@ -4,6 +4,32 @@ import { api, internal } from './_generated/api';
 import { classifyMedicalCallOutcome } from './outcomeClassifier';
 import { buildIvrInstructionsVar } from './prompts/index';
 
+// Ground-truth signal for "the agent deliberately ended the call because a
+// human was actively about to join" — NOT a generic ivr_only classification,
+// which is also true when the payer's IVR itself closes/rejects the call
+// (closed hours, invalid credentials) with no human ever becoming available.
+// The prompt (see HUMAN HANDOFF in medicalClaim.ts) instructs the agent to
+// use this EXACT reason string only for a genuine handoff; any other end_call
+// reason (including other ivr_only endings) does not match.
+const HANDOFF_REASON = 'ivr_human_handoff_detected';
+
+export function extractHandoffDetected(elTranscript: any[]): boolean {
+  for (const t of elTranscript || []) {
+    const calls = (t.tool_calls || []).filter(
+      (tc: any) => tc.tool_has_been_called && tc.tool_name === 'end_call'
+    );
+    for (const c of calls) {
+      try {
+        const params = JSON.parse(c.params_as_json);
+        if (params.reason === HANDOFF_REASON) return true;
+      } catch {
+        // ignore malformed params
+      }
+    }
+  }
+  return false;
+}
+
 export const initiateCall = action({
   args: {
     claimId: v.id('claims'),
@@ -213,9 +239,10 @@ export const initiateCall = action({
 });
 
 // Follow-up call placed after a call to the real payer number ends with
-// claimStatus "ivr_only" (agent navigated the IVR, then ended the call at
-// the human-handoff point per HUMAN HANDOFF in the medical claim prompt,
-// instead of waiting on hold). Dials the payer's humanAgentNumber directly —
+// handoffDetected=true (agent navigated the IVR, then deliberately ended the
+// call at a genuine human-handoff point per HUMAN HANDOFF in the medical
+// claim prompt, instead of waiting on hold — see extractHandoffDetected
+// above). Dials the payer's humanAgentNumber directly —
 // same agent, same static prompt, just different dynamic-variable data:
 // ivr_instructions tells it there's no IVR on this leg, and human_agent_number
 // is "N/A" so it doesn't try to end the call again looking for a handoff cue.
@@ -445,6 +472,11 @@ export const analyzeTranscript = action({
     claimId: v.id('claims'),
     transcript: v.string(),
     userId: v.string(),
+    // True only when extractHandoffDetected() found the exact
+    // 'ivr_human_handoff_detected' end_call reason — see that function's
+    // comment. Optional for backward compatibility with any caller that
+    // hasn't been updated to pass it; defaults to false (no follow-up call).
+    handoffDetected: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -627,14 +659,16 @@ SPECIAL STATUSES:
       console.error('Webhook dispatch failed (non-fatal):', e.message);
     }
 
-    // If this call only reached the payer's IVR (per HUMAN HANDOFF in the
-    // agent prompt, it ends the call at the human-handoff point rather than
-    // waiting on hold) and this payer has a human-agent number configured,
-    // place a separate follow-up call to that number now. Guarded by
-    // parentCallId to prevent a follow-up call from ever triggering another
-    // follow-up call (it has no IVR to navigate, so this shouldn't happen,
-    // but the guard makes that structurally impossible either way).
-    if (extraction.claimStatus === 'ivr_only' && !callRow?.parentCallId) {
+    // Place a follow-up call to the payer's human-agent number ONLY when the
+    // agent deliberately ended the call at a genuine human-handoff point (see
+    // extractHandoffDetected/HANDOFF_REASON above) — NOT just because the
+    // transcript classifier said "ivr_only". Those are different things: a
+    // payer's IVR can also end the call itself (closed hours, invalid
+    // credentials, rejection) with no human ever becoming available, which
+    // also looks like "ivr_only" to the classifier but must NOT trigger a
+    // follow-up call. Guarded by parentCallId so a follow-up call can never
+    // trigger another follow-up call.
+    if (args.handoffDetected && !callRow?.parentCallId) {
       const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
       if (humanAgentNumber && humanAgentNumber.trim()) {
         try {
@@ -747,6 +781,7 @@ export const getCallStatus = action({
                   claimId: args.claimId,
                   transcript: transcriptStr,
                   userId: call.userId,
+                  handoffDetected: extractHandoffDetected(data.transcript || []),
                 });
               } catch (analysisErr: any) {
                 console.error('Transcript analysis failed:', analysisErr.message);
@@ -837,6 +872,7 @@ export const endCall = action({
     // 3. Fetch transcript from ElevenLabs (wait 3s for it to finalize)
     let transcriptStr = '';
     let duration: number | undefined;
+    let handoffDetected = false;
 
     if (call.elevenLabsConversationId && ELEVENLABS_API_KEY) {
       await new Promise(r => setTimeout(r, 3000));
@@ -848,6 +884,7 @@ export const endCall = action({
         if (res.ok) {
           const data = await res.json();
           duration = data.metadata?.call_duration_secs;
+          handoffDetected = extractHandoffDetected(data.transcript || []);
 
           transcriptStr = (data.transcript || [])
             .map((t: any) => {
@@ -898,6 +935,7 @@ export const endCall = action({
             callId: args.callId,
             claimId: call.claimId,
             transcript: transcriptStr,
+            handoffDetected,
             userId: call.userId,
           });
         } else if (call.dentalCaseId) {

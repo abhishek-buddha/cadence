@@ -30,7 +30,12 @@ music, or otherwise signals a human handoff — do ALL of the following immediat
   2. Do NOT use the transfer_to_human tool.
   3. Do NOT attempt to collect any claim, benefit, or eligibility information, and
      do NOT mark any field unavailable.
-  4. Call end_call right away to hang up.
+  4. Call end_call right away to hang up, with reason set to EXACTLY this string
+     and nothing else: "ivr_human_handoff_detected". The backend keys on this
+     exact reason to place the separate follow-up call to the human-agent number,
+     so do not vary the wording. Use this reason ONLY for a genuine human handoff
+     — if the IVR itself ends the call (closed hours, "call back later", invalid
+     credentials), use a normal descriptive reason instead.
 
 In short: navigate the menus, reach the point where a human would pick up, and
 end the call at that moment. Do not proceed into a conversation with a human.

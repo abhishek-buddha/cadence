@@ -216,7 +216,11 @@ export default function InsuranceDirectory() {
       const payload = {
         name: form.name,
         phone: form.phone,
-        humanAgentNumber: form.humanAgentNumber || undefined,
+        // Send the raw value (empty string when cleared) rather than undefined:
+        // the update mutation skips undefined fields, so `|| undefined` made it
+        // impossible to CLEAR a saved number. "" is written and reads as "no
+        // number" everywhere (follow-up guard + prompt both treat it as unset).
+        humanAgentNumber: form.humanAgentNumber,
         department: form.department || undefined,
         payerId: form.payerId || undefined,
         payerKind: form.payerKind || undefined,

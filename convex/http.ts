@@ -343,12 +343,13 @@ http.route({
     try {
       const call = await ctx.runQuery(api.calls.getById, { id: callId as any });
       if (call && (call.status === 'in_progress' || call.status === 'initiating')) {
-        console.log(`[call-ended] Marking call ${callId} as completed (was ${call.status})`);
-        await ctx.runMutation(api.calls.updateStatus, {
-          id: callId as any,
-          status: 'completed',
-          completedAt: new Date().toISOString(),
-        });
+        console.log(`[call-ended] Running end-of-call flow for ${callId} (was ${call.status})`);
+        // Run the full end-of-call flow, not just a status flip: endCall fetches
+        // the transcript, computes handoffDetected, and runs analyzeTranscript —
+        // which places the human-handoff follow-up call. A bare status update
+        // here would flip the call to "completed" and make the frontend poll skip
+        // analysis, so a natural hang-up would never trigger the follow-up.
+        await ctx.runAction(api.callActions.endCall, { callId: callId as any });
       }
     } catch (e: any) {
       console.error(`[call-ended] Error:`, e.message);

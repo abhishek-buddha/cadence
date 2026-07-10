@@ -179,6 +179,10 @@ export default defineSchema({
     // Retry tracking
     parentCallId: v.optional(v.id('calls')),
     attemptNumber: v.optional(v.number()),
+    // Set atomically (once) when the IVR human-handoff follow-up call has been
+    // claimed, so concurrent completion paths (poll / call-ended / webhook)
+    // can't each place a duplicate call to the human-agent number.
+    handoffFollowUpAt: v.optional(v.string()),
     userId: v.string(),
     startedAt: v.string(),
     completedAt: v.optional(v.string()),

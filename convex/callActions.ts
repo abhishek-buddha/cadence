@@ -671,13 +671,20 @@ SPECIAL STATUSES:
     if (args.handoffDetected && !callRow?.parentCallId) {
       const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
       if (humanAgentNumber && humanAgentNumber.trim()) {
-        try {
-          await ctx.runAction(api.callActions.initiateHumanAgentCall, {
-            claimId: args.claimId,
-            parentCallId: args.callId,
-          });
-        } catch (e: any) {
-          console.error('Human-agent follow-up call failed (non-fatal):', e.message);
+        // Atomically claim the follow-up so concurrent completion paths can't
+        // each dial the human number for the same call.
+        const claimed = await ctx.runMutation(internal.callActions.claimHandoffFollowUp, {
+          callId: args.callId,
+        });
+        if (claimed) {
+          try {
+            await ctx.runAction(api.callActions.initiateHumanAgentCall, {
+              claimId: args.claimId,
+              parentCallId: args.callId,
+            });
+          } catch (e: any) {
+            console.error('Human-agent follow-up call failed (non-fatal):', e.message);
+          }
         }
       }
     }
@@ -702,6 +709,23 @@ export const patchCallOutcome = internalMutation({
       missingFields: args.missingFields,
       outcomeReason: args.outcomeReason,
     });
+  },
+});
+
+// Atomically claim the right to place the human-handoff follow-up call for this
+// call. Convex serializes mutations per document, so exactly one concurrent
+// caller sees handoffFollowUpAt unset and returns true; every other caller
+// returns false. This prevents duplicate calls to the human-agent number when
+// more than one completion path (frontend poll, bridge /call-ended, post-call
+// webhook) analyzes the same conversation.
+export const claimHandoffFollowUp = internalMutation({
+  args: { callId: v.id('calls') },
+  handler: async (ctx, args): Promise<boolean> => {
+    const call = await ctx.db.get(args.callId);
+    if (!call) return false;
+    if (call.handoffFollowUpAt) return false;
+    await ctx.db.patch(args.callId, { handoffFollowUpAt: new Date().toISOString() });
+    return true;
   },
 });
 

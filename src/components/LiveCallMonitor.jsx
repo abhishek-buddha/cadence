@@ -334,9 +334,17 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
           </div>
           <div>
             <p className="text-sm font-display font-semibold text-gray-900">
-              {isCompleted ? 'Call Completed' : 'Call in Progress'}
+              {isCompleted
+                ? 'Call Completed'
+                : call?.parentCallId
+                  ? 'Human Agent Call in Progress'
+                  : 'Call in Progress'}
             </p>
-            <p className="text-xs text-muted">{insurance?.name || 'Insurance'} — AI agent handling the call</p>
+            <p className="text-xs text-muted">
+              {call?.parentCallId
+                ? `${insurance?.name || 'Insurance'} — connected to human agent`
+                : `${insurance?.name || 'Insurance'} — AI agent handling the call`}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -357,6 +365,17 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
           )}
         </div>
       </div>
+
+      {/* B: IVR human-handoff detected — connecting to the live-agent follow-up call */}
+      {isCompleted && call?.handoffFollowUpAt && !call?.parentCallId && (
+        <div className="bg-accent/5 border border-accent/20 rounded-lg px-4 py-3 flex items-center gap-3">
+          <Loader2 className="w-4 h-4 text-accent animate-spin" />
+          <div>
+            <p className="text-sm font-medium text-gray-900">Handoff detected — connecting you to a human agent…</p>
+            <p className="text-xs text-muted">Placing a call to {insurance?.humanAgentNumber || 'the human-agent number'}.</p>
+          </div>
+        </div>
+      )}
 
       {/* Audio player */}
       {!isCompleted && (

@@ -659,16 +659,16 @@ SPECIAL STATUSES:
       console.error('Webhook dispatch failed (non-fatal):', e.message);
     }
 
-    // Place a follow-up call to the payer's human-agent number ONLY when the
-    // agent deliberately ended the call at a genuine human-handoff point (see
-    // extractHandoffDetected/HANDOFF_REASON above) — NOT just because the
-    // transcript classifier said "ivr_only". Those are different things: a
-    // payer's IVR can also end the call itself (closed hours, invalid
-    // credentials, rejection) with no human ever becoming available, which
-    // also looks like "ivr_only" to the classifier but must NOT trigger a
-    // follow-up call. Guarded by parentCallId so a follow-up call can never
-    // trigger another follow-up call.
-    if (args.handoffDetected && !callRow?.parentCallId) {
+    // After any call to this payer ends — regardless of whether our agent ended
+    // it at the handoff or the payer's IVR/rep ended it — place exactly one
+    // follow-up call to the payer's human-agent number if one is configured. If
+    // no number is set, nothing happens (the conversation is simply done).
+    // handoffDetected is no longer required to gate this: our agent doesn't
+    // always succeed in ending at the handoff (a rep can pick up first), and we
+    // must not miss the follow-up in that case. Guarded by parentCallId (a
+    // follow-up call can never spawn another) and the atomic handoffFollowUpAt
+    // claim (racing completion paths dial the number only once).
+    if (!callRow?.parentCallId) {
       const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
       if (humanAgentNumber && humanAgentNumber.trim()) {
         // Atomically claim the follow-up so concurrent completion paths can't

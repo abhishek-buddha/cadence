@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { Building2, Plus, Pencil, Trash2, Phone, X, Grid3x3, ShieldCheck, ShieldAlert, ShieldQuestion } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, Phone, X, Grid3x3, ShieldCheck, ShieldAlert, ShieldQuestion, Upload } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import BulkImportInsuranceModal from '../components/BulkImportInsuranceModal';
 
 const STALE_AFTER_DAYS = 90;
 const WARN_AFTER_DAYS = 30;
@@ -72,6 +73,7 @@ export default function InsuranceDirectory() {
   const generatePlaybook = useAction(api.insuranceContacts.generatePlaybookFromTranscript);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -113,7 +115,10 @@ export default function InsuranceDirectory() {
       ivrVerifiedAt: contact.ivrVerifiedAt ?? null,
     });
     originalIvrKeyRef.current = ivrConfigKey(contact.ivrInstructions, contact.ivrSteps, contact.voiceIvrPhrases);
-    setTranscriptInput(contact.ivrSourceTranscript ?? '');
+    // Start the transcript box empty — the playbook may already be filled (e.g.
+    // from a bulk upload). The "Generate playbook" button stays disabled until
+    // the user actually pastes a new transcript here.
+    setTranscriptInput('');
     setGenError(null);
     setModalOpen(true);
   }
@@ -275,10 +280,16 @@ export default function InsuranceDirectory() {
             {contacts ? `${contacts.length} contact${contacts.length !== 1 ? 's' : ''}` : 'Loading...'}
           </p>
         </div>
-        <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
-          <Plus className="w-4 h-4" />
-          Add Insurance
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setImportOpen(true)} className="px-4 py-2.5 bg-white border border-border text-gray-700 hover:bg-gray-50 rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
+            <Upload className="w-4 h-4" />
+            Upload Workbook
+          </button>
+          <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
+            <Plus className="w-4 h-4" />
+            Add Insurance
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -384,6 +395,8 @@ export default function InsuranceDirectory() {
       )}
 
       {/* Add/Edit Modal */}
+      <BulkImportInsuranceModal open={importOpen} onClose={() => setImportOpen(false)} />
+
       <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Insurance Contact' : 'Add Insurance Contact'} wide>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">

@@ -682,9 +682,23 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
     const callId = url.searchParams.get('callId');
+    // handoff=1 → the AI media stream closed because Cadence redirected the
+    // payer leg into the conference to drop the AI (Option-1 handoff in
+    // progress). This is NOT the end of the call — the payer↔human conversation
+    // continues in the conference. Do NOT run the end-of-call flow (that would
+    // mark it completed and place the legacy follow-up call).
+    const isHandoff = url.searchParams.get('handoff') === '1';
 
     if (!callId) {
       return new Response(JSON.stringify({ error: 'Missing callId' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (isHandoff) {
+      console.log(`[call-ended] AI stream closed for HANDOFF on ${callId} — not ending the call.`);
+      return new Response(JSON.stringify({ success: true, handoff: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

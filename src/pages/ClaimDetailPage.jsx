@@ -306,6 +306,10 @@ export default function ClaimDetailPage() {
     });
   };
 
+  // Derived — there's no stored "insurance active" field for medical claims (only
+  // dental EV cases track this via evResults). Best-effort from what we do know.
+  const insuranceActiveLabel = claim.status === 'denied' ? 'No' : latestResult ? 'Yes' : 'Unknown';
+
   // ---- Call handler -------------------------------------------------------
   const handleCallInsurance = async () => {
     if (callState === 'calling' || callState === 'in_progress') return;
@@ -369,23 +373,30 @@ export default function ClaimDetailPage() {
       {/* ------------------------------------------------------------------ */}
       {/* TOP BAR                                                             */}
       {/* ------------------------------------------------------------------ */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-start gap-4 flex-wrap">
         <button
           onClick={() => navigate('/claims')}
-          className="p-2 rounded-lg bg-white border border-border hover:border-border-light text-muted hover:text-gray-900 transition-all shadow-sm"
+          className="p-2 rounded-lg bg-white border border-border hover:border-border-light text-muted hover:text-gray-900 transition-all shadow-sm shrink-0"
           aria-label="Back to claims"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="font-data text-xl text-gray-900 tracking-tight">{claim.claimNumber}</h1>
-          <StatusBadge status={claim.status} size="lg" />
-          <PriorityBadge priority={claim.priority} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="font-data text-xl text-gray-900 tracking-tight">{claim.claimNumber}</h1>
+            <StatusBadge status={claim.status} size="lg" />
+            <PriorityBadge priority={claim.priority} />
+          </div>
+          <p className="text-sm text-muted mt-1 truncate">
+            {patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown patient'}
+            {insurance?.name && <> · {insurance.name}</>}
+            {claim.cptCodes?.length > 0 && <> · <span className="font-data">{claim.cptCodes.join(', ')}</span></>}
+          </p>
         </div>
 
         {claim.agingBucket && (
-          <span className="ml-auto text-xs font-data text-muted bg-surface px-3 py-1 rounded-full border border-border">
+          <span className="text-xs font-data text-muted bg-surface px-3 py-1 rounded-full border border-border shrink-0">
             <Clock className="w-3 h-3 inline mr-1.5" />
             {claim.agingBucket}
           </span>
@@ -465,6 +476,7 @@ export default function ClaimDetailPage() {
             <InfoField label="Amount" value={formatAmount(claim.amount)} mono />
             <InfoField label="Date of Service" value={formatDate(claim.dateOfService)} />
             <InfoField label="Date Submitted" value={formatDate(claim.dateSubmitted)} />
+            <InfoField label="Insurance Active" value={insuranceActiveLabel} />
             <InfoField label="CPT Codes" value={claim.cptCodes?.join(', ')} mono />
             <InfoField label="Diagnosis Codes" value={claim.diagnosisCodes?.join(', ')} mono />
             <InfoField label="Aging Bucket" value={claim.agingBucket} />

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Database, Users, Building2, Stethoscope } from 'lucide-react';
+import { Users, Building2, Stethoscope } from 'lucide-react';
 import PatientsPage from './PatientsPage';
 import InsuranceDirectory from './InsuranceDirectory';
 import ProvidersPage from './ProvidersPage';
@@ -15,12 +15,7 @@ export default function MasterDataPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-accent font-semibold mb-3">
-        <Database className="w-3.5 h-3.5" />
-        <span>Master Data</span>
-      </div>
-
-      {/* Sub-tabs */}
+      {/* Sub-tabs — Patients / Insurance / Providers have no sidebar equivalent, kept here */}
       <div className="bg-white border border-border rounded-xl shadow-sm">
         <div className="border-b border-border flex items-center gap-1 px-4">
           {TABS.map((tab) => {

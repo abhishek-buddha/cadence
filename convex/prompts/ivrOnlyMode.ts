@@ -8,12 +8,12 @@
 //
 // TWO handoff modes are supported (chosen by which is configured):
 //
-//   (A) LIVE TRANSFER (cadence_pro_ivr, preferred): the AI calls the
-//       transfer_to_number system tool (Conference type) to bridge OUR bridge
-//       number into the SAME call with the insurance rep, then drops itself.
-//       Our bridge number parks the rep and broadcasts the call to our agent
-//       pool; one of our humans takes it over in the browser. Use this whenever
-//       a bridge number ({{bridge_number}}) is provided.
+//   (A) LIVE UI HANDOFF (cadence_pro_ivr, preferred): Cadence owns the payer
+//       Twilio leg and the bridge watches the payer transcript. After a real
+//       insurance representative answers, the AI stays silent. The bridge fires
+//       Convex /twilio-request-handoff, the UI broadcasts to our agents, and
+//       when a Cadence user accepts, Convex redirects the payer leg into a
+//       conference. That redirect closes the AI stream and drops the AI.
 //
 //   (B) LEGACY SEPARATE FOLLOW-UP: the AI calls end_call with the exact reason
 //       "ivr_human_handoff_detected"; the backend then places a SEPARATE
@@ -61,10 +61,10 @@ When a real human has answered, do the following immediately:
   2. HAND OFF THE CALL:
 
      - IF a bridge number is configured (bridge_number = "{{bridge_number}}"
-       and it is not empty or "N/A"): call the transfer_to_number tool to
-       transfer to {{bridge_number}} using the Conference transfer type. In the
-       client_message say briefly: "One moment please, connecting you now."
-       Set the reason to "ivr_human_handoff_detected".
+       and it is not empty or "N/A"): stay completely silent. Do NOT call
+       end_call. Do NOT call transfer_to_number. The Cadence bridge detects the
+       real human's speech, broadcasts the handoff to the UI, and drops you only
+       after a Cadence user accepts the call.
 
      - OTHERWISE (no bridge number): call end_call right away with reason set to
        EXACTLY this string and nothing else: "ivr_human_handoff_detected". The

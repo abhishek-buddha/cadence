@@ -174,9 +174,9 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   // audio close to now; if packets arrive in bursts, drop stale buffered audio
   // instead of playing an increasingly delayed backlog.
   useEffect(() => {
-    const FRAME = 640; // 80ms @ 8kHz
-    const MAX_QUEUE = 3200; // 400ms buffered audio cap
-    const MAX_LEAD_SECONDS = 0.16;
+    const FRAME = 320; // 40ms @ 8kHz
+    const MAX_QUEUE = 8000; // 1s hard live buffer cap
+    const MAX_LEAD_SECONDS = 0.3;
 
     playIntervalRef.current = setInterval(() => {
       if (mutedRef.current) return;
@@ -193,8 +193,8 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       const now = ctx.currentTime;
       if (nextPlayTimeRef.current < now || nextPlayTimeRef.current > now + MAX_LEAD_SECONDS) {
         nextPlayTimeRef.current = now + 0.005;
-        if (queue.length > FRAME * 2) {
-          queue.splice(0, queue.length - FRAME * 2);
+        if (queue.length > FRAME * 4) {
+          queue.splice(0, queue.length - FRAME * 4);
         }
       }
 
@@ -207,7 +207,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       source.connect(ctx.destination);
       source.start(nextPlayTimeRef.current);
       nextPlayTimeRef.current += buffer.duration;
-    }, 80);
+    }, 20);
 
     return () => {
       clearInterval(playIntervalRef.current);
@@ -244,41 +244,13 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
             for (let i = 0; i < binary.length; i++) {
               samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xFF];
             }
+            // Live monitor audio is already time-ordered by the bridge. Playing
+            // chunks in arrival order avoids choppy gaps from waiting for a
+            // matching opposite track that may never arrive.
+            audioQueueRef.current.push(...samples);
 
-            // Route to separate queues by track, then mix
-            const track = data.media.track;
-            if (track === 'outbound') {
-              outboundQueueRef.current.push(...samples);
-            } else {
-              inboundQueueRef.current.push(...samples);
-            }
-
-            // Mix both tracks into the playback queue
-            const inQ = inboundQueueRef.current;
-            const outQ = outboundQueueRef.current;
-            const mixLen = Math.min(inQ.length, outQ.length);
-            if (mixLen > 0) {
-              const inSamples = inQ.splice(0, mixLen);
-              const outSamples = outQ.splice(0, mixLen);
-              for (let i = 0; i < mixLen; i++) {
-                audioQueueRef.current.push(Math.max(-1, Math.min(1, inSamples[i] + outSamples[i])));
-              }
-            }
-            // Flush solo tracks after small buffer (480 samples = 60ms)
-            // This allows time for the other track to arrive for proper mixing
-            // without the old 2000-sample (250ms) delay
-            if (inQ.length > 480 && outQ.length === 0) {
-              const solo = inQ.splice(0, inQ.length);
-              for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
-            }
-            if (outQ.length > 480 && inQ.length === 0) {
-              const solo = outQ.splice(0, outQ.length);
-              for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
-            }
-
-            // Overflow protection on mixed queue
-            if (audioQueueRef.current.length > 4800) {
-              audioQueueRef.current.splice(0, audioQueueRef.current.length - 1600);
+            if (audioQueueRef.current.length > 12000) {
+              audioQueueRef.current.splice(0, audioQueueRef.current.length - 4000);
               nextPlayTimeRef.current = 0;
             }
           }

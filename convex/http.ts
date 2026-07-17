@@ -112,11 +112,6 @@ http.route({
 
     return twimlResponse(`
       <Response>
-        <Start>
-          <Stream url="${BRIDGE_URL}/monitor" track="both_tracks">
-            <Parameter name="callId" value="${callId}"/>
-          </Stream>
-        </Start>
         <Connect>
           <Stream url="${BRIDGE_URL}/media-stream">
             <Parameter name="callId" value="${callId}"/>
@@ -141,11 +136,6 @@ http.route({
 
     return twimlResponse(`
       <Response>
-        <Start>
-          <Stream url="${BRIDGE_URL}/monitor" track="both_tracks">
-            <Parameter name="callId" value="${callId}"/>
-          </Stream>
-        </Start>
         <Connect>
           <Stream url="${BRIDGE_URL}/media-stream">
             <Parameter name="callId" value="${callId}"/>
@@ -212,11 +202,6 @@ http.route({
 
     return twimlResponse(`
       <Response>
-        <Start>
-          <Stream url="${BRIDGE_URL}/monitor" track="both_tracks">
-            <Parameter name="callId" value="${callId}"/>
-          </Stream>
-        </Start>
         <Gather input="speech" timeout="55" speechTimeout="3" action="${connectUrl}" method="POST">
           <Pause length="55"/>
         </Gather>

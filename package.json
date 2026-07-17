@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "convex:dev": "npx convex dev",
     "convex:deploy": "npx convex deploy",
+    "deploy:backend": "bash scripts/deploy-backend.sh",
+    "deploy:frontend": "bash scripts/redeploy-frontend.sh",
     "convex:clean": "npx convex run devSeed:cleanTestData",
     "test": "playwright test --config=tests/playwright.config.ts",
     "test:smoke": "playwright test --config=tests/playwright.config.ts tests/smoke",

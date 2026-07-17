@@ -162,28 +162,58 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [effectiveTranscript.length]);
 
-  // Audio player — smooth playback with upsample to native rate
+  // Audio player — jitter-buffered playback with upsample to native rate.
+  //
+  // The bridge delivers 8kHz mu-law chunks over a WebSocket whose arrival is
+  // bursty (the console showed queueSize swinging 0 → 6400): naive "play
+  // whatever is queued every 80ms" starves and floods, which is heard as
+  // choppy/glitchy audio. Fix: a proper jitter buffer —
+  //   • hold a lead-in (PREBUFFER) before starting playback,
+  //   • schedule fixed-size frames strictly back-to-back (nextPlayTime),
+  //   • on underrun, DON'T emit a short/garbled buffer — wait and re-prime so
+  //     the next frame starts cleanly instead of clicking.
   useEffect(() => {
+    const FRAME = 800;        // 100ms @ 8kHz — fixed frame size for even pacing
+    const PREBUFFER = 2400;   // 300ms lead-in before playback starts / after underrun
+    let priming = true;       // true until we've accumulated PREBUFFER once
+
     playIntervalRef.current = setInterval(() => {
       if (mutedRef.current) return;
       const ctx = audioCtxRef.current;
       if (!ctx || ctx.state !== 'running') return;
       const queue = audioQueueRef.current;
-      if (queue.length < 640) return;
 
-      const chunkSize = Math.min(queue.length, 1600);
-      const raw = new Float32Array(queue.splice(0, chunkSize));
-      const upsampled = upsample8kTo(raw, ctx.sampleRate);
-      const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
-      buffer.getChannelData(0).set(upsampled);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      const now = ctx.currentTime;
-      const startAt = Math.max(now + 0.005, nextPlayTimeRef.current);
-      source.start(startAt);
-      nextPlayTimeRef.current = startAt + buffer.duration;
-    }, 80);
+      // (Re)prime: wait for a healthy lead-in before (re)starting playback.
+      if (priming) {
+        if (queue.length < PREBUFFER) return;
+        priming = false;
+        nextPlayTimeRef.current = ctx.currentTime + 0.06; // small scheduling margin
+      }
+
+      // Underrun: not enough for a full frame → stop, re-prime, avoid a click.
+      if (queue.length < FRAME) {
+        priming = true;
+        return;
+      }
+
+      // Emit as many whole frames as are buffered, scheduled contiguously.
+      while (queue.length >= FRAME) {
+        const raw = new Float32Array(queue.splice(0, FRAME));
+        const upsampled = upsample8kTo(raw, ctx.sampleRate);
+        const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
+        buffer.getChannelData(0).set(upsampled);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        const now = ctx.currentTime;
+        // If we've fallen behind (scheduled time in the past), resync forward.
+        if (nextPlayTimeRef.current < now + 0.02) {
+          nextPlayTimeRef.current = now + 0.06;
+        }
+        source.start(nextPlayTimeRef.current);
+        nextPlayTimeRef.current += buffer.duration;
+      }
+    }, 50);
 
     return () => {
       clearInterval(playIntervalRef.current);
@@ -205,7 +235,6 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     let ws;
     let retryTimeout;
 
-    let wsMessageCount = 0;
     function connect() {
       ws = new WebSocket(`${BRIDGE_URL}/listen/${call._id}`);
       wsRef.current = ws;
@@ -216,10 +245,6 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
         try {
           const data = JSON.parse(event.data);
           if (data.event === 'audio' && data.media?.payload) {
-            wsMessageCount++;
-            if (wsMessageCount % 100 === 1) {
-              console.log(`[LiveCallMonitor] Audio chunk #${wsMessageCount}, track=${data.media.track}, muted=${mutedRef.current}, audioCtx=${audioCtxRef.current?.state}, queueSize=${audioQueueRef.current.length}`);
-            }
             const binary = atob(data.media.payload);
             const samples = new Array(binary.length);
             for (let i = 0; i < binary.length; i++) {

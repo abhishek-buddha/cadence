@@ -1,8 +1,28 @@
 import { useState, useRef, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { Building2, ChevronDown, Check } from 'lucide-react';
+import { Building2, ChevronDown, Check, UserCog, Database } from 'lucide-react';
 import { useProviderFilter } from '../context/ProviderFilterContext';
+
+function HeaderIconLink(props) {
+  const { to, icon: Icon, label } = props;
+  return (
+    <NavLink
+      to={to}
+      title={label}
+      className={({ isActive }) =>
+        `flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+          isActive
+            ? 'bg-accent/8 text-accent border-accent/20'
+            : 'text-gray-500 border-border-light hover:text-gray-800 hover:bg-gray-50'
+        }`
+      }
+    >
+      <Icon className="w-4 h-4 shrink-0" />
+      <span className="hidden md:inline">{label}</span>
+    </NavLink>
+  );
+}
 
 function HospitalDropdown() {
   const { selectedProviderId, setSelectedProviderId, providers, selectedProvider } = useProviderFilter();
@@ -82,6 +102,14 @@ export default function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-4 relative z-20">
+          {/* User Management / Master Data */}
+          <div className="flex items-center gap-2">
+            <HeaderIconLink to="/user-management" icon={UserCog} label="User Management" />
+            <HeaderIconLink to="/master-data" icon={Database} label="Master Data" />
+          </div>
+
+          <div className="w-px h-6 bg-border" />
+
           {/* Hospital selector */}
           <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider font-medium">

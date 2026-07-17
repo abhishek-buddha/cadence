@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx eslint *)",
+      "Bash(VITE_CONVEX_URL=https://rapid-pheasant-510.convex.cloud npm run build)"
+    ]
+  }
+}

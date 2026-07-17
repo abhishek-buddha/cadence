@@ -11,6 +11,7 @@
 import type * as apiKeys from "../apiKeys.js";
 import type * as auditEvents from "../auditEvents.js";
 import type * as callActions from "../callActions.js";
+import type * as callAgents from "../callAgents.js";
 import type * as callEvents from "../callEvents.js";
 import type * as callResults from "../callResults.js";
 import type * as callSessions from "../callSessions.js";
@@ -20,6 +21,7 @@ import type * as claims from "../claims.js";
 import type * as dashboard from "../dashboard.js";
 import type * as dentalCallActions from "../dentalCallActions.js";
 import type * as dentalCases from "../dentalCases.js";
+import type * as dentalImport from "../dentalImport.js";
 import type * as dentalPlans from "../dentalPlans.js";
 import type * as devSeed from "../devSeed.js";
 import type * as evResults from "../evResults.js";
@@ -49,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   apiKeys: typeof apiKeys;
   auditEvents: typeof auditEvents;
   callActions: typeof callActions;
+  callAgents: typeof callAgents;
   callEvents: typeof callEvents;
   callResults: typeof callResults;
   callSessions: typeof callSessions;
@@ -58,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   dashboard: typeof dashboard;
   dentalCallActions: typeof dentalCallActions;
   dentalCases: typeof dentalCases;
+  dentalImport: typeof dentalImport;
   dentalPlans: typeof dentalPlans;
   devSeed: typeof devSeed;
   evResults: typeof evResults;

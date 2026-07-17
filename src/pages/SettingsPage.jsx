@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import WebhooksPage from './WebhooksPage';
 import ApiKeysPage from './ApiKeysPage';
+import UsersPage from './UsersPage';
 
 function Section({ title, icon: Icon, children }) {
   return (
@@ -152,6 +153,13 @@ export default function SettingsPage() {
       <div className="pt-2 border-t border-border space-y-6">
         <WebhooksPage />
         <ApiKeysPage />
+      </div>
+
+      {/* App login/RBAC users — "User Management" in the header now means the
+          call-handling agents (CallAgentsPage); this is the original admin/manager/
+          viewer app-access list, kept here so it's still reachable. */}
+      <div className="pt-2 border-t border-border">
+        <UsersPage />
       </div>
     </div>
   );

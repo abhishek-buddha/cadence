@@ -364,4 +364,21 @@ export default defineSchema({
     userId: v.string(),
     createdAt: v.string(),
   }).index('by_userId', ['userId']),
+
+  // Human call-handling agents — picked up once the bot has an insurance rep
+  // on the line and warm-transfers the call. Drives Claim User Routing.
+  callAgents: defineTable({
+    name: v.string(),
+    username: v.string(),
+    role: v.string(), // "agent" | "supervisor"
+    status: v.string(), // "active" | "inactive"
+    specializations: v.array(v.string()), // "claim_manager" | "denial_handling" | "followup"
+    insuranceContactIds: v.array(v.id('insuranceContacts')),
+    availability: v.string(), // "available" | "busy" | "offline"
+    userId: v.string(),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index('by_userId', ['userId'])
+    .index('by_status', ['status']),
 });

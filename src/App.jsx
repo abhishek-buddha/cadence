@@ -24,6 +24,8 @@ import TransferDestinationsPage from './pages/TransferDestinationsPage';
 import ClaimUserRoutingPage from './pages/ClaimUserRoutingPage';
 import CallAuditPage from './pages/CallAuditPage';
 import MasterDataPage from './pages/MasterDataPage';
+import CallAgentsPage from './pages/CallAgentsPage';
+import DevConvexScope from './components/DevConvexScope';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(
@@ -48,14 +50,14 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="claims" element={<ClaimsPage />} />
               <Route path="claims/:id" element={<ClaimDetailPage />} />
-              <Route path="claim-routing" element={<ClaimUserRoutingPage />} />
+              <Route path="claim-routing" element={<DevConvexScope><ClaimUserRoutingPage /></DevConvexScope>} />
 
               <Route path="call-audit" element={<Navigate to="/call-audit/history" replace />} />
               <Route path="call-audit/history" element={<CallAuditPage />} />
               <Route path="call-audit/live" element={<CallAuditPage />} />
 
               <Route path="master-data" element={<MasterDataPage />} />
-              <Route path="user-management" element={<UsersPage />} />
+              <Route path="user-management" element={<DevConvexScope><CallAgentsPage /></DevConvexScope>} />
 
               <Route path="patients" element={<PatientsPage />} />
               <Route path="insurance" element={<InsuranceDirectory />} />

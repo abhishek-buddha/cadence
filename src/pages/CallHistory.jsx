@@ -268,6 +268,8 @@ function CallRow({ call }) {
   );
 }
 
+const ENDED_STATUSES = ['completed', 'failed'];
+
 export default function CallHistory() {
   const { selectedProviderId } = useProviderFilter();
   const allCalls = useQuery(api.calls.listRecent, { limit: 50 });
@@ -283,10 +285,13 @@ export default function CallHistory() {
     ? new Set(allClaims.filter((c) => c.providerId === selectedProviderId).map((c) => c._id))
     : null;
 
+  // Call History only covers ended calls — active calls live on the Live Sessions tab.
+  const endedCalls = (allCalls ?? []).filter((c) => ENDED_STATUSES.includes(c.status));
+
   // Filter calls by provider (through claims) and status
   const calls = selectedProviderId
-    ? (allCalls ?? []).filter((c) => providerClaimIds?.has(c.claimId))
-    : allCalls;
+    ? endedCalls.filter((c) => providerClaimIds?.has(c.claimId))
+    : endedCalls;
 
   const filteredCalls = calls
     ? calls
@@ -309,7 +314,7 @@ export default function CallHistory() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Call History</h1>
-          <p className="text-sm text-muted mt-1">All voice agent calls</p>
+          <p className="text-sm text-muted mt-1">Ended calls — in-progress calls are on Live Sessions</p>
         </div>
         <div className="flex items-center gap-3">
           <Clock className="w-4 h-4 text-muted" />
@@ -320,8 +325,6 @@ export default function CallHistory() {
               className={`${inputClass} custom-select appearance-none pr-8 w-44 cursor-pointer`}
             >
               <option value="all">All Statuses</option>
-              <option value="initiating">Initiating</option>
-              <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
               <option value="failed">Failed</option>
             </select>

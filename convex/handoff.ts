@@ -24,7 +24,7 @@
 //   awaiting_human | accepting | connected | declined | handoff_failed | handoff_ended
 // ---------------------------------------------------------------------------
 
-import { mutation, query, action, internalMutation } from './_generated/server';
+import { mutation, query, action, internalMutation, internalQuery } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 
@@ -288,6 +288,15 @@ export const saveRecording = internalMutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.callId, { recordingUrl: args.recordingUrl });
     await logEvent(ctx, args.callId, 'recording_ready', args.recordingUrl);
+  },
+});
+
+export const getRecordingForPlayback = internalQuery({
+  args: { callId: v.id('calls') },
+  handler: async (ctx, args) => {
+    const call = await ctx.db.get(args.callId);
+    if (!call?.recordingUrl) return null;
+    return { recordingUrl: call.recordingUrl };
   },
 });
 

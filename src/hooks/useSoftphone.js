@@ -27,6 +27,7 @@ export function useSoftphone() {
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
   const [activeCallId, setActiveCallId] = useState(null);
+  const [muted, setMuted] = useState(false);
   const deviceRef = useRef(null);
   const callRef = useRef(null);
   const DeviceCtorRef = useRef(null);
@@ -114,6 +115,7 @@ export function useSoftphone() {
       const device = await ensureDevice();
       if (!device) return { ok: false, error: 'softphone_unconfigured' };
       setStatus('connecting');
+      setMuted(false);
       try {
         const call = await device.connect({ params: { callId } });
         callRef.current = call;
@@ -142,18 +144,21 @@ export function useSoftphone() {
             setStatus('ready');
             setActiveCallId(null);
             callRef.current = null;
+            setMuted(false);
             settle({ ok: false, error: 'softphone_disconnected_before_accept' });
           });
           call.on('cancel', () => {
             setStatus('ready');
             setActiveCallId(null);
             callRef.current = null;
+            setMuted(false);
             settle({ ok: false, error: 'softphone_cancelled' });
           });
           call.on('error', (e) => {
             const message = e?.message || 'Call error';
             setError(message);
             setStatus('error');
+            setMuted(false);
             settle({ ok: false, error: message });
           });
         });
@@ -161,6 +166,7 @@ export function useSoftphone() {
         const message = e?.message || String(e);
         setError(message);
         setStatus('error');
+        setMuted(false);
         return { ok: false, error: message };
       }
     },
@@ -175,8 +181,23 @@ export function useSoftphone() {
     }
     callRef.current = null;
     setActiveCallId(null);
+    setMuted(false);
     if (status === 'on_call' || status === 'connecting') setStatus('ready');
   }, [status]);
 
-  return { status, error, activeCallId, ensureDevice, connect, disconnect };
+  const toggleMute = useCallback(() => {
+    const call = callRef.current;
+    if (!call || status !== 'on_call') return false;
+    const nextMuted = !muted;
+    try {
+      call.mute?.(nextMuted);
+      setMuted(nextMuted);
+      return true;
+    } catch (e) {
+      setError(e?.message || 'Could not change microphone mute');
+      return false;
+    }
+  }, [muted, status]);
+
+  return { status, error, activeCallId, muted, ensureDevice, connect, disconnect, toggleMute };
 }

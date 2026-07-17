@@ -565,6 +565,48 @@ http.route({
   }),
 });
 
+// Browser playback proxy for Twilio recordings. Twilio media URLs require Basic
+// Auth, so the UI points here and Convex fetches the MP3 with server-side creds.
+http.route({
+  path: '/twilio-recording-media',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const callId = url.searchParams.get('callId') || '';
+      if (!callId) return new Response('Missing callId', { status: 400 });
+
+      const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+      const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+      if (!ACCOUNT_SID || !AUTH_TOKEN) return new Response('Twilio auth not configured', { status: 503 });
+
+      const recording = await ctx.runQuery(internal.handoff.getRecordingForPlayback, { callId: callId as any });
+      if (!recording?.recordingUrl) return new Response('Recording not found', { status: 404 });
+
+      const recordingUrl = new URL(recording.recordingUrl);
+      if (recordingUrl.protocol !== 'https:' || !recordingUrl.hostname.endsWith('twilio.com')) {
+        return new Response('Invalid recording URL', { status: 400 });
+      }
+
+      const twilioRes = await fetch(recordingUrl.toString(), {
+        headers: { Authorization: `Basic ${btoa(`${ACCOUNT_SID}:${AUTH_TOKEN}`)}` },
+      });
+      if (!twilioRes.ok) return new Response('Recording fetch failed', { status: twilioRes.status });
+
+      return new Response(twilioRes.body, {
+        status: 200,
+        headers: {
+          'Content-Type': twilioRes.headers.get('content-type') || 'audio/mpeg',
+          'Cache-Control': 'private, max-age=300',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    } catch (error: any) {
+      console.error('[recording-media] error:', error.message);
+      return new Response('Recording playback failed', { status: 500 });
+    }
+  }),
+});
 // ---- Transcription callback ----
 // Twilio posts the recording transcription here (TranscriptionText).
 http.route({

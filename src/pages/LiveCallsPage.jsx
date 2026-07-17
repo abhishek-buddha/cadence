@@ -20,12 +20,24 @@ import {
   PhoneCall,
   PhoneOff,
   Mic,
+  MicOff,
   AlertTriangle,
   Loader2,
 } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import HandoffTimeline from '../components/HandoffTimeline';
 import { useSoftphone } from '../hooks/useSoftphone';
+
+function convexSiteUrl() {
+  const explicit = import.meta.env.VITE_CONVEX_SITE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const cloud = import.meta.env.VITE_CONVEX_URL || '';
+  return cloud.replace('.convex.cloud', '.convex.site').replace(/\/$/, '');
+}
+
+function recordingPlaybackUrl(callId) {
+  return `${convexSiteUrl()}/twilio-recording-media?callId=${encodeURIComponent(callId)}`;
+}
 
 function elapsedSince(iso) {
   if (!iso) return '';
@@ -168,33 +180,37 @@ function ActiveCallRow({ call }) {
       </div>
       <HandoffTimeline call={c} events={events} />
 
-      {/* Post-handoff recording + transcript of the human↔human portion. */}
+      {/* Post-handoff recording + transcript of the human-human portion. */}
       {(c.recordingUrl || c.humanTranscript) && (
-        <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
+        <div className="mt-3 pt-3 border-t border-border/60 space-y-3">
           {c.recordingUrl && (
-            <div className="flex items-center gap-2 text-xs text-muted">
-              <Mic className="w-3.5 h-3.5" />
-              <span>Call recorded</span>
-              <a
-                href={c.recordingUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-accent hover:underline font-medium"
-              >
-                Open recording
-              </a>
+            <div className="space-y-1.5 text-xs text-muted">
+              <div className="flex items-center gap-2">
+                <Mic className="w-3.5 h-3.5" />
+                <span>Call recorded</span>
+              </div>
+              <audio
+                controls
+                preload="none"
+                src={recordingPlaybackUrl(c._id)}
+                className="h-9 w-full max-w-md"
+              />
             </div>
           )}
-          {c.humanTranscript && (
-            <details className="text-sm">
-              <summary className="cursor-pointer text-gray-600 hover:text-gray-900 font-medium">
-                Transcript (agent ↔ rep)
-              </summary>
-              <p className="mt-1.5 text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-[13px] leading-relaxed">
+          <div className="text-sm">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted/70">
+              Transcript
+            </p>
+            {c.humanTranscript ? (
+              <p className="text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-[13px] leading-relaxed">
                 {c.humanTranscript}
               </p>
-            </details>
-          )}
+            ) : (
+              <p className="text-xs text-muted bg-gray-50 rounded-lg p-3">
+                Transcript processing. It will appear here when Twilio finishes transcription.
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -219,7 +235,7 @@ function StateBadge({ handoffState, status }) {
 
 // Compact softphone status/control bar.
 function SoftphoneBar({ softphone }) {
-  const { status, error, activeCallId, disconnect } = softphone;
+  const { status, error, activeCallId, muted, disconnect, toggleMute } = softphone;
 
   if (status === 'unconfigured') {
     return (
@@ -246,10 +262,14 @@ function SoftphoneBar({ softphone }) {
     <div className="rounded-lg border border-border bg-white px-4 py-2.5 text-sm flex items-center justify-between">
       <div className="flex items-center gap-2 text-gray-700">
         <span className={`w-2 h-2 rounded-full ${dot}`} />
-        <Mic className="w-4 h-4 text-gray-400" />
+        {muted ? (
+          <MicOff className="w-4 h-4 text-warn" />
+        ) : (
+          <Mic className="w-4 h-4 text-gray-400" />
+        )}
         <span className="font-medium">
           {status === 'on_call'
-            ? `On call${activeCallId ? '' : ''}`
+            ? `On call${muted ? ' - muted' : ''}${activeCallId ? '' : ''}`
             : status === 'connecting'
               ? 'Connecting…'
               : status === 'ready'
@@ -260,12 +280,28 @@ function SoftphoneBar({ softphone }) {
         </span>
       </div>
       {(status === 'on_call' || status === 'connecting') && (
-        <button
-          onClick={disconnect}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-danger text-white text-xs font-medium hover:bg-danger/90 transition-colors"
-        >
-          <PhoneOff className="w-3.5 h-3.5" /> Hang up
-        </button>
+        <div className="flex items-center gap-2">
+          {status === 'on_call' && (
+            <button
+              onClick={toggleMute}
+              aria-pressed={muted}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                muted
+                  ? 'border-warn/40 bg-warn/10 text-warn hover:bg-warn/15'
+                  : 'border-border text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {muted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+              {muted ? 'Unmute' : 'Mute'}
+            </button>
+          )}
+          <button
+            onClick={disconnect}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-danger text-white text-xs font-medium hover:bg-danger/90 transition-colors"
+          >
+            <PhoneOff className="w-3.5 h-3.5" /> Hang up
+          </button>
+        </div>
       )}
     </div>
   );

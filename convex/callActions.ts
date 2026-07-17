@@ -65,6 +65,37 @@ export function buildMedicalDynamicVars(args: {
   return dynamicVars;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function bridgeHealthUrl(bridgeUrl: string): string {
+  const httpBase = bridgeUrl
+    .replace(/\/$/, '')
+    .replace(/^wss:/, 'https:')
+    .replace(/^ws:/, 'http:');
+  return `${httpBase}/health`;
+}
+
+async function waitForBridgeReady(bridgeUrl: string, maxWaitMs = 70000): Promise<void> {
+  const healthUrl = bridgeHealthUrl(bridgeUrl);
+  const start = Date.now();
+  let attempt = 0;
+  let lastError = 'not attempted';
+
+  while (Date.now() - start < maxWaitMs) {
+    attempt += 1;
+    try {
+      const res = await fetch(healthUrl);
+      if (res.ok) return;
+      lastError = `HTTP ${res.status}`;
+    } catch (error: any) {
+      lastError = error?.message || String(error);
+    }
+
+    await sleep(Math.min(1000 * attempt, 5000));
+  }
+
+  throw new Error(`Bridge not ready at ${healthUrl}: ${lastError}`);
+}
 // Ground-truth signal for "the agent deliberately ended the call because a
 // human was actively about to join" — NOT a generic ivr_only classification,
 // which is also true when the payer's IVR itself closes/rejects the call
@@ -186,6 +217,10 @@ export const initiateCallViaTwilio = action({
 
       // Cadence places the call. Payer leg TwiML → /twiml-call-start, which
       // <Connect><Stream>s to the bridge (AI) + <Start><Stream>s the monitor.
+      // Wake the bridge before dialing. Render free instances can cold-start
+      // slower than Twilio's media-stream setup window; dialing first creates a
+      // silent short call with no /media-stream or /monitor connection.
+      await waitForBridgeReady(BRIDGE_URL);
       const twimlUrl = `${CONVEX_SITE_URL}/twiml-call-start?callId=${callId}&claimId=${args.claimId}`;
       const statusCallbackUrl = `${CONVEX_SITE_URL}/twilio-status`;
       const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);

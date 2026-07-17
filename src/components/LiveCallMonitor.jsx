@@ -82,7 +82,15 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const playIntervalRef = useRef(null);
   const wsRef = useRef(null);
 
-  useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => {
+    mutedRef.current = muted;
+    if (muted) {
+      audioQueueRef.current = [];
+      inboundQueueRef.current = [];
+      outboundQueueRef.current = [];
+      nextPlayTimeRef.current = 0;
+    }
+  }, [muted]);
 
   // Polling for call status + transcript
   const [polledData, setPolledData] = useState(null);
@@ -162,29 +170,43 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [effectiveTranscript.length]);
 
-  // Audio player — smooth low-latency playback with upsample to native rate.
-  // Keep this bounded for live monitoring: if the browser falls behind, dropping
-  // stale audio is better than preserving every packet and dragging playback.
+  // Audio player: live monitoring, not archival playback. Keep the scheduled
+  // audio close to now; if packets arrive in bursts, drop stale buffered audio
+  // instead of playing an increasingly delayed backlog.
   useEffect(() => {
+    const FRAME = 640; // 80ms @ 8kHz
+    const MAX_QUEUE = 3200; // 400ms buffered audio cap
+    const MAX_LEAD_SECONDS = 0.16;
+
     playIntervalRef.current = setInterval(() => {
       if (mutedRef.current) return;
       const ctx = audioCtxRef.current;
       if (!ctx || ctx.state !== 'running') return;
       const queue = audioQueueRef.current;
-      if (queue.length < 640) return;
 
-      const chunkSize = Math.min(queue.length, 1600);
-      const raw = new Float32Array(queue.splice(0, chunkSize));
+      if (queue.length > MAX_QUEUE) {
+        queue.splice(0, queue.length - MAX_QUEUE);
+        nextPlayTimeRef.current = 0;
+      }
+      if (queue.length < FRAME) return;
+
+      const now = ctx.currentTime;
+      if (nextPlayTimeRef.current < now || nextPlayTimeRef.current > now + MAX_LEAD_SECONDS) {
+        nextPlayTimeRef.current = now + 0.005;
+        if (queue.length > FRAME * 2) {
+          queue.splice(0, queue.length - FRAME * 2);
+        }
+      }
+
+      const raw = new Float32Array(queue.splice(0, FRAME));
       const upsampled = upsample8kTo(raw, ctx.sampleRate);
       const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
       buffer.getChannelData(0).set(upsampled);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.connect(ctx.destination);
-      const now = ctx.currentTime;
-      const startAt = Math.max(now + 0.005, nextPlayTimeRef.current);
-      source.start(startAt);
-      nextPlayTimeRef.current = startAt + buffer.duration;
+      source.start(nextPlayTimeRef.current);
+      nextPlayTimeRef.current += buffer.duration;
     }, 80);
 
     return () => {
@@ -199,7 +221,6 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       }
     };
   }, []);
-
   // WebSocket for audio from bridge monitor
   useEffect(() => {
     if (!call?._id) return;
@@ -217,6 +238,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
         try {
           const data = JSON.parse(event.data);
           if (data.event === 'audio' && data.media?.payload) {
+            if (mutedRef.current) return;
             const binary = atob(data.media.payload);
             const samples = new Array(binary.length);
             for (let i = 0; i < binary.length; i++) {
@@ -255,8 +277,8 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
             }
 
             // Overflow protection on mixed queue
-            if (audioQueueRef.current.length > 16000) {
-              audioQueueRef.current.splice(0, audioQueueRef.current.length - 8000);
+            if (audioQueueRef.current.length > 4800) {
+              audioQueueRef.current.splice(0, audioQueueRef.current.length - 1600);
               nextPlayTimeRef.current = 0;
             }
           }
@@ -308,6 +330,10 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   }
 
   function handleUnmute() {
+    audioQueueRef.current = [];
+    inboundQueueRef.current = [];
+    outboundQueueRef.current = [];
+    nextPlayTimeRef.current = 0;
     setMuted(false);
     ensureAudioContext();
   }

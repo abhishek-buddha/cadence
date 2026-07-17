@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
-import { ConvexProvider, ConvexReactClient } from 'convex/react';
+import { ConvexProvider } from 'convex/react';
 import App from './App.jsx';
+import { prodConvex } from './lib/prodConvexClient';
 import './index.css';
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL;
@@ -15,11 +16,9 @@ if (!convexUrl) {
     </div>
   );
 } else {
-  const convex = new ConvexReactClient(convexUrl);
-
   // No StrictMode - avoids double-mount issues with persistent connections
   createRoot(document.getElementById('root')).render(
-    <ConvexProvider client={convex}>
+    <ConvexProvider client={prodConvex}>
       <App />
     </ConvexProvider>
   );

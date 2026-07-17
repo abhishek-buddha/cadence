@@ -2,6 +2,8 @@ import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import EmptyState from '../components/EmptyState';
 import { Route as RouteIcon, UserCog } from 'lucide-react';
+import ProdConvexScope from '../components/ProdConvexScope';
+import DevConvexScope from '../components/DevConvexScope';
 
 const ROLE_LABELS = { agent: 'Agent', supervisor: 'Supervisor' };
 const SPECIALIZATION_LABELS = {
@@ -27,8 +29,24 @@ function AvailabilityBadge({ value }) {
 }
 
 export default function ClaimUserRoutingPage() {
-  const agents = useQuery(api.callAgents.list);
+  return (
+    <ProdConvexScope>
+      <ClaimUserRoutingWithInsurance />
+    </ProdConvexScope>
+  );
+}
+
+function ClaimUserRoutingWithInsurance() {
   const insuranceContacts = useQuery(api.insuranceContacts.list);
+  return (
+    <DevConvexScope>
+      <ClaimUserRoutingInner insuranceContacts={insuranceContacts} />
+    </DevConvexScope>
+  );
+}
+
+function ClaimUserRoutingInner({ insuranceContacts }) {
+  const agents = useQuery(api.callAgents.list);
   const isLoading = agents === undefined;
 
   const insuranceMap = {};

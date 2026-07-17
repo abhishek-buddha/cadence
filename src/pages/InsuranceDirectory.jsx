@@ -9,7 +9,6 @@ const EMPTY_FORM = {
   name: '',
   phone: '',
   humanAgentNumber: '',
-  department: '',
   payerId: '',
   hours: '',
   ivrInstructions: '',
@@ -43,7 +42,6 @@ export default function InsuranceDirectory() {
       name: contact.name,
       phone: contact.phone,
       humanAgentNumber: contact.humanAgentNumber ?? '',
-      department: contact.department ?? '',
       payerId: contact.payerId ?? '',
       hours: contact.hours ?? '',
       ivrInstructions: contact.ivrInstructions ?? '',
@@ -72,7 +70,6 @@ export default function InsuranceDirectory() {
         name: form.name,
         phone: form.phone,
         humanAgentNumber: form.humanAgentNumber || undefined,
-        department: form.department || undefined,
         payerId: form.payerId || undefined,
         hours: form.hours || undefined,
         ivrInstructions: form.ivrInstructions || undefined,
@@ -156,7 +153,6 @@ export default function InsuranceDirectory() {
                 <tr className="border-b border-border">
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Company Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Phone</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Department</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Hours</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Avg Hold Time</th>
                   <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted font-semibold">Actions</th>
@@ -177,7 +173,6 @@ export default function InsuranceDirectory() {
                         {contact.phone}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{contact.department ?? '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{contact.hours ?? '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{formatHoldTime(contact.avgHoldTime)}</td>
                     <td className="px-4 py-3 text-sm text-right">
@@ -247,16 +242,6 @@ export default function InsuranceDirectory() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Department</label>
-              <input
-                type="text"
-                value={form.department}
-                onChange={(e) => setField('department', e.target.value)}
-                className={inputClass}
-                placeholder="Claims, Provider Relations, etc."
-              />
-            </div>
-            <div>
               <label className={labelClass}>Payer ID</label>
               <input
                 type="text"
@@ -266,9 +251,6 @@ export default function InsuranceDirectory() {
                 placeholder="60054"
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>Hours of Operation</label>
               <input
@@ -279,17 +261,18 @@ export default function InsuranceDirectory() {
                 placeholder="Mon-Fri 8am-6pm EST"
               />
             </div>
-            <div>
-              <label className={labelClass}>Avg Hold Time (minutes)</label>
-              <input
-                type="number"
-                min="0"
-                value={form.avgHoldTime}
-                onChange={(e) => setField('avgHoldTime', e.target.value)}
-                className={inputClass}
-                placeholder="15"
-              />
-            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Avg Hold Time (minutes)</label>
+            <input
+              type="number"
+              min="0"
+              value={form.avgHoldTime}
+              onChange={(e) => setField('avgHoldTime', e.target.value)}
+              className={inputClass}
+              placeholder="15"
+            />
           </div>
 
           <div>

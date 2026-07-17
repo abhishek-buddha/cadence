@@ -4,6 +4,8 @@ import { api } from '../../convex/_generated/api';
 import { UserCog, UserPlus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import ProdConvexScope from '../components/ProdConvexScope';
+import DevConvexScope from '../components/DevConvexScope';
 
 const ROLE_OPTIONS = [
   { value: 'agent', label: 'Agent' },
@@ -318,10 +320,28 @@ function AgentModal({ open, onClose, editing, insuranceContacts, createAgent, up
 
 // ===========================================================================
 // MAIN COMPONENT
+// Insurance companies are real reference data (Master Data, production) —
+// fetched here in prod scope, then passed down into the dev-scoped agent CRUD.
 // ===========================================================================
 export default function CallAgentsPage() {
-  const agents = useQuery(api.callAgents.list);
+  return (
+    <ProdConvexScope>
+      <CallAgentsWithInsurance />
+    </ProdConvexScope>
+  );
+}
+
+function CallAgentsWithInsurance() {
   const insuranceContacts = useQuery(api.insuranceContacts.list);
+  return (
+    <DevConvexScope>
+      <CallAgentsPageInner insuranceContacts={insuranceContacts} />
+    </DevConvexScope>
+  );
+}
+
+function CallAgentsPageInner({ insuranceContacts }) {
+  const agents = useQuery(api.callAgents.list);
   const createAgent = useMutation(api.callAgents.create);
   const updateAgent = useMutation(api.callAgents.update);
   const removeAgent = useMutation(api.callAgents.remove);

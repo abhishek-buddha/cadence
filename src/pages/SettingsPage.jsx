@@ -11,6 +11,8 @@ import {
   Info,
   Loader2,
 } from 'lucide-react';
+import WebhooksPage from './WebhooksPage';
+import ApiKeysPage from './ApiKeysPage';
 
 function Section({ title, icon: Icon, children }) {
   return (
@@ -66,12 +68,14 @@ export default function SettingsPage() {
   }, []);
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-3xl">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Settings</h1>
         <p className="text-sm text-muted mt-1">Application configuration and status</p>
       </div>
+
+      <div className="max-w-3xl space-y-6">
 
       {/* Connection Status */}
       <Section title="Connection Status" icon={Database}>
@@ -142,6 +146,13 @@ export default function SettingsPage() {
           </div>
         </div>
       </Section>
+      </div>
+
+      {/* Webhooks + API Keys — moved here from the sidebar */}
+      <div className="pt-2 border-t border-border space-y-6">
+        <WebhooksPage />
+        <ApiKeysPage />
+      </div>
     </div>
   );
 }

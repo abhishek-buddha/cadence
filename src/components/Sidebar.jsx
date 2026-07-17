@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard,
   FileText,
@@ -13,14 +12,8 @@ import {
   Activity,
   PanelLeftClose,
   PanelLeftOpen,
-  PhoneForwarded,
-  ShieldCheck,
-  KeyRound,
-  Webhook,
-  Users,
   ChevronDown,
   ChevronRight,
-  MoreHorizontal,
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -41,23 +34,8 @@ const callAuditGroup = {
 
 const reportsItem = { to: '/reports', icon: BarChart3, label: 'Reports' };
 
-// Deprioritized modules — still fully functional, tucked away for later reconsideration.
-// roles: undefined = visible to everyone, matching each item's prior visibility rules.
-const othersItems = [
-  { to: '/eligibility', icon: Activity, label: 'Eligibility' },
-  { to: '/sessions', icon: Users, label: 'Sessions' },
-  { to: '/transfers', icon: PhoneForwarded, label: 'Transfers' },
-  { to: '/audit', icon: ShieldCheck, label: 'Audit Log', roles: ['admin', 'manager'] },
-  { to: '/api-keys', icon: KeyRound, label: 'API Keys', roles: ['admin'] },
-  { to: '/webhooks', icon: Webhook, label: 'Webhooks', roles: ['admin', 'manager'] },
-];
-
 export default function Sidebar({ collapsed, onToggle }) {
   const location = useLocation();
-  const auth = useAuth?.() ?? {};
-  const role = auth?.role ?? auth?.user?.role ?? null;
-  const visibleOthersItems = othersItems.filter((item) => !item.roles || item.roles.includes(role));
-  const [othersOpen, setOthersOpen] = useState(false);
   const [callAuditOpen, setCallAuditOpen] = useState(
     location.pathname.startsWith(callAuditGroup.basePath)
   );
@@ -165,33 +143,6 @@ export default function Sidebar({ collapsed, onToggle }) {
         </div>
 
         {renderNavLink(reportsItem)}
-
-        {/* Others — deprioritized, collapsible */}
-        <div className="pt-1">
-          <button
-            onClick={() => setOthersOpen((o) => !o)}
-            title={collapsed ? 'Others' : undefined}
-            className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-50 transition-all duration-150`}
-          >
-            <MoreHorizontal className="w-4 h-4 shrink-0" />
-            {!collapsed && (
-              <>
-                <span className="flex-1 text-left">Others</span>
-                {othersOpen ? (
-                  <ChevronDown className="w-3.5 h-3.5 text-muted" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5 text-muted" />
-                )}
-              </>
-            )}
-          </button>
-          {!collapsed && othersOpen && (
-            <div className="ml-3 pl-3 border-l border-border/60 space-y-0.5 mt-0.5">
-              {visibleOthersItems.map(renderNavLink)}
-            </div>
-          )}
-          {collapsed && visibleOthersItems.map(renderNavLink)}
-        </div>
       </nav>
 
       {/* Bottom section */}

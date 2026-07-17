@@ -16,12 +16,6 @@ const SPECIALIZATION_OPTIONS = [
   { value: 'followup', label: 'Followup' },
 ];
 
-const AVAILABILITY_OPTIONS = [
-  { value: 'available', label: 'Available' },
-  { value: 'busy', label: 'Busy in call' },
-  { value: 'offline', label: 'Offline' },
-];
-
 const AVAILABILITY_CONFIG = {
   available: { bg: 'bg-success/10', text: 'text-success', dot: 'bg-success', label: 'Available' },
   busy: { bg: 'bg-warn/10', text: 'text-warn', dot: 'bg-warn', label: 'Busy in call' },
@@ -99,7 +93,6 @@ const EMPTY_FORM = {
   username: '',
   role: 'agent',
   status: 'active',
-  availability: 'available',
   specializations: [],
   insuranceContactIds: [],
 };
@@ -120,7 +113,6 @@ function AgentModal({ open, onClose, editing, insuranceContacts, createAgent, up
             username: editing.username,
             role: editing.role,
             status: editing.status,
-            availability: editing.availability,
             specializations: editing.specializations ?? [],
             insuranceContactIds: editing.insuranceContactIds ?? [],
           }
@@ -164,7 +156,6 @@ function AgentModal({ open, onClose, editing, insuranceContacts, createAgent, up
         username: form.username.trim(),
         role: form.role,
         status: form.status,
-        availability: form.availability,
         specializations: form.specializations,
         insuranceContactIds: form.insuranceContactIds,
       };
@@ -229,37 +220,24 @@ function AgentModal({ open, onClose, editing, insuranceContacts, createAgent, up
             </div>
           </div>
           <div>
-            <label className={LABEL_CLASS}>Availability</label>
-            <select
-              value={form.availability}
-              onChange={(e) => setField('availability', e.target.value)}
-              className={`${INPUT_CLASS} custom-select cursor-pointer`}
-            >
-              {AVAILABILITY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className={LABEL_CLASS}>Active</label>
-          <button
-            type="button"
-            onClick={() => setField('status', form.status === 'active' ? 'inactive' : 'active')}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              form.status === 'active' ? 'bg-accent' : 'bg-gray-300'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                form.status === 'active' ? 'translate-x-6' : 'translate-x-1'
+            <label className={LABEL_CLASS}>Active</label>
+            <button
+              type="button"
+              onClick={() => setField('status', form.status === 'active' ? 'inactive' : 'active')}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                form.status === 'active' ? 'bg-accent' : 'bg-gray-300'
               }`}
-            />
-          </button>
-          <span className="ml-3 text-sm text-gray-600 align-middle">
-            {form.status === 'active' ? 'Active' : 'Inactive'}
-          </span>
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  form.status === 'active' ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            <span className="ml-3 text-sm text-gray-600 align-middle">
+              {form.status === 'active' ? 'Active' : 'Inactive'}
+            </span>
+          </div>
         </div>
 
         <div>
@@ -407,7 +385,7 @@ export default function CallAgentsPage() {
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Role</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Specialization</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Insurance</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Availability</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap" title="Set automatically by call routing, not editable here">Availability</th>
               <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Active</th>
               <th className="text-right px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Actions</th>
             </tr>

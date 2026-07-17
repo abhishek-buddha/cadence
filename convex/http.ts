@@ -1,7 +1,7 @@
 import { httpRouter } from 'convex/server';
 import { httpAction } from './_generated/server';
 import { api, internal } from './_generated/api';
-import { extractHandoffDetected } from './callActions';
+import { extractHandoffDetected, buildMedicalDynamicVars } from './callActions';
 
 const MAX_HOLD_ATTEMPTS = 30; // 30 × 60s = 30 minutes max hold
 const API_VERSION = '1.0.0';
@@ -360,11 +360,21 @@ async function bridgeParkedHandler(ctx: any, request: Request): Promise<Response
   const siteUrl = url.origin;
   // Park the rep: they start/hold the conference but do NOT end it when the
   // holding side changes (endConferenceOnExit=false). waitUrl loops hold audio.
+  //
+  // Recording: record the whole conference automatically from the start
+  // (record-from-start) — captures the human↔human portion for QA/audit. Set on
+  // this (the first, longest-lived) leg only; Twilio records the conference
+  // once regardless of how many participants set it. recordingStatusCallback
+  // fires once when the conference recording is ready. The callId is threaded
+  // through the callback URL so we can attach the recording to the right call.
   return twimlResponse(`
     <Response>
       <Dial>
         <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
-                    waitUrl="${siteUrl}/twiml-conference-hold" beep="false">
+                    waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
+                    record="record-from-start"
+                    recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${call._id}"
+                    recordingStatusCallbackEvent="completed">
           ${confName}
         </Conference>
       </Dial>
@@ -434,6 +444,173 @@ async function softphoneOutgoingHandler(ctx: any, request: Request): Promise<Res
 }
 http.route({ path: '/twiml-softphone-outgoing', method: 'POST', handler: httpAction(softphoneOutgoingHandler) });
 http.route({ path: '/twiml-softphone-outgoing', method: 'GET', handler: httpAction(softphoneOutgoingHandler) });
+
+// ---------------------------------------------------------------------------
+// OPTION 1 — the AI drop lands here. handoff.redirectPayerToConference() POSTs
+// this URL to the live payer call, which abandons its <Connect><Stream> (closing
+// the bridge socket → AI dropped) and parks the payer in the conference. The
+// conference records from the start (human↔human portion) and holds the payer on
+// waitUrl audio until our browser agent joins. endConferenceOnExit=false so the
+// payer holding here never tears the conference down.
+// ---------------------------------------------------------------------------
+async function payerConferenceHandler(ctx: any, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  let callId = url.searchParams.get('callId') || '';
+  if (!callId) {
+    try {
+      const form = new URLSearchParams(await request.text());
+      callId = form.get('callId') || '';
+    } catch {
+      // ignore
+    }
+  }
+  const confName = `cadence-${callId}`;
+  const siteUrl = url.origin;
+  return twimlResponse(`
+    <Response>
+      <Dial>
+        <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
+                    waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
+                    record="record-from-start"
+                    recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${callId}"
+                    recordingStatusCallbackEvent="completed">
+          ${confName}
+        </Conference>
+      </Dial>
+    </Response>
+  `);
+}
+http.route({ path: '/twiml-payer-conference', method: 'POST', handler: httpAction(payerConferenceHandler) });
+http.route({ path: '/twiml-payer-conference', method: 'GET', handler: httpAction(payerConferenceHandler) });
+
+// ---------------------------------------------------------------------------
+// Handoff trigger — the AI (in IVR-only mode) signals that the insurance human
+// is on the line. This flips the call to awaiting_human and broadcasts to the
+// pool. Does NOT drop the AI yet — the AI stays on a holding line with the rep
+// until one of our agents accepts (see redirectPayerToConference).
+//
+// Correlation: prefer explicit ?callId=; else the numeric ?token= (handoffToken)
+// carried by the agent; else fall back to the most-recent active call.
+// ---------------------------------------------------------------------------
+async function requestHandoffHandler(ctx: any, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  let callId = url.searchParams.get('callId') || '';
+  const token = url.searchParams.get('token') || '';
+  const reason = url.searchParams.get('reason') || 'ivr_human_handoff_detected';
+
+  if (!callId) {
+    // Resolve via token / most-recent-active fallback.
+    const call = await ctx.runQuery(api.handoff.resolveByToken, { token: token || undefined });
+    if (call) callId = call._id;
+  }
+  if (!callId) {
+    return jsonResponse({ ok: false, error: 'could_not_correlate_call' }, 404);
+  }
+
+  const res = await ctx.runMutation(internal.handoff.requestHandoff, {
+    callId: callId as any,
+    reason,
+  });
+  return jsonResponse({ ok: true, callId, result: res });
+}
+http.route({ path: '/twilio-request-handoff', method: 'POST', handler: httpAction(requestHandoffHandler) });
+http.route({ path: '/twilio-request-handoff', method: 'GET', handler: httpAction(requestHandoffHandler) });
+
+// ---- Conference recording status callback ----
+// Twilio calls this once the conference recording is ready. We store the URL on
+// the call, then ask Twilio to transcribe that recording (transcription result
+// posts to /twilio-transcription). callId is threaded via the query string.
+http.route({
+  path: '/twilio-recording-status',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const callId = url.searchParams.get('callId') || '';
+      const form = new URLSearchParams(await request.text());
+      const recordingUrl = form.get('RecordingUrl') || '';
+      const recordingSid = form.get('RecordingSid') || '';
+      const duration = parseInt(form.get('RecordingDuration') || '0', 10);
+
+      if (callId && recordingUrl) {
+        await ctx.runMutation(internal.handoff.saveRecording, {
+          callId: callId as any,
+          // Twilio's RecordingUrl has no extension; .mp3 is playable in browsers.
+          recordingUrl: `${recordingUrl}.mp3`,
+          duration: Number.isFinite(duration) ? duration : undefined,
+        });
+
+        // Request transcription of the recording (easiest path — Twilio does it
+        // and posts the text to /twilio-transcription). Best-effort; recording
+        // is already saved regardless.
+        const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+        const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+        const SITE = process.env.CONVEX_SITE_URL;
+        if (ACCOUNT_SID && AUTH_TOKEN && recordingSid) {
+          try {
+            await fetch(
+              `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Recordings/${recordingSid}/Transcriptions.json`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Basic ${btoa(`${ACCOUNT_SID}:${AUTH_TOKEN}`)}`,
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                  TranscribeCallback: `${SITE}/twilio-transcription?callId=${callId}`,
+                }),
+              }
+            );
+          } catch (e: any) {
+            console.error('[recording-status] transcription request failed (non-fatal):', e.message);
+          }
+        }
+      }
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error: any) {
+      console.error('[recording-status] error:', error.message);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
+
+// ---- Transcription callback ----
+// Twilio posts the recording transcription here (TranscriptionText).
+http.route({
+  path: '/twilio-transcription',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const callId = url.searchParams.get('callId') || '';
+      const form = new URLSearchParams(await request.text());
+      const text = form.get('TranscriptionText') || '';
+      const status = form.get('TranscriptionStatus') || '';
+      if (callId && text && status === 'completed') {
+        await ctx.runMutation(internal.handoff.saveHumanTranscript, {
+          callId: callId as any,
+          transcript: text,
+        });
+      }
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error: any) {
+      console.error('[transcription] error:', error.message);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
 
 // ---- Twilio status callback ----
 http.route({
@@ -560,25 +737,23 @@ http.route({
       }
 
       const { call, claim, patient, insurance, provider } = metadata;
+      // Full parity with the native-outbound dialer: the bridge forwards these
+      // to ElevenLabs as conversation_initiation_client_data, so the agent gets
+      // the IVR playbook, voice-IVR phrases, and handoff vars — everything it
+      // needs to navigate the IVR identically over the bridge transport.
+      const dynamic_variables = buildMedicalDynamicVars({
+        claim,
+        patient,
+        insurance,
+        provider,
+        callId: call._id,
+        claimId: claim._id,
+        handoffToken: call.handoffToken,
+      });
       return new Response(JSON.stringify({
         callId: call._id,
         claimId: claim._id,
-        dynamic_variables: {
-          practice_name: provider?.practiceName || '',
-          npi: provider?.npi || '',
-          tax_id: provider?.taxId || '',
-          callback_number: provider?.phone || '',
-          patient_name: patient ? `${patient.firstName} ${patient.lastName}` : '',
-          patient_dob: patient?.dateOfBirth || '',
-          member_id: patient?.memberId || '',
-          group_number: patient?.groupNumber || 'N/A',
-          claim_number: claim.claimNumber,
-          date_of_service: claim.dateOfService,
-          billed_amount: (claim.amount / 100).toFixed(2),
-          cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
-          internal_call_id: call._id,
-          internal_claim_id: claim._id,
-        },
+        dynamic_variables,
       }), {
         status: 200,
         headers: {

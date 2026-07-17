@@ -1,149 +1,125 @@
 # PLAN — Live AI→Human Call Handoff (cadence_pro_ivr)
 
-**Status:** APPROVED — building on branch `cadence_pro_ivr`. No commits until user says so.
-**Date:** 2026-07-17
-**Feature:** When the AI agent navigates a payer IVR and the *insurance human agent* picks up, hand the live call off from the AI to one of *our* human agents (a queue/pool), so a real human↔human conversation continues on the **same call**. Plus a new **Live Calls / Handoff** view showing in-progress calls and the AI→human transfer in real time.
+**Status:** APPROVED architecture (Option 1 — "Cadence owns the call"). Building on branch `cadence_pro_ivr`. No commits until user says so.
+**Date:** 2026-07-17 (rev 3 — supersedes the `transfer_to_number` design)
+**Feature:** When the AI agent navigates a payer IVR and the *insurance human agent* picks up, hand the live call off from the AI to one of *our* human agents (a queue/pool broadcast; browser softphone), so a real human↔human conversation continues on the **same call**, recorded + transcribed. Plus a **Live Calls / Handoff** view showing in-progress calls and the AI→human transfer in real time.
 
 ---
 
-## ⭐ REVISED ARCHITECTURE (after bridge + ElevenLabs investigation) — this supersedes §2–§3 below
+## ⭐ LOCKED ARCHITECTURE — Option 1: Cadence owns the call
 
-**Key discovery:** ElevenLabs Conversational AI has a native `transfer_to_number` system tool with a **Conference** method that "calls the destination, adds it to a conference, then removes the AI agent so only the caller and transferred participant remain." This is exactly the AI-drop we need — so we do NOT switch off ElevenLabs-native outbound and do NOT touch the bridge repo (kills the original §9.1 risk).
+User chose Option 1 over the ElevenLabs-`transfer_to_number` approach. Cadence's Twilio owns the call from the first second, the AI is a *droppable conference participant*, and handoff = hang up the AI's leg (one Twilio API call). No DTMF correlation. No dependency on ElevenLabs' transfer tool.
 
-**Locked flow:**
-1. AI runs on the existing ElevenLabs-native outbound call, navigates payer IVR — UNCHANGED.
-2. On insurance-human handoff, AI fires `transfer_to_number` (Conference) to a SINGLE Cadence bridge number (our Twilio `+13187589839`). ElevenLabs conferences that leg in with the rep and drops itself.
-3. The bridge number's inbound TwiML (Convex `http.ts`) parks the rep in a Twilio conference `cadence-<callId>` with hold audio, and sets `call.handoffState="awaiting_human"` → reactive broadcast to ALL active users.
-4. An agent clicks Accept → Phase 1: Cadence dials the agent's number into the conference; Phase 2: browser softphone joins. `handoffState="connected"`. Human↔human. Decline/timeout → stays available; all-declined → `handoff_failed`.
+### Key enabling discovery
+`cadence-bridge/server.js` already has a **complete bidirectional** Twilio↔ElevenLabs relay at **`/media-stream`** (Twilio media → `user_audio_chunk` → ElevenLabs; ElevenLabs `audio` → `event:"media"` → Twilio). It is fully built but **currently unused** — the live app only uses the passive listen-only `/monitor` path. So Option 1 = *activating an existing bridge path*, not writing a streaming engine. (See memory `cadence-bridge-media-stream-dormant`.)
 
-**Why low-risk:** existing calls unaffected (new path is additive + per-payer opt-in); bridge untouched; only new telephony Cadence owns is one inbound leg + conference (standard TwiML); Accept/Decline/Live-view is pure Convex reactive state. `transfer_to_number` is configured per-agent via the ElevenLabs API (existing `scripts/setup-elevenlabs-agents.mjs`), not hardcoded.
+### The topology — VERIFIED (spike done 2026-07-17, against Twilio docs)
 
-**How the rep reaches our bridge number:** the AI transfers to it via ElevenLabs Conference transfer (an outbound-from-ElevenLabs call into our number). We map that inbound call back to the original `callId` via the transfer's post-dial digits or a lookup on the parked call (resolved during build).
+**The naive "AI is a conference participant" is IMPOSSIBLE on Twilio, and here's why (proven, not assumed):**
+- `<Connect><Stream>` (bidirectional, how the AI talks/listens via the bridge) is a **terminal** verb — it takes over the whole leg and blocks all other TwiML. A `<Connect><Stream>` leg **cannot also be a `<Dial><Conference>` participant**. Only one bidirectional stream per call.
+- `<Start><Stream>` runs in parallel with `<Conference>` but is **listen-only** — it can extract conference audio but **cannot inject the AI's speech back in.** So the AI could hear the conference but never talk into it.
+- ⇒ There is no way to make the AI a speaking member of a Twilio conference. Both earlier candidate approaches are dead.
 
----
+**The WORKING topology — redirect the payer leg (this is the standard warm-transfer pattern):**
+
+```
+BEFORE handoff:                          AT handoff (redirect payer leg):
+┌──────────────────────────┐            ┌───────────────────────────────────┐
+│ Payer call (Cadence-owned)│            │ Conference: cadence-<callId>        │
+│ TwiML = <Connect><Stream> │            │                                     │
+│         → bridge/media-   │  redirect  │  Payer  ← redirected here via       │
+│           stream          │ ─────────► │         POST /Calls/<payerSid> Url= │
+│                           │            │         /twiml-payer-conference     │
+│ ElevenLabs AI talks to    │            │  (the <Connect><Stream> is          │
+│ payer directly. NO        │            │   abandoned → bridge WS closes →    │
+│ conference yet.           │            │   AI DROPPED automatically)         │
+└──────────────────────────┘            │                                     │
+                                         │  Browser agent joins same conf on   │
+                                         │  Accept (Voice JS SDK) → payer↔human│
+                                         └───────────────────────────────────┘
+```
+
+1. **Before handoff:** the AI *is* the payer call. Cadence dials the payer, payer leg TwiML = `<Connect><Stream url=bridge/media-stream>`. Payer↔AI talk directly through the bridge. **No conference exists yet.** (Uses the bridge's already-built `/media-stream` — likely NO bridge change needed.)
+2. **Drop the AI = redirect the payer leg.** On handoff, `POST /Calls/<payerSid>.json Url=/twiml-payer-conference`. Twilio abandons the `<Connect><Stream>` (closing the bridge WS → **AI dropped, no extra hangup call**) and runs the new TwiML = `<Dial><Conference record="record-from-start" …>cadence-<callId></Conference></Dial>`. Payer is now parked in the conference.
+3. **Human joins:** browser agent (softphone) joins the same `cadence-<callId>` conference on Accept → payer↔human, same call.
+
+**Correlation key = conference name `cadence-<callId>`.** No DTMF, no separate AI leg, no participant-removal API. Dropping the AI is a byproduct of the redirect. Cleaner than the other agent's "remove a participant" — we don't even need a participant to remove.
+
+> **Remaining validation (build step 2, small):** confirm the ElevenLabs agent behaves identically over `/media-stream` as it did on native outbound (IVR navigation + dynamic vars land via the bridge's `conversation_initiation_client_data` init). The bridge already implements the documented ElevenLabs media-stream pattern, so this is expected to just work — verify with one call. Bridge change likely unnecessary; if the redirect needs a graceful stream-close signal, that's a tiny additive tweak.
 
 ---
 
 ## 1. Confirmed requirements (from user)
+- **Trigger:** the AI (on the line, IVR-only mode) detects the insurance-human handoff and signals it (the only reliable detector).
+- **On detection:** broadcast an "incoming handoff" to **all active users**; any can **Accept** / **Decline**; first Accept wins.
+- **Swap style:** **Blind** — AI leg drops; our human is bridged into the same call.
+- **Agents connect via the Web UI only** (browser softphone, Twilio Voice JS SDK) — not dialed phones.
+- **Real telephony, "not too complex."** Cadence owns the Twilio call → real re-bridge.
+- **Record + transcribe** the human↔human portion automatically (no consent prompt); Twilio built-in transcription.
+- **Production-hardened** for concurrent calls.
 
-- **Trigger:** The AI (already on the line, in IVR-only mode) detects the insurance human handoff and signals it. This is the only reliable detector in this architecture.
-- **On detection:** App broadcasts an "incoming handoff" notification to **all active users**. Any user can **Accept** or **Decline**. First to accept wins.
-- **Swap style:** **Blind** — AI leg drops immediately; our human is bridged in.
-- **Our agents connect via the Web UI only** (browser softphone), NOT dialed phones. → Twilio Voice JS SDK (WebRTC).
-- **Real telephony**, "but not too complex." Cadence must own the Twilio call leg to re-bridge for real.
-- **Sequencing:** Phase 1 = full state machine + Live Calls view + Accept/Decline broadcast + real Twilio conference + AI-drop transfer (agent joins via a **dialed number interim**). Phase 2 = swap the interim dial for the **in-browser softphone**.
+## 2. What changes vs. what stays the same
+- **Changes:** the *dialer*. `initiateCall` stops using ElevenLabs native `/v1/convai/twilio/outbound-call` (ElevenLabs-owned leg, no CallSid) and instead Cadence dials the payer via Twilio REST into a conference, and the AI reaches ElevenLabs through the bridge `/media-stream`. Cadence now holds the payer CallSid + the AI-leg CallSid → real control.
+- **Stays the same:** the ElevenLabs **agent** (same agent IDs, same fixed prompt, same dynamic variables, same IVR navigation, same transcript/analysis). Only *how the call is placed* changes.
+- **Kept behind a per-payer opt-in flag** so existing medical/dental/session calls do NOT regress until the new path is verified. Legacy `initiateHumanAgentCall` (Handoff A separate-call) stays as fallback.
 
-## 2. Why the telephony path must change (and what stays the same)
+## 3. Data model (`convex/schema.ts`) — ALREADY DONE in rev 1, reused
+`calls` optional fields (additive, non-breaking): `handoffState`, `handoffRequestedAt`, `handoffReason`, `handoffAcceptedByUserId`, `handoffAcceptedByEmail`, `handoffAcceptedAt`, `conferenceName`, `aiParticipantCallSid`, `humanParticipantCallSid`, `handoffToken`, `humanTranscript`, plus `recordingUrl`. Index `by_handoffState`. `handoffState` values: `awaiting_human | accepting | connected | handoff_failed | handoff_ended`.
+- **Reuse:** `twilioCallSid` = payer (Leg A). `aiParticipantCallSid` = Leg B (the one we hang up). `humanParticipantCallSid` = Leg C (browser agent).
+- **`handoffToken` is now vestigial** (no DTMF correlation in Option 1) — keep the column, stop relying on it for correlation. Conference name `cadence-<callId>` is the sole correlation key.
 
-- **Today:** ElevenLabs' native `/v1/convai/twilio/outbound-call` dials the payer. **ElevenLabs owns the Twilio leg → Cadence has no CallSid → cannot re-bridge.**
-- **Change:** Cadence places the call via the **Twilio REST API** itself and streams audio into the **same ElevenLabs agent** over the existing bridge (WebSocket media stream). The legacy `/twiml-call-start` → bridge `/media-stream` path already proves this works.
-- **ElevenLabs agent is UNCHANGED:** same agent IDs, same `composePrompt`, same dynamic variables, same IVR navigation, same transcript/analysis. Only the dialer changes. Cadence gains the CallSid → real call control.
-- The call is placed **into a Twilio `<Conference>`** so participants can be swapped live (AI leg drops, human leg joins the same conference).
+## 4. Backend (Convex)
+### 4.1 Place the Cadence-owned call — NEW action `convex/twilioCallActions.ts`
+- `initiateIvrCallViaTwilio({ claimId })` (+ dental variant later): Twilio REST `POST /Calls.json`, `To=payer.phone`, `From=TWILIO_PHONE_NUMBER`, `Url=/twiml-payer-conference?callId=…`, `StatusCallback=/twilio-status`. Store returned SID as `twilioCallSid` (Leg A).
+- Immediately place the **AI leg (Leg B)**: Twilio REST `POST /Calls.json` (or add as conference participant), `Url=/twiml-ai-stream?callId=…` whose TwiML is `<Connect><Stream url="wss://…bridge…/media-stream"><Parameter name="callId" .../></Stream></Connect>`. Store SID as `aiParticipantCallSid`. Kick `/start-monitor` for the live transcript feed as today.
+- Resolve A-vs-B topology per the spike (§⭐ validation).
 
-## 3. Telephony architecture (Phase 1)
+### 4.2 TwiML handlers (`convex/http.ts`)
+- `/twiml-payer-conference` → `<Dial><Conference startConferenceOnEnter="true" endConferenceOnExit="false" record="record-from-start" recordingStatusCallback="/twilio-recording-status?callId=…" waitUrl=…>cadence-<callId></Conference></Dial>`.
+- `/twiml-ai-stream` → `<Connect><Stream url=bridge/media-stream>` (Leg B) — OR the conference-stream variant from the spike.
+- Keep existing `/twiml-softphone-outgoing` (Leg C join), `/twilio-recording-status`, `/twilio-transcription`, `/twilio-voice-token` — already built in rev 1.
 
-```
-Cadence (Twilio REST create call, holds CallSid)
-   │  to=payer.phone,  TwiML → <Dial><Conference>cadence-<callId></Conference>
-   ▼
-Payer line joins Conference "cadence-<callId>"
-   │
-   ├─ AI media leg: bridge /media-stream ↔ ElevenLabs agent (navigates IVR)
-   │
-   ▼ AI detects insurance human pickup
-   │  → transfer_to_human(reason) tool → webhook /twilio-request-handoff
-   ▼
-Call.handoffState = "awaiting_human"  → broadcast to all active users (Convex reactive query)
-   │
-   ▼ A user clicks Accept  → mutation acceptHandoff → action connectHumanToConference
-   │  Phase 1: Twilio REST create call to agent's number, TwiML joins same Conference
-   │  Phase 2: browser softphone (Twilio Client) joins same Conference
-   ▼
-Drop AI leg (Twilio REST update AI participant → hangup, or remove from conference)
-   ▼
-Insurance human ↔ our human, same conference. handoffState = "connected"
-```
+### 4.3 Detect handoff
+- Agent, in IVR-only mode, fires the existing signal on human pickup → HTTP `/twilio-request-handoff?callId=…` (or via the bridge event stream): sets `handoffState="awaiting_human"`, `handoffRequestedAt`, `handoffReason`. Schedules `checkHandoffTimeout` (3 min) — already built.
+- **Blind-drop gap mitigation:** do NOT drop Leg B at detection; keep the AI on a brief holding line ("one moment, connecting you to a specialist") until a human accepts, so the rep isn't in silence.
 
-Conference name = deterministic `cadence-<callId>` so every leg (payer, AI, human) can find it without extra lookups.
+### 4.4 Accept / Decline — ALREADY BUILT in `convex/handoff.ts`, adjust connect step
+- `acceptHandoff` (atomic first-wins), `declineHandoff` (broadcast; stays available), `checkHandoffTimeout` → `handoff_failed`. Reuse.
+- **Connect (revised for Option 1):** on Accept, browser softphone (Leg C) joins `cadence-<callId>`; once Leg C is answered, **hang up Leg B** (`POST /Calls/<aiParticipantCallSid>.json Status=completed`, or remove the participant). Set `handoffState="connected"`. This replaces the old dialed-number interim entirely (user chose "skip interim, go straight to softphone").
 
-## 4. Data model changes (`convex/schema.ts`)
+### 4.5 Cleanup / concurrency
+- `/twilio-status` closes `handoffState="handoff_ended"` + ends conference on terminal payer state — extend existing.
+- Concurrency: conference name `cadence-<callId>` is unique per call; all mutations are per-doc serializable; first-accept wins atomically. Orphaned-conference sweep on timeout.
 
-**`calls` table — add fields:**
-- `handoffState?: string` — `"none" | "awaiting_human" | "accepting" | "connected" | "declined" | "handoff_failed" | "handoff_ended"`
-- `handoffRequestedAt?: string`
-- `handoffAcceptedByUserId?: string`, `handoffAcceptedByEmail?: string`, `handoffAcceptedAt?: string`
-- `conferenceName?: string`
-- `aiParticipantCallSid?: string` — the leg to drop
-- `humanParticipantCallSid?: string` — our agent's leg (Phase 1 dialed / Phase 2 client)
-- `handoffReason?: string` — reason string the AI passed
-- Reuse existing `twilioCallSid` for the payer leg.
+## 5. Frontend — ALREADY BUILT in rev 1 (reuse, minor tweaks)
+- `pages/LiveCallsPage.jsx` (`/live`), `components/HandoffTimeline.jsx`, `components/HandoffNotifier.jsx` (in Layout), `hooks/useSoftphone.js` (`@twilio/voice-sdk`, lazy, degrades to "unconfigured"). Route + Sidebar nav done.
+- Recording link + collapsible transcript surfaced in `ActiveCallRow` — done.
+- Tweak: timeline copy to reflect Leg-B-drop semantics (no functional change).
 
-**New index:** `calls.by_handoffState` on `['handoffState']` — powers the Live Calls broadcast query cheaply.
+## 6. Env / config
+- Existing (Convex env, prod `rapid-pheasant-510`): `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `BRIDGE_SERVER_URL`, `CONVEX_SITE_URL`, ElevenLabs vars, `OPENAI_API_KEY`.
+- Softphone (Leg C) needs: `TWILIO_API_KEY`, `TWILIO_API_SECRET`, `TWILIO_TWIML_APP_SID` (TwiML App Voice URL → `…convex.site/twiml-softphone-outgoing`). User to create (walkthrough pending).
+- **Number-role note:** Option 1 needs only ONE Twilio number (`+13187589839`) as the outbound caller ID; the "conference" is named, not a phone number, so no bridge/second number is required. For a *test* payer, use the payer simulator or an external number (since `+13187589839` is the caller, not the callee).
+- **SECURITY:** secrets pasted in chat → rotate ElevenLabs / OpenAI / Twilio / Convex-deploy-key / GitHub-PAT.
 
-*(No breaking changes — all new fields optional; existing calls unaffected.)*
+## 7. Testing (real, deployed, no SDK mocks — per CLAUDE.md)
+- Playwright: drive `/live`; flip a seeded call to `awaiting_human` via a test endpoint; assert broadcast card; Accept → `connected`.
+- Real smoke: payer simulator with a "transferring you to an agent" branch → exercises detection + conference join + Leg-B drop + recording/transcription.
+- Ask user before writing tests.
 
-## 5. Backend work (Convex)
+## 8. Risks / open items
+1. **Conference↔`<Connect><Stream>` topology (highest):** resolve A vs B by a spike (build step 2). May need a small additive `cadence-bridge` change (conference-targeted stream endpoint). Bridge repo now cloned at `c:\GitHub\cadence-bridge`.
+2. **Regression:** new dialer must not break existing calls → per-payer opt-in flag; legacy paths retained.
+3. **Blind-drop silence gap:** keep AI holding line until human answers, then drop Leg B.
+4. **Softphone** blocked on the 3 Twilio API creds.
+5. **ElevenLabs media-stream vs native parity:** confirm the agent behaves identically over `/media-stream` (it's the documented ElevenLabs pattern the bridge already implements) as it did on native outbound — verify IVR navigation + dynamic vars land via the bridge's `conversation_initiation_client_data` init.
 
-### 5.1 Placing the Cadence-controlled call
-- New action `convex/twilioCallActions.ts : initiateIvrCallViaTwilio({ claimId | dentalCaseId })` (or extend existing `initiateCall`/`initiateEvCall` behind a flag). Uses `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` (already in env) to `POST` Twilio `/Calls.json` with `Url → /twiml-ivr-conference?callId=...`.
-- New TwiML handler `/twiml-ivr-conference` in `http.ts`: returns `<Dial><Conference startConferenceOnEnter=true endConferenceOnExit=false>cadence-<callId></Conference></Dial>` and starts the `<Stream>` to the bridge (so ElevenLabs agent hears + speaks) exactly like `/twiml-call-start`.
-- **Note / bridge dependency:** the AI must be a *participant* in the conference, not just a passive stream. Two options, chosen in build: (a) the ElevenLabs agent is dialed into the conference as its own leg via the bridge, or (b) we keep the media-stream model and, on handoff, `<Dial>` the human into the conference while redirecting the payer leg. Will validate which the bridge supports first (may need a small bridge tweak — flagged as a risk, see §9).
-
-### 5.2 Detecting the handoff
-- Repurpose the existing `transfer_to_human` tool + `ivrOnlyMode.ts` detection. Update `IVR_ONLY_MODE_GUIDANCE` / `TRANSFER_TRIGGER_GUIDANCE` so that in IVR-only mode the agent, on human pickup, calls `transfer_to_human(reason="ivr_human_handoff_detected")` instead of `end_call`.
-- New HTTP action `/twilio-request-handoff` (webhook the tool hits, or wire via existing `/v1/transfers/{callId}`): sets `handoffState="awaiting_human"`, `handoffRequestedAt`, `handoffReason`; records `aiParticipantCallSid`. Does NOT drop AI yet (blind drop happens on Accept so the rep isn't in silence indefinitely — a short AI holding line covers the gap).
-
-### 5.3 Accept / Decline (broadcast queue)
-- `mutation acceptHandoff({ callId })`: atomic compare-and-set — only succeeds if `handoffState === "awaiting_human"`; sets `accepting` + accepting user info. First writer wins; others get a benign "already taken".
-- `mutation declineHandoff({ callId })`: audit only (broadcast model — one decline doesn't cancel; call stays available to others). If ALL decline / timeout → `handoff_failed`.
-- `action connectHumanToConference({ callId })`:
-  - **Phase 1:** Twilio REST create call `to = accepting agent's phone` (from a new per-user field or a single configured ops number), TwiML → join `cadence-<callId>` conference. Store `humanParticipantCallSid`.
-  - Drop AI: Twilio REST `POST Conferences/<name>/Participants/<aiParticipantCallSid>` update → or hang up the AI leg. Set `handoffState="connected"`, `handoffAcceptedAt`.
-- Reactive Convex queries (no polling needed) drive the UI: `calls.listAwaitingHandoff` and `calls.listLive`.
-
-### 5.4 Cleanup / edge cases
-- Twilio status callbacks (`/twilio-status`) already flip terminal state; extend to also close out `handoffState` → `handoff_ended` and end the conference.
-- Guard: a call with `parentCallId` can't request handoff (mirrors existing follow-up guard).
-- The legacy `initiateHumanAgentCall` separate-call path stays as-is for payers WITHOUT the new live-transfer (backward compatible / fallback).
-
-## 6. Frontend work (React)
-
-### 6.1 New page: **Live Calls** — route `/live` (`src/pages/LiveCallsPage.jsx`)
-- Reactive queries: `api.calls.listLive` (in-progress calls) + `api.calls.listAwaitingHandoff`.
-- Sections: **Incoming handoffs** (cards with payer, patient/claim, reason, elapsed since request, **Accept** / **Decline** buttons) and **Active calls** (each with phase/handoffState, embedded `LiveCallMonitor`, and a visible AI→human transfer timeline).
-- Add to `Sidebar.jsx` nav + `App.jsx` route.
-
-### 6.2 Handoff notification (app-wide broadcast)
-- A small `HandoffNotifier` mounted in `Layout.jsx`: subscribes to `listAwaitingHandoff`; when a new one appears, shows a toast/banner ("Insurance rep on the line for claim X — Accept?") with Accept → `acceptHandoff` then navigate to `/live`. Broadcast = every active user sees it; reactive query auto-clears it when someone accepts.
-
-### 6.3 Transfer visualization
-- In `LiveCallMonitor.jsx` (or a new `HandoffTimeline` component): render the state machine visibly — `AI navigating IVR → insurance human detected → awaiting our agent → [name] accepted → connected (human↔human)`, with timestamps. This is the "show how a call is being transferred" view the user asked for.
-
-### 6.4 Phase 2 (softphone, later)
-- Add `@twilio/voice-sdk`; new Convex HTTP action `/twilio-voice-token` minting a browser access token (needs **Twilio API Key+Secret + TwiML App SID** — not yet provided). Replace the Phase-1 dialed-number leg with the browser `Device` joining the conference. Accept button then also connects local mic/speaker.
-
-## 7. Env / config
-- Phase 1 uses existing `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `BRIDGE_SERVER_URL`, ElevenLabs vars — **all already in Convex env**. Referenced only via `process.env.*`; never hardcoded.
-- Phase 2 needs new: `TWILIO_API_KEY`, `TWILIO_API_SECRET`, `TWILIO_TWIML_APP_SID`.
-- **SECURITY:** secrets were pasted in chat → recommend rotating ElevenLabs / OpenAI / Twilio credentials.
-
-## 8. Testing (per CLAUDE.md — real, deployed, no SDK mocks)
-- Playwright: drive `/live`, simulate a handoff via a test endpoint that flips a seeded call to `awaiting_human`, assert the broadcast card appears, Accept transitions to `connected`.
-- Real call smoke test against the payer simulator (`cadence-payer-simulator`) with a scripted "transferring you to an agent now" branch to exercise real detection + conference join.
-- Ask user before writing tests (per global instructions).
-
-## 9. Risks / open items
-1. **Bridge / conference compatibility (highest risk):** the existing bridge streams media for a passive/connected agent. Making the ElevenLabs agent a *droppable conference participant* may need a bridge-side change (repo `cadence-bridge`). Must validate first; may adjust approach in §5.1.
-2. **Blind-drop gap:** between AI drop and human join, the insurance rep hears silence. Mitigation: drop AI only *after* human leg is answered, or play brief hold audio.
-3. **ElevenLabs native → Twilio-direct switch** must not regress existing medical/dental/session calls. Keep the old path available behind a per-payer/opt-in flag until the new path is verified.
-4. Phase-2 softphone blocked on Twilio API Key/Secret + TwiML App SID.
-
-## 10. Proposed build order
-1. Schema fields + indexes (§4).
-2. Cadence-controlled Twilio conference call + `/twiml-ivr-conference`; verify ElevenLabs agent still navigates IVR unchanged (§5.1). **Validate bridge/conference (risk #1) here.**
-3. Handoff detection webhook + prompt tweak (§5.2).
-4. Accept/Decline mutations + connect action, dialed-number interim (§5.3).
-5. Live Calls page + notifier + transfer timeline (§6.1–6.3).
-6. End-to-end verify against payer simulator.
-7. (Phase 2) Browser softphone (§6.4) once API Key/Secret provided.
-```
+## 9. Build order
+1. Schema (done) + confirm indexes.
+2. **Spike:** resolve conference↔stream topology (A vs B); minimal bridge change if needed. ← do FIRST, it gates everything.
+3. `twilioCallActions.initiateIvrCallViaTwilio` + `/twiml-payer-conference` + `/twiml-ai-stream`; verify AI navigates IVR unchanged over the bridge.
+4. `/twilio-request-handoff` + IVR-only holding-line prompt tweak.
+5. Adjust `handoff.acceptHandoff`/connect to Leg-C-join-then-drop-Leg-B; wire softphone.
+6. Recording/transcription already wired — verify end-to-end.
+7. Live Calls page verify (built).
+8. End-to-end against payer simulator; then softphone creds + real test.

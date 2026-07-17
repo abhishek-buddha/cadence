@@ -1,16 +1,24 @@
-// Live AI→Human Handoff (cadence_pro_ivr)
+// Live AI→Human Handoff (cadence_pro_ivr) — Option 1: Cadence owns the call
 // ---------------------------------------------------------------------------
 // State machine + queries powering the live transfer where the AI navigates a
 // payer IVR, then — when the insurance human is about to pick up — the call is
 // handed to one of OUR human agents (a broadcast pool) who takes it over in the
-// browser. See docs/PLAN.md ("REVISED ARCHITECTURE") and
-// docs/HANDOFF_BUILD_SPEC.md.
+// browser, all on the SAME call. See docs/PLAN.md ("LOCKED ARCHITECTURE —
+// Option 1") and the memory note handoff-b-option1-cadence-owns-call.
 //
-// The AI itself does the drop via ElevenLabs' native transfer_to_number
-// (Conference) tool, which conferences our bridge number in with the insurance
-// rep and removes the AI. Our bridge-number TwiML (convex/http.ts) parks the
-// rep in a Twilio conference `cadence-<callId>` and flips the call to
-// handoffState="awaiting_human". This module owns everything after that point.
+// The AI is NOT a conference participant (Twilio makes that impossible — a
+// <Connect><Stream> leg cannot also be in a <Conference>). Instead:
+//   1. Cadence dials the payer; the payer leg runs <Connect><Stream> to the
+//      bridge → ElevenLabs (initiateCallViaTwilio). Payer↔AI talk directly.
+//   2. On human handoff, /twilio-request-handoff flips the call to
+//      handoffState="awaiting_human" and broadcasts to the pool.
+//   3. On Accept, redirectPayerToConference() does POST /Calls/<payerSid> with
+//      Url=/twiml-payer-conference — Twilio abandons the <Connect><Stream>
+//      (closing the bridge socket = AI DROPPED) and parks the payer in the
+//      conference `cadence-<callId>`.
+//   4. The browser agent joins that same conference via the Voice SDK.
+// Dropping the AI is thus a byproduct of the redirect — no participant removal,
+// no separate AI leg, no DTMF correlation.
 //
 // handoffState values (also documented on the schema):
 //   awaiting_human | accepting | connected | declined | handoff_failed | handoff_ended
@@ -165,6 +173,14 @@ async function logEvent(ctx: any, callId: any, type: string, message?: string) {
   });
 }
 
+// Exported wrapper so actions (which have no ctx.db) can append a timeline event.
+export const logHandoffEvent = internalMutation({
+  args: { callId: v.id('calls'), type: v.string(), message: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await logEvent(ctx, args.callId, args.type, args.message);
+  },
+});
+
 // Insurance human detected → park the rep, broadcast to our pool. Idempotent:
 // re-invoking while already awaiting/accepting/connected is a no-op.
 export const requestHandoff = internalMutation({
@@ -187,7 +203,32 @@ export const requestHandoff = internalMutation({
       conferenceName: `cadence-${args.callId}`,
     });
     await logEvent(ctx, args.callId, 'handoff_requested', args.reason);
+
+    // Safety net: if no agent accepts within the window, mark the handoff failed
+    // so the Live Calls view doesn't show a stuck "awaiting" card forever.
+    await ctx.scheduler.runAfter(
+      HANDOFF_TIMEOUT_MS,
+      internal.handoff.checkHandoffTimeout,
+      { callId: args.callId }
+    );
     return { ok: true };
+  },
+});
+
+// How long an incoming handoff stays offered to the pool before we give up.
+const HANDOFF_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+
+// Scheduled after requestHandoff. If the call is STILL awaiting_human (no agent
+// accepted), mark it failed. If it advanced (accepting/connected/ended), no-op.
+export const checkHandoffTimeout = internalMutation({
+  args: { callId: v.id('calls') },
+  handler: async (ctx, args) => {
+    const call = await ctx.db.get(args.callId);
+    if (!call) return;
+    if (call.handoffState === 'awaiting_human') {
+      await ctx.db.patch(args.callId, { handoffState: 'handoff_failed' });
+      await logEvent(ctx, args.callId, 'handoff_failed', 'no_agent_accepted_timeout');
+    }
   },
 });
 
@@ -197,6 +238,16 @@ export const setHandoffToken = internalMutation({
   args: { callId: v.id('calls'), token: v.string() },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.callId, { handoffToken: args.token });
+  },
+});
+
+// Stamp the deterministic conference name at call-initiation time. The name
+// `cadence-<callId>` is the sole correlation key for the whole handoff — the
+// payer leg is redirected into it, and the browser agent joins it by name.
+export const setConferenceName = internalMutation({
+  args: { callId: v.id('calls'), conferenceName: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.callId, { conferenceName: args.conferenceName });
   },
 });
 
@@ -224,6 +275,29 @@ export const markHandoffEnded = internalMutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.callId, { handoffState: 'handoff_ended' });
     await logEvent(ctx, args.callId, 'handoff_ended');
+  },
+});
+
+// Save the conference recording URL/duration (from Twilio recordingStatusCallback).
+export const saveRecording = internalMutation({
+  args: {
+    callId: v.id('calls'),
+    recordingUrl: v.string(),
+    duration: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.callId, { recordingUrl: args.recordingUrl });
+    await logEvent(ctx, args.callId, 'recording_ready', args.recordingUrl);
+  },
+});
+
+// Append the human-portion transcript (from Twilio transcribeCallback). Kept in
+// a dedicated field so it doesn't collide with the AI/IVR transcript on the call.
+export const saveHumanTranscript = internalMutation({
+  args: { callId: v.id('calls'), transcript: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.callId, { humanTranscript: args.transcript });
+    await logEvent(ctx, args.callId, 'human_transcript_ready');
   },
 });
 
@@ -259,6 +333,24 @@ export const acceptHandoff = mutation({
       acceptedEmail || acceptedBy
     );
     return { ok: true, conferenceName: `cadence-${args.callId}` };
+  },
+});
+
+// Called by the browser once its softphone has joined the conference AND the
+// payer leg has been redirected in — flips the call to "connected". Public
+// (client-invoked) wrapper around the internal state transition.
+export const markConnectedFromClient = mutation({
+  args: { callId: v.id('calls') },
+  handler: async (ctx, args) => {
+    const call = await ctx.db.get(args.callId);
+    if (!call) return { ok: false, reason: 'not_found' };
+    // Only advance from accepting → connected (guards against stale clicks).
+    if (call.handoffState !== 'accepting' && call.handoffState !== 'connected') {
+      return { ok: false, reason: `unexpected_state:${call.handoffState}` };
+    }
+    await ctx.db.patch(args.callId, { handoffState: 'connected' });
+    await logEvent(ctx, args.callId, 'handoff_connected', 'browser softphone bridged');
+    return { ok: true };
   },
 });
 
@@ -331,6 +423,81 @@ export const connectHumanToConference = action({
         humanParticipantCallSid: callSid,
       });
       return { ok: true, callSid };
+    } catch (error: any) {
+      await ctx.runMutation(internal.handoff.markHandoffFailed, {
+        callId: args.callId,
+        reason: error.message,
+      });
+      return { ok: false, error: error.message };
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Action — THE AI DROP. Redirect the live payer leg out of its <Connect><Stream>
+// (to the bridge → ElevenLabs) and into the conference. Twilio abandons the
+// current TwiML, which closes the bridge WebSocket → the AI is dropped. The
+// payer is then parked in `cadence-<callId>` waiting for our human agent.
+//
+// Called on Accept (by the frontend, right after acceptHandoff succeeds, once
+// the softphone has joined — or just before, since the payer holds in the
+// conference with waitUrl audio). Idempotent-ish: safe to call once per accept.
+// ---------------------------------------------------------------------------
+export const redirectPayerToConference = action({
+  args: { callId: v.id('calls') },
+  handler: async (ctx, args): Promise<{ ok: boolean; error?: string }> => {
+    const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+    const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+    const SITE = process.env.CONVEX_SITE_URL;
+
+    if (!ACCOUNT_SID || !AUTH_TOKEN || !SITE) {
+      await ctx.runMutation(internal.handoff.markHandoffFailed, {
+        callId: args.callId,
+        reason: 'twilio_not_configured',
+      });
+      return { ok: false, error: 'Twilio not configured' };
+    }
+
+    const call = await ctx.runQuery(api.calls.getById, { id: args.callId });
+    if (!call) return { ok: false, error: 'call_not_found' };
+    const payerSid = call.twilioCallSid;
+    if (!payerSid) {
+      // No Cadence-owned payer leg (e.g. call placed via the legacy ElevenLabs
+      // dialer). Option-1 redirect is impossible; fail loudly so the UI shows it.
+      await ctx.runMutation(internal.handoff.markHandoffFailed, {
+        callId: args.callId,
+        reason: 'no_payer_call_sid (legacy dialer? live handoff needs the Twilio dialer)',
+      });
+      return { ok: false, error: 'no_payer_call_sid' };
+    }
+
+    // New TwiML for the payer leg → park in the conference. Redirecting to this
+    // URL replaces the running <Connect><Stream>, severing the AI.
+    const conferenceTwimlUrl = `${SITE}/twiml-payer-conference?callId=${args.callId}`;
+    const body = new URLSearchParams({ Url: conferenceTwimlUrl, Method: 'POST' });
+
+    try {
+      const res = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Calls/${payerSid}.json`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${btoa(`${ACCOUNT_SID}:${AUTH_TOKEN}`)}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body,
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Twilio redirect ${res.status}: ${text}`);
+      }
+      await ctx.runMutation(internal.handoff.logHandoffEvent, {
+        callId: args.callId,
+        type: 'ai_dropped',
+        message: 'payer leg redirected into conference; AI stream closed',
+      });
+      return { ok: true };
     } catch (error: any) {
       await ctx.runMutation(internal.handoff.markHandoffFailed, {
         callId: args.callId,

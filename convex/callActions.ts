@@ -4,6 +4,67 @@ import { api, internal } from './_generated/api';
 import { classifyMedicalCallOutcome } from './outcomeClassifier';
 import { buildIvrInstructionsVar } from './prompts/index';
 
+// Build the full set of ElevenLabs dynamic variables for a medical-claim call.
+// Single source of truth shared by BOTH dialers:
+//   • the ElevenLabs-native path (initiateCall legacy), which passes these in
+//     the outbound-call request body, and
+//   • the Cadence-owned Twilio path (initiateCallViaTwilio), where the bridge
+//     fetches them from /call-metadata and forwards them to ElevenLabs as the
+//     conversation_initiation_client_data. Keeping this in one place is what
+//     makes the agent navigate the IVR identically over either transport.
+export function buildMedicalDynamicVars(args: {
+  claim: any;
+  patient: any;
+  insurance: any;
+  provider: any;
+  callId: string;
+  claimId: string;
+  handoffToken?: string;
+}): Record<string, string> {
+  const { claim, patient, insurance, provider, callId, claimId, handoffToken } = args;
+  const ivrInstructionsVar = buildIvrInstructionsVar(insurance.ivrInstructions, insurance.ivrSteps);
+
+  const dynamicVars: Record<string, string> = {
+    practice_name: provider.practiceName,
+    npi: provider.npi,
+    tax_id: provider.taxId,
+    callback_number: provider.phone,
+    patient_name: `${patient.firstName} ${patient.lastName}`,
+    patient_dob: patient.dateOfBirth,
+    member_id: patient.memberId,
+    group_number: patient.groupNumber || 'N/A',
+    claim_number: claim.claimNumber,
+    date_of_service: claim.dateOfService,
+    amount: (claim.amount / 100).toFixed(2),
+    cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
+    internal_call_id: callId,
+    internal_claim_id: claimId,
+    insurance_name: insurance.name,
+    insurance_phone: insurance.phone,
+    ivr_instructions: ivrInstructionsVar,
+    human_agent_number: insurance.humanAgentNumber || 'N/A',
+    // Live AI→human handoff: bridge/caller number + correlation token. Empty
+    // bridge_number → legacy end_call fallback (see ivrOnlyMode.ts).
+    bridge_number: process.env.TWILIO_PHONE_NUMBER || '',
+    handoff_token: handoffToken || '',
+  };
+
+  // Voice-IVR auto-response phrases — only when the payer has voice IVR enabled.
+  // Render {{placeholders}} inside each response now, since ElevenLabs does not
+  // recursively substitute vars that sit inside a dynamic-variable value.
+  const renderVars = (str: string): string =>
+    String(str || '').replace(/\{\{(\w+)\}\}/g, (m, k) => (dynamicVars[k] != null ? dynamicVars[k] : m));
+  const renderedPhrases = insurance.voiceIvrEnabled
+    ? (insurance.voiceIvrPhrases || []).map((p: any) => ({
+        promptContains: p.promptContains,
+        responseText: renderVars(p.responseText),
+      }))
+    : [];
+  dynamicVars.voice_ivr_phrases = JSON.stringify(renderedPhrases);
+
+  return dynamicVars;
+}
+
 // Ground-truth signal for "the agent deliberately ended the call because a
 // human was actively about to join" — NOT a generic ivr_only classification,
 // which is also true when the payer's IVR itself closes/rejects the call
@@ -30,7 +91,158 @@ export function extractHandoffDetected(elTranscript: any[]): boolean {
   return false;
 }
 
+// Primary entry point for placing a medical-claim verification call.
+//
+// Default: the Cadence-owned Twilio dialer (initiateCallViaTwilio) — Cadence
+// dials the payer and owns the CallSid, so the live AI→human handoff can
+// redirect the payer leg into a conference and drop the AI. Set the env var
+// USE_LEGACY_DIALER='true' to fall back to the original ElevenLabs-native
+// outbound path (kept intact as an instant escape hatch).
 export const initiateCall = action({
+  args: {
+    claimId: v.id('claims'),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; callId: string; twilioCallSid?: string; conversationId?: string }> => {
+    if (process.env.USE_LEGACY_DIALER === 'true') {
+      return await ctx.runAction(api.callActions.initiateCallLegacyElevenLabs, { claimId: args.claimId });
+    }
+    return await ctx.runAction(api.callActions.initiateCallViaTwilio, { claimId: args.claimId });
+  },
+});
+
+// Cadence-owned Twilio dialer (DEFAULT). Cadence places the outbound call to the
+// payer via the Twilio REST API and holds the CallSid. The payer leg's TwiML
+// (/twiml-call-start) opens a <Connect><Stream> to the bridge's /media-stream,
+// where the SAME ElevenLabs agent runs — unchanged — navigating the IVR. Because
+// Cadence owns this leg, the live handoff can later redirect it into a
+// <Dial><Conference> (which closes the stream and drops the AI) and bridge in a
+// human agent. See docs/PLAN.md "LOCKED ARCHITECTURE — Option 1".
+export const initiateCallViaTwilio = action({
+  args: {
+    claimId: v.id('claims'),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; callId: string; twilioCallSid?: string; conversationId?: string }> => {
+    const data: any = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
+    if (!data || !data.claim) throw new Error('Claim not found');
+
+    const { claim, patient, insurance, provider } = data;
+    if (!patient || !insurance || !provider) {
+      throw new Error('Missing patient, insurance, or provider data for this claim');
+    }
+
+    const callId: any = await ctx.runMutation(api.calls.create, {
+      claimId: args.claimId,
+      insuranceContactId: claim.insuranceContactId,
+      status: 'initiating',
+      startedAt: new Date().toISOString(),
+    });
+    await ctx.runMutation(internal.callActions.patchCallUseCase, { callId, useCase: 'medical_claim' });
+
+    // Deterministic conference name — the sole correlation key for the handoff.
+    const handoffToken = `${Date.now()}`.slice(-8);
+    await ctx.runMutation(internal.handoff.setHandoffToken, { callId, token: handoffToken });
+    await ctx.runMutation(internal.handoff.setConferenceName, {
+      callId,
+      conferenceName: `cadence-${callId}`,
+    });
+
+    await ctx.runMutation(api.calls.setCallSetting, {
+      key: 'forwardNumber',
+      value: insurance.humanAgentNumber || '',
+    });
+
+    const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+    const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+    const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
+    const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL;
+    const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
+
+    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'failed',
+        errorMessage: 'Missing Twilio credentials in environment variables',
+      });
+      throw new Error('Twilio not configured');
+    }
+    if (!CONVEX_SITE_URL) {
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'failed',
+        errorMessage: 'Missing CONVEX_SITE_URL in environment variables',
+      });
+      throw new Error('CONVEX_SITE_URL not configured');
+    }
+
+    try {
+      // The bridge reads the ElevenLabs dynamic variables from /call-metadata,
+      // which serves buildMedicalDynamicVars() — identical data to the legacy
+      // native path. We build them here too only to fail fast if data is bad;
+      // the authoritative copy the agent uses comes from /call-metadata.
+      buildMedicalDynamicVars({
+        claim, patient, insurance, provider,
+        callId, claimId: args.claimId, handoffToken,
+      });
+
+      // Cadence places the call. Payer leg TwiML → /twiml-call-start, which
+      // <Connect><Stream>s to the bridge (AI) + <Start><Stream>s the monitor.
+      const twimlUrl = `${CONVEX_SITE_URL}/twiml-call-start?callId=${callId}&claimId=${args.claimId}`;
+      const statusCallbackUrl = `${CONVEX_SITE_URL}/twilio-status`;
+      const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+
+      const params = new URLSearchParams();
+      params.append('To', insurance.phone);
+      params.append('From', TWILIO_PHONE_NUMBER);
+      params.append('Url', twimlUrl);
+      params.append('StatusCallback', statusCallbackUrl);
+      params.append('StatusCallbackEvent', 'initiated ringing answered completed');
+      params.append('Timeout', '60');
+
+      const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls.json`,
+        {
+          method: 'POST',
+          headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString(),
+        }
+      );
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Twilio API error ${response.status}: ${errorText}`);
+      }
+      const result = await response.json();
+      const callSid = result.sid;
+
+      // Cadence now owns this CallSid — it's the payer leg we redirect on handoff.
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'in_progress',
+        twilioCallSid: callSid,
+      });
+
+      await ctx.runMutation(api.claims.update, {
+        id: args.claimId,
+        lastCalledAt: new Date().toISOString(),
+        status: claim.status === 'pending' ? 'in_progress' : claim.status,
+      });
+
+      return { success: true, callId, twilioCallSid: callSid };
+    } catch (error: any) {
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: callId,
+        status: 'failed',
+        errorMessage: error.message,
+      });
+      throw error;
+    }
+  },
+});
+
+// LEGACY: ElevenLabs-native outbound dialer. ElevenLabs owns the Twilio call
+// end-to-end (Cadence gets no controllable CallSid → cannot re-bridge). Retained
+// as a fallback behind USE_LEGACY_DIALER='true'. This is the original body of
+// initiateCall, moved verbatim.
+export const initiateCallLegacyElevenLabs = action({
   args: {
     claimId: v.id('claims'),
   },
@@ -92,54 +304,12 @@ export const initiateCall = action({
       // No prompt override — the agent's system prompt is fixed and permanent
       // (set once via scripts/setup-elevenlabs-agents.mjs). Everything payer-
       // specific reaches the agent purely as dynamic variable data substituted
-      // into that fixed prompt's {{placeholders}}, same as patient_name etc.
-      const ivrInstructionsVar = buildIvrInstructionsVar(insurance.ivrInstructions, insurance.ivrSteps);
-
-      // All payer-/claim-specific values sent to the agent as dynamic variables.
-      const dynamicVars: Record<string, string> = {
-        practice_name: provider.practiceName,
-        npi: provider.npi,
-        tax_id: provider.taxId,
-        callback_number: provider.phone,
-        patient_name: `${patient.firstName} ${patient.lastName}`,
-        patient_dob: patient.dateOfBirth,
-        member_id: patient.memberId,
-        group_number: patient.groupNumber || 'N/A',
-        claim_number: claim.claimNumber,
-        date_of_service: claim.dateOfService,
-        amount: (claim.amount / 100).toFixed(2),
-        cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
-        internal_call_id: callId,
-        internal_claim_id: args.claimId,
-        insurance_name: insurance.name,
-        insurance_phone: insurance.phone,
-        ivr_instructions: ivrInstructionsVar,
-        human_agent_number: insurance.humanAgentNumber || 'N/A',
-        // Live AI→human handoff: our bridge number the AI transfers into
-        // (Conference), and the post-dial token that ties the bridged leg back
-        // to this call. Empty bridge_number → agent falls back to end_call
-        // legacy follow-up (see ivrOnlyMode.ts).
-        bridge_number: process.env.TWILIO_PHONE_NUMBER || '',
-        handoff_token: handoffToken,
-      };
-
-      // Voice-IVR auto-response rules — ONLY when the payer has voice IVR enabled.
-      // (Previously these were sent regardless of the toggle, so turning voice IVR
-      // OFF didn't stop the agent from speaking configured phrases.) When enabled,
-      // substitute the claim values into each response before sending, so the agent
-      // speaks the real Tax ID / member ID etc. instead of the literal
-      // "{{placeholder}}" (ElevenLabs does not recursively substitute {{vars}} that
-      // sit inside a dynamic-variable value, so we render them here).
-      const renderVars = (str: string): string =>
-        String(str || '').replace(/\{\{(\w+)\}\}/g, (m, k) =>
-          dynamicVars[k] != null ? dynamicVars[k] : m);
-      const renderedPhrases = insurance.voiceIvrEnabled
-        ? (insurance.voiceIvrPhrases || []).map((p: any) => ({
-            promptContains: p.promptContains,
-            responseText: renderVars(p.responseText),
-          }))
-        : [];
-      dynamicVars.voice_ivr_phrases = JSON.stringify(renderedPhrases);
+      // into that fixed prompt's {{placeholders}}. Shared builder = identical
+      // vars to the Cadence-owned Twilio path (via /call-metadata).
+      const dynamicVars = buildMedicalDynamicVars({
+        claim, patient, insurance, provider,
+        callId, claimId: args.claimId, handoffToken,
+      });
 
       // Step 1: Call ElevenLabs native outbound call — handles IVR navigation natively
       const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {

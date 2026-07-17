@@ -213,6 +213,10 @@ export default defineSchema({
     // Short numeric token carried in the AI transfer's post-dial DTMF digits so
     // the inbound leg on our bridge number can be correlated back to THIS call.
     handoffToken: v.optional(v.string()),
+    // Transcript of the human↔human portion after handoff (Twilio transcription
+    // of the conference recording). Separate from `transcript` (the AI/IVR
+    // portion) so the two don't collide.
+    humanTranscript: v.optional(v.string()),
     userId: v.string(),
     startedAt: v.string(),
     completedAt: v.optional(v.string()),

@@ -1,5 +1,54 @@
 # Changelog
 
+## 2026-07-17 — Handoff rearchitected to Option 1 (Cadence owns the call) [cadence_pro_ivr]
+
+Replaces the ElevenLabs `transfer_to_number` design. Verified against Twilio docs
+that a `<Connect><Stream>` leg cannot also be a `<Conference>` participant, so the
+AI can never be a droppable conference member. New working topology:
+
+- **New default dialer** `callActions.initiateCallViaTwilio`: Cadence places the
+  outbound call to the payer via Twilio REST and OWNS the CallSid. Payer leg TwiML
+  = existing `/twiml-call-start` (`<Connect><Stream>` → bridge `/media-stream` →
+  the SAME ElevenLabs agent, unchanged). `initiateCall` now switches on
+  `USE_LEGACY_DIALER` env (default = new dialer; `='true'` → original
+  ElevenLabs-native path, kept verbatim as `initiateCallLegacyElevenLabs`).
+- **Shared** `buildMedicalDynamicVars()` — single source of truth for the agent's
+  dynamic variables, used by both dialers AND by `/call-metadata` (which the
+  bridge fetches to init ElevenLabs), so the agent navigates the IVR identically
+  over either transport.
+- **AI drop = redirect, not participant-removal:** `handoff.redirectPayerToConference`
+  POSTs the live payer call to `/twiml-payer-conference`, which abandons the
+  `<Connect><Stream>` (closing the bridge socket → AI dropped) and parks the payer
+  in conference `cadence-<callId>`. New `/twilio-request-handoff` sets
+  `awaiting_human`. New `markConnectedFromClient` + `setConferenceName` +
+  `logHandoffEvent`.
+- **Frontend** Accept flow rewired: claim → softphone joins conference → redirect
+  payer (drops AI) → mark connected.
+- **Infra:** bought 2nd Twilio number `+17744486457` = caller (`TWILIO_PHONE_NUMBER`);
+  `+13187589839` stays the payer IVR, webhook repointed to `rapid-pheasant-510`.
+  No cadence-bridge changes required. Deployed to `rapid-pheasant-510` (typecheck OK).
+- **Pending:** checkpoint test call (AI navigates IVR over the bridge?) before the
+  handoff path is exercised end-to-end.
+
+## 2026-07-17 — Handoff hardening: recording, transcription, timeout [cadence_pro_ivr]
+
+- **Conference recording:** the handoff conference now records automatically
+  (`record-from-start`, no consent prompt per requirement). New
+  `/twilio-recording-status` handler saves `recordingUrl` onto the call and
+  requests Twilio transcription of the recording.
+- **Transcription:** `/twilio-transcription` handler saves the human↔human
+  transcript to a new `calls.humanTranscript` field (Twilio built-in
+  transcription — easiest path). Surfaced in the Live Calls active-call card
+  (recording link + collapsible transcript).
+- **Edge cases:** `requestHandoff` now schedules `checkHandoffTimeout` (3 min);
+  an unclaimed handoff auto-transitions to `handoff_failed` instead of sticking.
+- `handoff.ts` new internals: `saveRecording`, `saveHumanTranscript`,
+  `checkHandoffTimeout`. Deployed to rapid-pheasant-510 (typecheck + schema OK).
+
+**Still pending:** ElevenLabs `transfer_to_number` tool config (unblocks live
+test) → then a real call to observe DTMF correlation and finalize concurrent-
+call hardening.
+
 ## 2026-07-17 — Live AI→Human Call Handoff (Phase 1) [branch: cadence_pro_ivr]
 
 Feature: when the AI navigating a payer IVR reaches the insurance human, hand the

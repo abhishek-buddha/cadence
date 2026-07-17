@@ -10,7 +10,7 @@
 // listLive), no polling.
 
 import { useEffect, useState } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
   Radio,
@@ -45,6 +45,8 @@ function subjectLabel(call) {
 function IncomingCard({ call, softphone, onAccepted }) {
   const acceptHandoff = useMutation(api.handoff.acceptHandoff);
   const declineHandoff = useMutation(api.handoff.declineHandoff);
+  const redirectPayer = useAction(api.handoff.redirectPayerToConference);
+  const markConnected = useMutation(api.handoff.markConnectedFromClient);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const [, forceTick] = useState(0);
@@ -58,15 +60,31 @@ function IncomingCard({ call, softphone, onAccepted }) {
   async function handleAccept() {
     setBusy(true);
     setNotice(null);
+    // 1) Atomic first-wins claim.
     const res = await acceptHandoff({ callId: call._id });
     if (!res?.ok) {
       setNotice(res?.reason === 'already_taken' ? 'Already taken by another agent' : 'Could not accept');
       setBusy(false);
       return;
     }
-    // Join the conference audio via the browser softphone.
-    await softphone.connect(call._id);
-    onAccepted?.(call._id);
+    try {
+      // 2) Join the conference from the browser FIRST, so a human is already
+      //    present when the payer arrives (no dead air on the rep's side).
+      await softphone.connect(call._id);
+      // 3) Drop the AI: redirect the payer leg into the same conference. This
+      //    closes the AI's bridge stream. Payer now hears our human.
+      const r = await redirectPayer({ callId: call._id });
+      if (!r?.ok) {
+        setNotice(`Could not bridge the call${r?.error ? `: ${r.error}` : ''}`);
+        setBusy(false);
+        return;
+      }
+      // 4) Mark connected once both sides are in.
+      await markConnected({ callId: call._id });
+      onAccepted?.(call._id);
+    } catch (e) {
+      setNotice(`Handoff error: ${e?.message || 'unknown'}`);
+    }
     setBusy(false);
   }
 
@@ -127,6 +145,7 @@ function IncomingCard({ call, softphone, onAccepted }) {
 function ActiveCallRow({ call }) {
   const detail = useQuery(api.handoff.getHandoff, { callId: call._id });
   const events = detail?.events ?? [];
+  const c = detail?.call || call;
 
   return (
     <div className="rounded-xl border border-border bg-white p-4">
@@ -140,7 +159,37 @@ function ActiveCallRow({ call }) {
         </div>
         <StateBadge handoffState={call.handoffState} status={call.status} />
       </div>
-      <HandoffTimeline call={detail?.call || call} events={events} />
+      <HandoffTimeline call={c} events={events} />
+
+      {/* Post-handoff recording + transcript of the human↔human portion. */}
+      {(c.recordingUrl || c.humanTranscript) && (
+        <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
+          {c.recordingUrl && (
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <Mic className="w-3.5 h-3.5" />
+              <span>Call recorded</span>
+              <a
+                href={c.recordingUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent hover:underline font-medium"
+              >
+                Open recording
+              </a>
+            </div>
+          )}
+          {c.humanTranscript && (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-gray-600 hover:text-gray-900 font-medium">
+                Transcript (agent ↔ rep)
+              </summary>
+              <p className="mt-1.5 text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-[13px] leading-relaxed">
+                {c.humanTranscript}
+              </p>
+            </details>
+          )}
+        </div>
+      )}
     </div>
   );
 }

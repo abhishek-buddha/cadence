@@ -107,33 +107,61 @@ export function useSoftphone() {
   }, [status]);
 
   // Join the conference for a given callId (the accepted handoff).
+  // Resolves only after Twilio accepts the browser leg, so callers can avoid
+  // redirecting the payer/dropping the AI until a human is really connected.
   const connect = useCallback(
     async (callId) => {
       const device = await ensureDevice();
-      if (!device) return; // unconfigured / error — status already set
+      if (!device) return { ok: false, error: 'softphone_unconfigured' };
       setStatus('connecting');
       try {
         const call = await device.connect({ params: { callId } });
         callRef.current = call;
         setActiveCallId(callId);
-        call.on('accept', () => setStatus('on_call'));
-        call.on('disconnect', () => {
-          setStatus('ready');
-          setActiveCallId(null);
-          callRef.current = null;
-        });
-        call.on('cancel', () => {
-          setStatus('ready');
-          setActiveCallId(null);
-          callRef.current = null;
-        });
-        call.on('error', (e) => {
-          setError(e?.message || 'Call error');
-          setStatus('error');
+
+        return await new Promise((resolve) => {
+          let settled = false;
+          const settle = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            resolve(result);
+          };
+
+          const timeout = setTimeout(() => {
+            setError('Softphone did not connect in time');
+            setStatus('error');
+            settle({ ok: false, error: 'softphone_accept_timeout' });
+          }, 15000);
+
+          call.on('accept', () => {
+            setStatus('on_call');
+            settle({ ok: true, call });
+          });
+          call.on('disconnect', () => {
+            setStatus('ready');
+            setActiveCallId(null);
+            callRef.current = null;
+            settle({ ok: false, error: 'softphone_disconnected_before_accept' });
+          });
+          call.on('cancel', () => {
+            setStatus('ready');
+            setActiveCallId(null);
+            callRef.current = null;
+            settle({ ok: false, error: 'softphone_cancelled' });
+          });
+          call.on('error', (e) => {
+            const message = e?.message || 'Call error';
+            setError(message);
+            setStatus('error');
+            settle({ ok: false, error: message });
+          });
         });
       } catch (e) {
-        setError(e?.message || String(e));
+        const message = e?.message || String(e);
+        setError(message);
         setStatus('error');
+        return { ok: false, error: message };
       }
     },
     [ensureDevice]

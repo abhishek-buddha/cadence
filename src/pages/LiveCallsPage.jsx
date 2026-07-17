@@ -68,13 +68,20 @@ function IncomingCard({ call, softphone, onAccepted }) {
       return;
     }
     try {
-      // 2) Join the conference from the browser FIRST, so a human is already
-      //    present when the payer arrives (no dead air on the rep's side).
-      await softphone.connect(call._id);
+      // 2) Join the conference from the browser FIRST. Do not redirect/drop the
+      //    AI until Twilio confirms the Cadence user is actually connected.
+      const joined = await softphone.connect(call._id);
+      if (!joined?.ok) {
+        setNotice(`Could not connect browser phone${joined?.error ? `: ${joined.error}` : ''}`);
+        setBusy(false);
+        return;
+      }
+
       // 3) Drop the AI: redirect the payer leg into the same conference. This
       //    closes the AI's bridge stream. Payer now hears our human.
       const r = await redirectPayer({ callId: call._id });
       if (!r?.ok) {
+        softphone.disconnect();
         setNotice(`Could not bridge the call${r?.error ? `: ${r.error}` : ''}`);
         setBusy(false);
         return;

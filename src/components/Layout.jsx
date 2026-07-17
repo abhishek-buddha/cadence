@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import HandoffNotifier from './HandoffNotifier';
 import { Building2, ChevronDown, Check } from 'lucide-react';
 import { useProviderFilter } from '../context/ProviderFilterContext';
 
@@ -99,6 +100,9 @@ export default function Layout() {
           </div>
         </main>
       </div>
+
+      {/* App-wide broadcast toast for incoming AI→human handoffs */}
+      <HandoffNotifier />
     </div>
   );
 }

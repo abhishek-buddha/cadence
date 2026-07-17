@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
  * Format: cad_<64 hex chars>; prefix is the first 12 chars (`cad_` + 8 hex).
  */
 
-const API_BASE = process.env.CADENCE_API_BASE ?? 'https://colorless-cardinal-959.convex.site';
+const API_BASE = process.env.CADENCE_API_BASE ?? 'https://rapid-pheasant-510.convex.site';
 
 interface IssuedKey {
   id: string;

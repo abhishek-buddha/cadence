@@ -10,6 +10,7 @@ import PatientsPage from './pages/PatientsPage';
 import InsuranceDirectory from './pages/InsuranceDirectory';
 import ProvidersPage from './pages/ProvidersPage';
 import CallHistory from './pages/CallHistory';
+import LiveCallsPage from './pages/LiveCallsPage';
 import SettingsPage from './pages/SettingsPage';
 import AccessCodePage from './pages/AccessCodePage';
 import EligibilityPage from './pages/EligibilityPage';
@@ -50,6 +51,7 @@ export default function App() {
               <Route path="insurance" element={<InsuranceDirectory />} />
               <Route path="providers" element={<ProvidersPage />} />
               <Route path="calls" element={<CallHistory />} />
+              <Route path="live" element={<LiveCallsPage />} />
               <Route path="settings" element={<SettingsPage />} />
 
               <Route path="eligibility" element={<EligibilityPage />} />

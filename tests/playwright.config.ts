@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 
 const BASE_URL = process.env.CADENCE_BASE_URL ?? 'https://cadence-new.onrender.com';
-const API_BASE = process.env.CADENCE_API_BASE ?? 'https://colorless-cardinal-959.convex.site';
+const API_BASE = process.env.CADENCE_API_BASE ?? 'https://rapid-pheasant-510.convex.site';
 
 export default defineConfig({
   testDir: '.',

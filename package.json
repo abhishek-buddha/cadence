@@ -17,6 +17,7 @@
     "test:report": "playwright show-report tests/playwright-report"
   },
   "dependencies": {
+    "@twilio/voice-sdk": "^2.18.3",
     "convex": "^1.31.7",
     "lucide-react": "^0.564.0",
     "react": "^19.2.0",

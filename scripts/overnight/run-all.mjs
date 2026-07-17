@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 
 const URL = 'https://cadence-new.onrender.com';
-const CONVEX_SITE = 'https://colorless-cardinal-959.convex.site';
+const CONVEX_SITE = 'https://rapid-pheasant-510.convex.site';
 const PIN = '472394';
 const SHOT_DIR = 'docs/status/screenshots/2026-04-20';
 const RESULTS = [];

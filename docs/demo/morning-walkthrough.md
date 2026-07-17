@@ -16,7 +16,7 @@ npx convex dev
 ```
 This caches your Convex auth token at `~/.convex/`.
 
-### 0.2 Deploy schema + functions to prod Convex (`colorless-cardinal-959`)
+### 0.2 Deploy schema + functions to prod Convex (`rapid-pheasant-510`)
 ```bash
 npx convex deploy --cmd 'npm run build'
 ```
@@ -185,7 +185,7 @@ Should see: Eligibility, Sessions, Reports, Transfers, plus role-gated Admin gro
 3. From terminal:
 ```bash
 KEY="paste_your_key_here"
-BASE="https://colorless-cardinal-959.convex.site"
+BASE="https://rapid-pheasant-510.convex.site"
 
 # List payers
 curl -H "Authorization: Bearer $KEY" $BASE/v1/payers
@@ -293,7 +293,7 @@ npx convex run devSeed:wipeAndReseed
 ## If something breaks
 
 1. Re-run `npx convex deploy --cmd 'npm run build'` — most likely a stale function
-2. Check Convex dashboard logs at https://dashboard.convex.dev/ → deployment colorless-cardinal-959 → Logs
+2. Check Convex dashboard logs at https://dashboard.convex.dev/ → deployment rapid-pheasant-510 → Logs
 3. `npx convex run devSeed:wipeAndReseed` to reset state
 4. The test plan classifies what should pass: `docs/superpowers/plans/2026-04-17-cadence-test-plan.md`
 5. The gap plan documents architecture decisions: `docs/superpowers/plans/2026-04-17-cadence-medusind-rfp-gap-plan.md`

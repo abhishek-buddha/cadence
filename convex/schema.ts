@@ -183,6 +183,36 @@ export default defineSchema({
     // claimed, so concurrent completion paths (poll / call-ended / webhook)
     // can't each place a duplicate call to the human-agent number.
     handoffFollowUpAt: v.optional(v.string()),
+    // ---- LIVE AI→HUMAN HANDOFF (cadence_pro_ivr) ----
+    // These drive the live transfer where the AI navigates the payer IVR on a
+    // Cadence-controlled Twilio conference call, and when the insurance human
+    // picks up, one of our agents takes over the SAME call (AI leg dropped).
+    // All optional / additive — legacy calls and the existing ElevenLabs-native
+    // separate-follow-up path (handoffFollowUpAt above) are unaffected.
+    //   "none"          — no live handoff in play (default / legacy calls)
+    //   "awaiting_human"— insurance human detected; broadcast to our agents
+    //   "accepting"     — one of our agents claimed it; bridging in progress
+    //   "connected"     — our human ↔ insurance human on the same call
+    //   "declined"      — an agent declined (call stays available to others)
+    //   "handoff_failed"— no agent took it / bridge failed
+    //   "handoff_ended" — call ended after a successful handoff
+    handoffState: v.optional(v.string()),
+    handoffRequestedAt: v.optional(v.string()),
+    handoffReason: v.optional(v.string()),
+    handoffAcceptedByUserId: v.optional(v.string()),
+    handoffAcceptedByEmail: v.optional(v.string()),
+    handoffAcceptedAt: v.optional(v.string()),
+    // Deterministic Twilio conference name (cadence-<callId>) that every leg
+    // (payer, AI media, our human) joins so participants can be swapped live.
+    conferenceName: v.optional(v.string()),
+    // The AI's conference participant/call leg — dropped on successful handoff.
+    aiParticipantCallSid: v.optional(v.string()),
+    // Our agent's leg once they join (Phase 1: dialed number; Phase 2: browser
+    // softphone). Kept so we can track/clean it up.
+    humanParticipantCallSid: v.optional(v.string()),
+    // Short numeric token carried in the AI transfer's post-dial DTMF digits so
+    // the inbound leg on our bridge number can be correlated back to THIS call.
+    handoffToken: v.optional(v.string()),
     userId: v.string(),
     startedAt: v.string(),
     completedAt: v.optional(v.string()),
@@ -193,6 +223,7 @@ export default defineSchema({
     .index('by_userId', ['userId'])
     .index('by_status', ['status'])
     .index('by_outcome', ['outcome'])
+    .index('by_handoffState', ['handoffState'])
     .index('by_elevenLabsConversationId', ['elevenLabsConversationId']),
 
   // Call sessions for multi-patient calls (RFP requirement R-CONV-6)

@@ -270,6 +270,171 @@ http.route({
   }),
 });
 
+// ===========================================================================
+// LIVE AI→HUMAN HANDOFF — conference bridge TwiML (cadence_pro_ivr)
+// ---------------------------------------------------------------------------
+// Flow: the AI (on its ElevenLabs call) navigates the payer IVR, then on human
+// handoff fires ElevenLabs' native transfer_to_number (Conference) to OUR
+// bridge number (TWILIO_PHONE_NUMBER). ElevenLabs conferences that leg in with
+// the insurance rep and drops the AI. Twilio delivers that leg to us as an
+// inbound call → /twiml-bridge-inbound, which reads the post-dial handoff token,
+// parks the rep in conference `cadence-<callId>`, and flips the call to
+// handoffState="awaiting_human" (broadcast to our agents). When an agent
+// accepts in the UI, their browser softphone (or a dialed leg) joins the same
+// conference → human ↔ insurance human.
+// ===========================================================================
+
+// Hold audio played to the parked insurance rep while we wait for one of our
+// agents to accept. Simple, polite, loops via waitUrl.
+function holdTwiml(): string {
+  return `
+    <Response>
+      <Say voice="alice">Please hold. Connecting you to a specialist now.</Say>
+      <Play loop="0">https://sdk.twilio.com/js/client/sounds/releases/1.0.0/ringtone.mp3</Play>
+    </Response>
+  `;
+}
+
+// Entry point for the AI's Conference transfer landing on our bridge number.
+// Reads the handoff token from post-dial DTMF, then redirects to the parking
+// handler with the resolved token.
+async function bridgeInboundHandler(ctx: any, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  // ElevenLabs post-dial digits arrive as DTMF; Twilio can also pass them as a
+  // Digits param on the inbound webhook depending on config. Accept either.
+  let token = url.searchParams.get('token') || url.searchParams.get('Digits') || '';
+  if (!token) {
+    try {
+      const form = new URLSearchParams(await request.text());
+      token = form.get('Digits') || '';
+    } catch {
+      // no body / not form-encoded
+    }
+  }
+  const siteUrl = url.origin;
+  // If no token yet, gather the DTMF the transfer relays, then reprocess.
+  if (!token) {
+    return twimlResponse(`
+      <Response>
+        <Gather numDigits="8" timeout="4" action="${siteUrl}/twiml-bridge-parked" method="POST"/>
+        <Redirect method="POST">${siteUrl}/twiml-bridge-parked</Redirect>
+      </Response>
+    `);
+  }
+  return twimlResponse(`
+    <Response>
+      <Redirect method="POST">${siteUrl}/twiml-bridge-parked?token=${encodeURIComponent(token)}</Redirect>
+    </Response>
+  `);
+}
+
+http.route({ path: '/twiml-bridge-inbound', method: 'POST', handler: httpAction(bridgeInboundHandler) });
+http.route({ path: '/twiml-bridge-inbound', method: 'GET', handler: httpAction(bridgeInboundHandler) });
+
+// Resolve token → callId, flip to awaiting_human, park the rep in the conference.
+async function bridgeParkedHandler(ctx: any, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  let token = url.searchParams.get('token') || '';
+  if (!token) {
+    try {
+      const form = new URLSearchParams(await request.text());
+      token = (form.get('Digits') || '').replace(/[^0-9]/g, '');
+    } catch {
+      // ignore
+    }
+  }
+
+  const call = await ctx.runQuery(api.handoff.resolveByToken, { token: token || undefined });
+  if (!call) {
+    // Couldn't correlate — keep the rep on a brief hold rather than dropping.
+    return twimlResponse(holdTwiml());
+  }
+
+  // Idempotently mark awaiting_human + set conference name.
+  await ctx.runMutation(internal.handoff.requestHandoff, {
+    callId: call._id,
+    reason: call.handoffReason || 'ivr_human_handoff_detected',
+  });
+
+  const confName = `cadence-${call._id}`;
+  const siteUrl = url.origin;
+  // Park the rep: they start/hold the conference but do NOT end it when the
+  // holding side changes (endConferenceOnExit=false). waitUrl loops hold audio.
+  return twimlResponse(`
+    <Response>
+      <Dial>
+        <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
+                    waitUrl="${siteUrl}/twiml-conference-hold" beep="false">
+          ${confName}
+        </Conference>
+      </Dial>
+    </Response>
+  `);
+}
+
+http.route({ path: '/twiml-bridge-parked', method: 'POST', handler: httpAction(bridgeParkedHandler) });
+http.route({ path: '/twiml-bridge-parked', method: 'GET', handler: httpAction(bridgeParkedHandler) });
+
+// Hold audio (waitUrl) for the parked conference.
+http.route({
+  path: '/twiml-conference-hold',
+  method: 'POST',
+  handler: httpAction(async () => twimlResponse(holdTwiml())),
+});
+http.route({
+  path: '/twiml-conference-hold',
+  method: 'GET',
+  handler: httpAction(async () => twimlResponse(holdTwiml())),
+});
+
+// Our agent's leg (dialed-number fallback path) joins the conference. When the
+// agent leaves, the conference ends (endConferenceOnExit=true), dropping the rep.
+async function agentJoinHandler(ctx: any, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const callId = url.searchParams.get('callId') || '';
+  const confName = `cadence-${callId}`;
+  return twimlResponse(`
+    <Response>
+      <Dial>
+        <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false">
+          ${confName}
+        </Conference>
+      </Dial>
+    </Response>
+  `);
+}
+http.route({ path: '/twiml-agent-join', method: 'POST', handler: httpAction(agentJoinHandler) });
+http.route({ path: '/twiml-agent-join', method: 'GET', handler: httpAction(agentJoinHandler) });
+
+// TwiML the browser softphone (Twilio Voice SDK) requests when it places its
+// outgoing call — joins the same conference so the agent talks to the rep.
+// The TwiML App's Voice URL points here. The client passes `callId` as a
+// custom parameter, surfaced by Twilio as a POST field.
+async function softphoneOutgoingHandler(ctx: any, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  let callId = url.searchParams.get('callId') || '';
+  if (!callId) {
+    try {
+      const form = new URLSearchParams(await request.text());
+      callId = form.get('callId') || '';
+    } catch {
+      // ignore
+    }
+  }
+  const confName = `cadence-${callId}`;
+  return twimlResponse(`
+    <Response>
+      <Dial>
+        <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false">
+          ${confName}
+        </Conference>
+      </Dial>
+    </Response>
+  `);
+}
+http.route({ path: '/twiml-softphone-outgoing', method: 'POST', handler: httpAction(softphoneOutgoingHandler) });
+http.route({ path: '/twiml-softphone-outgoing', method: 'GET', handler: httpAction(softphoneOutgoingHandler) });
+
 // ---- Twilio status callback ----
 http.route({
   path: '/twilio-status',
@@ -301,6 +466,14 @@ http.route({
             completedAt: new Date().toISOString(),
             duration: duration ? parseInt(duration, 10) : undefined,
           });
+          // If this call went through a live handoff, close it out so the Live
+          // Calls view stops showing it as active.
+          if (
+            call.handoffState &&
+            ['awaiting_human', 'accepting', 'connected'].includes(call.handoffState)
+          ) {
+            await ctx.runMutation(internal.handoff.markHandoffEnded, { callId: call._id });
+          }
         } else if (callStatus === 'failed' || callStatus === 'busy' || callStatus === 'no-answer') {
           await ctx.runMutation(api.calls.updateStatus, {
             id: call._id,
@@ -1651,6 +1824,124 @@ http.route({
     const result = await ctx.runQuery(api.reports.exceptionReport, {});
     await logAudit(ctx, request, 'read', 'report', undefined, 'exceptions', auth.keyId);
     return jsonResponse(result);
+  }),
+});
+
+// ===========================================================================
+// /twilio-voice-token — mint a Twilio Voice access token for the browser
+// softphone (Twilio Voice JS SDK). The token is a JWT signed HS256 with the
+// Twilio API Key SECRET, granting the browser a VoiceGrant tied to our TwiML
+// App. Built with Web Crypto (Convex runtime) — no Twilio Node SDK needed.
+//
+// Requires (Convex env): TWILIO_ACCOUNT_SID, TWILIO_API_KEY (SK...),
+// TWILIO_API_SECRET, TWILIO_TWIML_APP_SID (AP...). Until those exist the
+// endpoint returns 503 and the softphone stays inert — nothing else breaks.
+// ===========================================================================
+
+function base64UrlEncode(input: string | Uint8Array): string {
+  let str: string;
+  if (typeof input === 'string') {
+    str = btoa(unescape(encodeURIComponent(input)));
+  } else {
+    let binary = '';
+    for (let i = 0; i < input.length; i++) binary += String.fromCharCode(input[i]);
+    str = btoa(binary);
+  }
+  return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function signTwilioAccessToken(opts: {
+  accountSid: string;
+  apiKey: string;
+  apiSecret: string;
+  twimlAppSid: string;
+  identity: string;
+  ttlSeconds?: number;
+}): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const ttl = opts.ttlSeconds ?? 3600;
+  const header = { typ: 'JWT', alg: 'HS256', cty: 'twilio-fpa;v=1' };
+  const payload = {
+    jti: `${opts.apiKey}-${now}`,
+    iss: opts.apiKey,
+    sub: opts.accountSid,
+    iat: now,
+    exp: now + ttl,
+    grants: {
+      identity: opts.identity,
+      voice: {
+        outgoing: { application_sid: opts.twimlAppSid },
+        incoming: { allow: true },
+      },
+    },
+  };
+
+  const encHeader = base64UrlEncode(JSON.stringify(header));
+  const encPayload = base64UrlEncode(JSON.stringify(payload));
+  const signingInput = `${encHeader}.${encPayload}`;
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(opts.apiSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signingInput));
+  const encSig = base64UrlEncode(new Uint8Array(sig));
+  return `${signingInput}.${encSig}`;
+}
+
+async function voiceTokenHandler(ctx: any, request: Request): Promise<Response> {
+  const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+  const API_KEY = process.env.TWILIO_API_KEY;
+  const API_SECRET = process.env.TWILIO_API_SECRET;
+  const TWIML_APP_SID = process.env.TWILIO_TWIML_APP_SID;
+
+  if (!ACCOUNT_SID || !API_KEY || !API_SECRET || !TWIML_APP_SID) {
+    return jsonResponse(
+      {
+        error: {
+          code: 'softphone_not_configured',
+          message:
+            'Browser softphone not configured. Set TWILIO_API_KEY, TWILIO_API_SECRET, and TWILIO_TWIML_APP_SID in Convex env.',
+        },
+      },
+      503
+    );
+  }
+
+  const url = new URL(request.url);
+  const identity =
+    url.searchParams.get('identity') || `agent-${Math.random().toString(36).slice(2, 10)}`;
+
+  const token = await signTwilioAccessToken({
+    accountSid: ACCOUNT_SID,
+    apiKey: API_KEY,
+    apiSecret: API_SECRET,
+    twimlAppSid: TWIML_APP_SID,
+    identity,
+  });
+
+  return jsonResponse({ token, identity });
+}
+
+http.route({ path: '/twilio-voice-token', method: 'GET', handler: httpAction(voiceTokenHandler) });
+http.route({ path: '/twilio-voice-token', method: 'POST', handler: httpAction(voiceTokenHandler) });
+
+// CORS preflight for the voice-token endpoint (browser fetches it cross-origin).
+http.route({
+  path: '/twilio-voice-token',
+  method: 'OPTIONS',
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
   }),
 });
 

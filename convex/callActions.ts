@@ -60,6 +60,12 @@ export const initiateCall = action({
       useCase: 'medical_claim',
     });
 
+    // Live handoff correlation token: short numeric id carried in the AI
+    // transfer's post-dial DTMF so the inbound bridge leg maps back to THIS
+    // call. Derived from the callId's trailing digits + time for uniqueness.
+    const handoffToken = `${Date.now()}`.slice(-8);
+    await ctx.runMutation(internal.handoff.setHandoffToken, { callId, token: handoffToken });
+
     // Store forwarding number for the test IVR to read
     await ctx.runMutation(api.calls.setCallSetting, {
       key: 'forwardNumber',
@@ -109,6 +115,12 @@ export const initiateCall = action({
         insurance_phone: insurance.phone,
         ivr_instructions: ivrInstructionsVar,
         human_agent_number: insurance.humanAgentNumber || 'N/A',
+        // Live AI→human handoff: our bridge number the AI transfers into
+        // (Conference), and the post-dial token that ties the bridged leg back
+        // to this call. Empty bridge_number → agent falls back to end_call
+        // legacy follow-up (see ivrOnlyMode.ts).
+        bridge_number: process.env.TWILIO_PHONE_NUMBER || '',
+        handoff_token: handoffToken,
       };
 
       // Voice-IVR auto-response rules — ONLY when the payer has voice IVR enabled.

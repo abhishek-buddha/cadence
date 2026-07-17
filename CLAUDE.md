@@ -2,7 +2,7 @@
 
 ## Stack
 - React 19 + Vite 7 + TailwindCSS 3 (frontend)
-- Convex 1.31+ (real-time backend, deployment `colorless-cardinal-959` / production)
+- Convex 1.31+ (real-time backend, deployment `rapid-pheasant-510` / production)
 - ElevenLabs Conversational AI (voice agents)
 - OpenAI GPT-4o-mini family (transcript analysis & extraction)
 - Twilio Voice (telephony, outbound calls)
@@ -11,15 +11,15 @@
 
 ## Deployment
 - **Frontend**: Render web service `cadence-new` (Docker, auto-deploys from `main`). Live at https://cadence-new.onrender.com
-- **Backend**: Convex Cloud — production deployment `colorless-cardinal-959`
-  - Cloud URL: https://colorless-cardinal-959.convex.cloud
-  - HTTP Actions URL: https://colorless-cardinal-959.convex.site
+- **Backend**: Convex Cloud — production deployment `rapid-pheasant-510`
+  - Cloud URL: https://rapid-pheasant-510.convex.cloud
+  - HTTP Actions URL: https://rapid-pheasant-510.convex.site
 - **Bridge**: Render web service `cadence-bridge` (WebSocket relay for live transcript / audio)
 - **Payer simulator** (test infra): repo `abhishek-buddha/cadence-payer-simulator`, deployable to any Node host (Render Free, Vercel, Fly.io, Cloudflare Workers, or local + ngrok)
 - **Deploy commands**:
   ```bash
   # Convex prod (requires CONVEX_DEPLOY_KEY env or cached login)
-  CONVEX_DEPLOY_KEY="prod:colorless-cardinal-959|..." npx convex deploy --cmd 'npm run build'
+  CONVEX_DEPLOY_KEY="prod:rapid-pheasant-510|..." npx convex deploy --cmd 'npm run build'
 
   # Frontend: push to main → Render auto-deploys
   git push origin main

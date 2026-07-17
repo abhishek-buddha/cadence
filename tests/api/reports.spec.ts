@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe.configure({ mode: 'parallel' });
 
-const API_BASE = process.env.CADENCE_API_BASE ?? 'https://colorless-cardinal-959.convex.site';
+const API_BASE = process.env.CADENCE_API_BASE ?? 'https://rapid-pheasant-510.convex.site';
 const KEY = process.env.CADENCE_API_KEY ?? '';
 const auth = () => ({ Authorization: `Bearer ${KEY}` });
 

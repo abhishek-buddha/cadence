@@ -94,6 +94,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
 
   // Polling for call status + transcript
   const [polledData, setPolledData] = useState(null);
+  const [liveTranscript, setLiveTranscript] = useState([]);
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -140,15 +141,19 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
 
   const isCompleted = polledData?.status === 'done' || polledData?.status === 'failed' || call?.status === 'completed' || call?.status === 'failed';
 
+  useEffect(() => {
+    setLiveTranscript([]);
+  }, [call?._id]);
+
   const effectiveTranscript = useMemo(() => {
-    if (!polledData?.transcript) return [];
-    return polledData.transcript
-      .filter(t => t.message !== '...')
+    const postCallTranscript = (polledData?.transcript || [])
+      .filter(t => t.message && t.message !== '...')
       .map(t => ({
         role: t.role === 'agent' ? 'agent' : 'user',
         message: t.message,
       }));
-  }, [polledData]);
+    return postCallTranscript.length > 0 ? postCallTranscript : liveTranscript;
+  }, [polledData, liveTranscript]);
 
   // Use ref-based frozen duration (set synchronously) with fallbacks. The ref is
   // only set when THIS component's own poll detects "done". When completion
@@ -237,6 +242,17 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data.event === 'transcript' && data.text) {
+            const message = String(data.text).trim();
+            if (message && message !== '...') {
+              setLiveTranscript((prev) => {
+                const next = [...prev, { role: data.role === 'agent' ? 'agent' : 'user', message }];
+                return next.slice(-80);
+              });
+            }
+            return;
+          }
+
           if (data.event === 'audio' && data.media?.payload) {
             if (mutedRef.current) return;
             const binary = atob(data.media.payload);

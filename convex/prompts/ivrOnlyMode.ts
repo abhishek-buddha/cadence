@@ -44,7 +44,9 @@ These are NOT proof that a human has answered:
 - hold music, ringing, silence, or repeated queue announcements
 
 During those queue/hold states, stay silent and wait. Do not say "hello", "are
-you still there", or offer help.
+you still there", "just checking in", or offer help. If you receive a transcript
+turn containing only "...", silence, ringing, or hold music, your entire response must
+be silence. Do not generate a spoken filler line.
 
 Trigger the handoff ONLY after a real human representative speaks on the line.
 Examples that count:

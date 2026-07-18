@@ -9,7 +9,7 @@ import { useAuth, hasRole } from '../context/AuthContext';
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin', color: 'bg-danger/10 text-danger' },
   { value: 'manager', label: 'Manager', color: 'bg-accent/10 text-accent' },
-  { value: 'operator', label: 'Agent', color: 'bg-success/10 text-success' },
+  { value: 'operator', label: 'Operator', color: 'bg-success/10 text-success' },
   { value: 'viewer', label: 'Viewer', color: 'bg-gray-500/10 text-gray-600' },
 ];
 

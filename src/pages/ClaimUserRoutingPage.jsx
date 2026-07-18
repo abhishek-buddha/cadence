@@ -18,7 +18,7 @@ import { useSoftphone } from '../hooks/useSoftphone';
 const ROLE_LABELS = {
   admin: 'Admin',
   manager: 'Manager',
-  operator: 'Agent',
+  operator: 'Operator',
   viewer: 'Viewer',
 };
 

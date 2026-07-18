@@ -7,7 +7,7 @@ import ProvidersPage from './ProvidersPage';
 const TABS = [
   { key: 'patients', icon: Users, label: 'Patients' },
   { key: 'insurance', icon: Building2, label: 'Insurance' },
-  { key: 'providers', icon: Stethoscope, label: 'Providers' },
+  { key: 'providers', icon: Stethoscope, label: 'Hospitals' },
 ];
 
 export default function MasterDataPage() {

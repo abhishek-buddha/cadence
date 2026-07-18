@@ -17,7 +17,7 @@ import {
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/claims', icon: FileText, label: 'Claim Management' },
-  { to: '/claim-routing', icon: Route, label: 'Claim User Routing' },
+  { to: '/claim-routing', icon: Route, label: 'Claim User Routing', newTab: true },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
 ];
 
@@ -41,12 +41,14 @@ export default function Sidebar({ collapsed, onToggle }) {
   );
 
   const renderNavLink = (item) => {
-    const { to, icon: ItemIcon, label, end } = item;
+    const { to, icon: ItemIcon, label, end, newTab } = item;
     return (
       <NavLink
         key={to}
         to={to}
         end={end}
+        target={newTab ? '_blank' : undefined}
+        rel={newTab ? 'noreferrer' : undefined}
         title={collapsed ? label : undefined}
         className={({ isActive }) =>
           `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group relative ${

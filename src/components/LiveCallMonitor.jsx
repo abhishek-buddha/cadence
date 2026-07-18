@@ -64,7 +64,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const getCallStatus = useAction(api.callActions.getCallStatus);
   const endCallAction = useAction(api.callActions.endCall);
   const [ending, setEnding] = useState(false);
-  const transcriptEndRef = useRef(null);
+  const transcriptScrollerRef = useRef(null);
   const completionTriggeredRef = useRef(false);
 
   // Ref-based timer freeze — set synchronously when "done" detected
@@ -172,7 +172,13 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const elapsed = useElapsedTimer(call?.startedAt, frozenDuration);
 
   useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const scroller = transcriptScrollerRef.current;
+    if (!scroller) return;
+    const distanceFromBottom = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+    if (distanceFromBottom > 120 && effectiveTranscript.length > 2) return;
+    requestAnimationFrame(() => {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
+    });
   }, [effectiveTranscript.length]);
 
   // Audio player: live monitoring, not archival playback. Keep the scheduled
@@ -446,14 +452,16 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
               </span>
             )}
           </div>
-          <div className="bg-white/60 border border-border rounded-lg p-3 max-h-56 overflow-y-auto space-y-1.5">
+          <div
+            ref={transcriptScrollerRef}
+            className="bg-white/60 border border-border rounded-lg p-3 max-h-56 overflow-y-auto space-y-1.5"
+          >
             {effectiveTranscript.map((t, i) => (
               <div key={i} className={`text-xs ${t.role === 'agent' ? 'text-accent' : 'text-gray-600'}`}>
                 <span className="font-data font-medium">{getLabel(t)}:</span>
                 <span className="ml-1.5">{formatEntry(t)}</span>
               </div>
             ))}
-            <div ref={transcriptEndRef} />
           </div>
         </div>
       )}

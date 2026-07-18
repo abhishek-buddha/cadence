@@ -6,7 +6,6 @@ import {
   Upload,
   Search,
   FileText,
-  ChevronDown,
   FileSpreadsheet,
   AlertTriangle,
   CheckCircle2,
@@ -24,21 +23,24 @@ import EmptyState from '../components/EmptyState';
 import AddClaimModal from '../components/AddClaimModal';
 import { useProviderFilter } from '../context/ProviderFilterContext';
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All Statuses' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'paid', label: 'Paid' },
+const STATUS_TABS = [
+  { value: '', label: 'All' },
+  { value: 'pending', label: 'In Queue' },
+  { value: 'in_progress', label: 'Retry' },
   { value: 'denied', label: 'Denied' },
+  { value: 'paid', label: 'Paid' },
   { value: 'appealing', label: 'Appealing' },
   { value: 'write_off', label: 'Write Off' },
 ];
 
+function getClaimType(claim) {
+  if (claim.status === 'denied' || claim.denialCode) return 'Denial check';
+  if (claim.lastCalledAt) return 'Status check';
+  return 'Enquiry';
+}
+
 const INPUT_CLASS =
   'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none w-full';
-
-const SELECT_CLASS =
-  'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-700 focus:border-accent focus:ring-1 focus:ring-accent outline-none appearance-none cursor-pointer';
 
 function formatCurrency(cents) {
   if (cents == null) return '$0.00';
@@ -58,32 +60,13 @@ function ShimmerRow() {
   return (
     <tr>
       <td className="pl-5 pr-2 py-3.5"><div className="shimmer rounded h-4 w-4" /></td>
-      {Array.from({ length: 5 }).map((_, i) => (
+      {Array.from({ length: 6 }).map((_, i) => (
         <td key={i} className="px-4 py-3.5">
           <div className="shimmer rounded h-4 w-full" />
         </td>
       ))}
       <td className="px-5 py-3.5"><div className="shimmer rounded h-4 w-full" /></td>
     </tr>
-  );
-}
-
-function FilterSelect({ value, onChange, options, className = '' }) {
-  return (
-    <div className={`relative ${className}`}>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`${SELECT_CLASS} custom-select pr-8 w-full`}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-    </div>
   );
 }
 
@@ -747,24 +730,38 @@ export default function ClaimsPage() {
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-white border border-border rounded-xl p-4 shadow-sm">
-        <FilterSelect
-          value={statusFilter}
-          onChange={setStatusFilter}
-          options={STATUS_OPTIONS}
-          className="w-40"
+      {/* Status Tabs */}
+      <div className="flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
+        {STATUS_TABS.map((tab) => {
+          const isActive = statusFilter === tab.value;
+          return (
+            <button
+              key={tab.value || 'all'}
+              type="button"
+              onClick={() => setStatusFilter(tab.value)}
+              className={`relative inline-flex items-center px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                isActive ? 'text-accent' : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {tab.label}
+              {isActive && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-t" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Search */}
+      <div className="relative bg-white border border-border rounded-xl p-4 shadow-sm">
+        <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+        <input
+          type="text"
+          placeholder="Search claims, patients, insurance..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className={`${INPUT_CLASS} pl-9`}
         />
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-          <input
-            type="text"
-            placeholder="Search claims, patients, insurance..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={`${INPUT_CLASS} pl-9`}
-          />
-        </div>
       </div>
 
       {/* Table */}
@@ -785,6 +782,7 @@ export default function ClaimsPage() {
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Insurance</th>
               <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Amount</th>
               <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Status</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Claim Type</th>
               <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold" style={{ minWidth: '250px', width: '99%' }}>Latest Update</th>
             </tr>
           </thead>
@@ -793,7 +791,7 @@ export default function ClaimsPage() {
               Array.from({ length: 8 }).map((_, i) => <ShimmerRow key={i} />)
             ) : filteredClaims.length === 0 ? (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <EmptyState
                     icon={FileText}
                     title="No claims found"
@@ -838,6 +836,7 @@ export default function ClaimsPage() {
                     <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{insuranceMap[claim.insuranceContactId] ?? '---'}</td>
                     <td className="px-4 py-3.5 font-data text-gray-900 text-right whitespace-nowrap">{formatCurrency(claim.amount)}</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap"><StatusDropdown claimId={claim._id} currentStatus={claim.status} /></td>
+                    <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{getClaimType(claim)}</td>
                     <td className="px-5 py-3.5 text-[13px] leading-snug text-gray-500 max-w-[300px]">
                       {latestUpdate ? (
                         <span className="text-gray-700 line-clamp-2" title={latestUpdate}>{latestUpdate}</span>

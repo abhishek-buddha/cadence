@@ -1,9 +1,27 @@
 import { useState, useRef, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import HandoffNotifier from './HandoffNotifier';
-import { Building2, ChevronDown, Check } from 'lucide-react';
+import { Building2, ChevronDown, Check, Database } from 'lucide-react';
 import { useProviderFilter } from '../context/ProviderFilterContext';
+
+function HeaderIconLink({ to, icon: Icon, label }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors shadow-sm ${
+          isActive
+            ? 'border-accent/40 bg-accent/5 text-accent'
+            : 'border-border-light bg-white text-gray-600 hover:border-accent/40 hover:text-gray-900'
+        }`
+      }
+    >
+      <Icon className="w-4 h-4" />
+      <span className="hidden sm:inline">{label}</span>
+    </NavLink>
+  );
+}
 
 function HospitalDropdown() {
   const { selectedProviderId, setSelectedProviderId, providers, selectedProvider } = useProviderFilter();
@@ -82,7 +100,12 @@ export default function Layout() {
       <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-4 relative z-20">
+        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-3 relative z-20">
+          {/* User Management is intentionally hidden for now.
+          <HeaderIconLink to="/users" icon={UserCog} label="User Management" />
+          */}
+          <HeaderIconLink to="/master-data" icon={Database} label="Master Data" />
+
           {/* Hospital selector */}
           <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider font-medium">

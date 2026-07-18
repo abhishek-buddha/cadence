@@ -18,10 +18,13 @@ import EvCaseDetailPage from './pages/EvCaseDetailPage';
 import SessionsPage from './pages/SessionsPage';
 import ReportsPage from './pages/ReportsPage';
 import AuditPage from './pages/AuditPage';
-import UsersPage from './pages/UsersPage';
-import ApiKeysPage from './pages/ApiKeysPage';
-import WebhooksPage from './pages/WebhooksPage';
+// import UsersPage from './pages/UsersPage';
+// import ApiKeysPage from './pages/ApiKeysPage';
+// import WebhooksPage from './pages/WebhooksPage';
 import TransferDestinationsPage from './pages/TransferDestinationsPage';
+import MasterDataPage from './pages/MasterDataPage';
+import ClaimUserRoutingPage from './pages/ClaimUserRoutingPage';
+import CallAuditPage from './pages/CallAuditPage';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(
@@ -50,6 +53,11 @@ export default function App() {
               <Route path="patients" element={<PatientsPage />} />
               <Route path="insurance" element={<InsuranceDirectory />} />
               <Route path="providers" element={<ProvidersPage />} />
+              <Route path="master-data" element={<MasterDataPage />} />
+              <Route path="claim-routing" element={<ClaimUserRoutingPage />} />
+              <Route path="call-audit" element={<Navigate to="/call-audit/history" replace />} />
+              <Route path="call-audit/history" element={<CallAuditPage />} />
+              <Route path="call-audit/live" element={<CallAuditPage />} />
               <Route path="calls" element={<CallHistory />} />
               <Route path="live" element={<LiveCallsPage />} />
               <Route path="settings" element={<SettingsPage />} />
@@ -59,9 +67,11 @@ export default function App() {
               <Route path="sessions" element={<SessionsPage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="audit" element={<AuditPage />} />
+              {/* Admin pages are intentionally hidden for now.
               <Route path="users" element={<UsersPage />} />
               <Route path="api-keys" element={<ApiKeysPage />} />
               <Route path="webhooks" element={<WebhooksPage />} />
+              */}
               <Route path="transfers" element={<TransferDestinationsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -18,6 +18,7 @@ import type * as calls from "../calls.js";
 import type * as claimImport from "../claimImport.js";
 import type * as claims from "../claims.js";
 import type * as dashboard from "../dashboard.js";
+import type * as demoMetrics from "../demoMetrics.js";
 import type * as dentalCallActions from "../dentalCallActions.js";
 import type * as dentalCases from "../dentalCases.js";
 import type * as dentalImport from "../dentalImport.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   claimImport: typeof claimImport;
   claims: typeof claims;
   dashboard: typeof dashboard;
+  demoMetrics: typeof demoMetrics;
   dentalCallActions: typeof dentalCallActions;
   dentalCases: typeof dentalCases;
   dentalImport: typeof dentalImport;

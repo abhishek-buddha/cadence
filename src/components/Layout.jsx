@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import HandoffNotifier from './HandoffNotifier';
-import { Building2, ChevronDown, Check, Database } from 'lucide-react';
+import { Building2, ChevronDown, Check, Database, UserCog } from 'lucide-react';
 import { useProviderFilter } from '../context/ProviderFilterContext';
 
 function HeaderIconLink({ to, icon: Icon, label }) {
@@ -101,9 +101,7 @@ export default function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-3 relative z-20">
-          {/* User Management is intentionally hidden for now.
           <HeaderIconLink to="/users" icon={UserCog} label="User Management" />
-          */}
           <HeaderIconLink to="/master-data" icon={Database} label="Master Data" />
 
           {/* Hospital selector */}

@@ -18,7 +18,7 @@ import EvCaseDetailPage from './pages/EvCaseDetailPage';
 import SessionsPage from './pages/SessionsPage';
 import ReportsPage from './pages/ReportsPage';
 import AuditPage from './pages/AuditPage';
-// import UsersPage from './pages/UsersPage';
+import UsersPage from './pages/UsersPage';
 // import ApiKeysPage from './pages/ApiKeysPage';
 // import WebhooksPage from './pages/WebhooksPage';
 import TransferDestinationsPage from './pages/TransferDestinationsPage';
@@ -68,8 +68,8 @@ export default function App() {
                   <Route path="sessions" element={<SessionsPage />} />
                   <Route path="reports" element={<ReportsPage />} />
                   <Route path="audit" element={<AuditPage />} />
-                  {/* Admin pages are intentionally hidden for now.
                   <Route path="users" element={<UsersPage />} />
+                  {/* Admin integration pages are intentionally hidden for now.
                   <Route path="api-keys" element={<ApiKeysPage />} />
                   <Route path="webhooks" element={<WebhooksPage />} />
                   */}

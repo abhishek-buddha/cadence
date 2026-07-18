@@ -22,6 +22,7 @@ function isStaleLiveCall(call: any): boolean {
 }
 
 function isRoutingCallActive(call: any): boolean {
+  if (call.status === 'completed' || call.status === 'failed') return false;
   if (isStaleLiveCall(call)) return false;
   const liveStatuses = new Set(['initiating', 'in_progress']);
   const liveHandoffStates = new Set(['awaiting_human', 'accepting', 'connected']);

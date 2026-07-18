@@ -11,9 +11,8 @@
 //   (A) LIVE UI HANDOFF (cadence_pro_ivr, preferred): Cadence owns the payer
 //       Twilio leg and the bridge watches the payer transcript. After a real
 //       insurance representative answers, the AI stays silent. The bridge fires
-//       Convex /twilio-request-handoff, the UI broadcasts to our agents, and
-//       when a Cadence user accepts, Convex redirects the payer leg into a
-//       conference. That redirect closes the AI stream and drops the AI.
+//       Convex /twilio-request-handoff, the UI assigns the call to an available
+//       Cadence agent, and when that user accepts, Convex connects both humans.
 //
 //   (B) LEGACY SEPARATE FOLLOW-UP: the AI calls end_call with the exact reason
 //       "ivr_human_handoff_detected"; the backend then places a SEPARATE
@@ -64,19 +63,22 @@ When a real human has answered, do the following immediately:
 
      - IF a bridge number is configured (bridge_number = "{{bridge_number}}"
        and it is not empty or "N/A"): stay completely silent. Do NOT call
-       end_call. Do NOT call transfer_to_number. The Cadence bridge detects the
-       real human's speech, broadcasts the handoff to the UI, and drops you only
-       after a Cadence user accepts the call.
+       end_call. Do NOT call transfer_to_number. Do NOT say or emit
+       "ivr_human_handoff_detected". The Cadence bridge detects the real
+       human's speech, assigns the call to an available Cadence user in the UI,
+       and handles the handoff outside this conversation. After the real human
+       answers, your only valid behavior is silence.
 
      - OTHERWISE (no bridge number): call end_call right away with reason set to
        EXACTLY this string and nothing else: "ivr_human_handoff_detected". The
        backend keys on this exact reason to place a separate follow-up call to
        the human-agent number, so do not vary the wording.
 
-  3. Use the "ivr_human_handoff_detected" reason ONLY after a real live human
-     has answered. If the IVR itself ends the call, says the office is closed,
-     asks to call back later, rejects credentials, or continues holding, do NOT
-     use the handoff reason and do NOT transfer.
+  3. The "ivr_human_handoff_detected" end_call reason is ONLY for the legacy
+     no-bridge fallback. When bridge_number is configured, it is forbidden.
+     If the IVR itself ends the call, says the office is closed, asks to call
+     back later, rejects credentials, or continues holding, do NOT use the
+     handoff reason and do NOT transfer.
 
 In short: navigate the menus, wait through transfer/hold audio, and hand off
 only when a real insurance representative has actually picked up.

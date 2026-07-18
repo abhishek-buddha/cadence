@@ -87,6 +87,7 @@ function routingAgentName(index: number): string {
 }
 
 function isRoutingCallActive(call: any): boolean {
+  if (call.status === 'completed' || call.status === 'failed') return false;
   if (isStaleLiveCall(call)) return false;
   const liveStatuses = new Set(['initiating', 'in_progress']);
   const liveHandoffStates = new Set(['awaiting_human', 'accepting', 'connected']);
@@ -131,7 +132,11 @@ export const listAwaitingHandoff = query({
       .withIndex('by_handoffState', (q) => q.eq('handoffState', 'awaiting_human'))
       .order('desc')
       .collect();
-    return Promise.all(calls.map((c) => enrichCall(ctx, c)));
+    return Promise.all(
+      calls
+        .filter((c) => c.status !== 'completed' && c.status !== 'failed')
+        .map((c) => enrichCall(ctx, c))
+    );
   },
 });
 
@@ -156,6 +161,8 @@ export const listLive = query({
 
     const live = recent.filter(
       (c) =>
+        c.status !== 'completed' &&
+        c.status !== 'failed' &&
         !isStaleLiveCall(c) &&
         (LIVE_STATUSES.has(c.status) ||
           (c.handoffState && LIVE_HANDOFF.has(c.handoffState)))

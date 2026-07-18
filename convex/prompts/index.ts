@@ -44,8 +44,8 @@ export interface ComposePromptOptions {
    *  non-empty, independent of hasVoiceIvr — that flag only gates the
    *  phrase-table fragment below. */
   ivrContext?: string;
-  /** When true, the payer has a dedicated human-agent number configured, so the
-   *  agent should navigate the IVR only and end the call at the human handoff
+  /** When true, the payer has a dedicated human-agent handoff configured, so the
+   *  agent should navigate the IVR only and wait silently at the human handoff
    *  point instead of speaking with a live representative. Prepends
    *  IVR_ONLY_MODE_GUIDANCE as the highest-priority section. */
   endAtHumanHandoff?: boolean;
@@ -86,8 +86,8 @@ export function composePrompt(options: ComposePromptOptions): string {
 
   const sections: string[] = [];
 
-  // Highest priority: when the payer has a dedicated human-agent number, the
-  // agent navigates the IVR only and ends at the human handoff. Prepended first
+  // Highest priority: when the payer has a dedicated human-agent handoff, the
+  // agent navigates the IVR only and waits silently at the handoff. Prepended first
   // and worded to override the retrieval gate + transfer guidance below.
   if (endAtHumanHandoff) {
     sections.push(IVR_ONLY_MODE_GUIDANCE);

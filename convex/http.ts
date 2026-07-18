@@ -2,6 +2,7 @@ import { httpRouter } from 'convex/server';
 import { httpAction } from './_generated/server';
 import { api, internal } from './_generated/api';
 import { extractHandoffDetected, buildMedicalDynamicVars } from './callActions';
+import { buildIvrContextSection, composePrompt } from './prompts/index';
 
 const MAX_HOLD_ATTEMPTS = 30; // 30 × 60s = 30 minutes max hold
 const API_VERSION = '1.0.0';
@@ -804,6 +805,22 @@ http.route({
 
     try {
       const call = await ctx.runQuery(api.calls.getById, { id: callId as any });
+      const isLiveHandoffCall =
+        call &&
+        call.conferenceName &&
+        call.handoffToken &&
+        (call.status === 'in_progress' || call.status === 'initiating');
+
+      if (isLiveHandoffCall) {
+        console.log(
+          `[call-ended] AI stream closed for live-handoff call ${callId} — leaving Twilio leg/conference in control.`
+        );
+        return new Response(JSON.stringify({ success: true, liveHandoff: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       if (call && (call.status === 'in_progress' || call.status === 'initiating')) {
         console.log(`[call-ended] Running end-of-call flow for ${callId} (was ${call.status})`);
         // Run the full end-of-call flow, not just a status flip: endCall fetches
@@ -862,10 +879,25 @@ http.route({
         claimId: claim._id,
         handoffToken: call.handoffToken,
       });
+      const prompt = composePrompt({
+        useCase: 'medical_claim',
+        hasVoiceIvr: !!insurance.voiceIvrEnabled,
+        endAtHumanHandoff: true,
+        ivrContext: buildIvrContextSection(insurance.ivrInstructions, insurance.ivrSteps),
+        vars: dynamic_variables,
+      });
       return new Response(JSON.stringify({
         callId: call._id,
         claimId: claim._id,
         dynamic_variables,
+        conversation_config_override: {
+          agent: {
+            prompt: { prompt },
+          },
+          turn: {
+            silence_end_call_timeout: -1,
+          },
+        },
       }), {
         status: 200,
         headers: {

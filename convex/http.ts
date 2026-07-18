@@ -522,7 +522,6 @@ http.route({
           callId: callId as any,
           // Twilio's RecordingUrl has no extension; .mp3 is playable in browsers.
           recordingUrl: `${recordingUrl}.mp3`,
-          recordingSid: recordingSid || undefined,
           duration: Number.isFinite(duration) ? duration : undefined,
         });
 

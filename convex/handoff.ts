@@ -278,23 +278,15 @@ export const markHandoffEnded = internalMutation({
   },
 });
 
-// Save the conference recording URL/SID/duration (from Twilio
-// recordingStatusCallback). We store the SID + duration so the UI can play the
-// recording through our authenticated proxy (the raw Twilio URL needs Basic
-// auth and won't load in a browser <audio> tag → shows 0:00).
+// Save the conference recording URL/duration (from Twilio recordingStatusCallback).
 export const saveRecording = internalMutation({
   args: {
     callId: v.id('calls'),
     recordingUrl: v.string(),
-    recordingSid: v.optional(v.string()),
     duration: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.callId, {
-      recordingUrl: args.recordingUrl,
-      recordingSid: args.recordingSid,
-      recordingDuration: args.duration,
-    });
+    await ctx.db.patch(args.callId, { recordingUrl: args.recordingUrl });
     await logEvent(ctx, args.callId, 'recording_ready', args.recordingUrl);
   },
 });

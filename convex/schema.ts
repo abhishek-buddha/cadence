@@ -160,8 +160,6 @@ export default defineSchema({
     duration: v.optional(v.number()),
     transcript: v.optional(v.string()),
     recordingUrl: v.optional(v.string()),
-    recordingSid: v.optional(v.string()),
-    recordingDuration: v.optional(v.number()),
     errorMessage: v.optional(v.string()),
     // IVR call phase tracking
     callPhase: v.optional(v.string()),

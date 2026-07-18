@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText } from 'lucide-react';
+import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText, Mic } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import OutcomeBadge from '../components/OutcomeBadge';
 import EmptyState from '../components/EmptyState';
@@ -21,6 +21,25 @@ function formatDuration(seconds) {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
+function callDuration(call) {
+  if (call.duration != null && call.duration > 0) return call.duration;
+  if (call.startedAt && call.completedAt) {
+    return Math.max(0, Math.round((new Date(call.completedAt).getTime() - new Date(call.startedAt).getTime()) / 1000));
+  }
+  return null;
+}
+
+function convexSiteUrl() {
+  const explicit = import.meta.env.VITE_CONVEX_SITE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const cloud = import.meta.env.VITE_CONVEX_URL || '';
+  return cloud.replace('.convex.cloud', '.convex.site').replace(/\/$/, '');
+}
+
+function recordingPlaybackUrl(callId) {
+  return `${convexSiteUrl()}/twilio-recording-media?callId=${encodeURIComponent(callId)}`;
+}
+
 function formatDate(isoString) {
   if (!isoString) return '--';
   const d = new Date(isoString);
@@ -35,6 +54,7 @@ function formatDate(isoString) {
 
 function CallRow({ call }) {
   const [expanded, setExpanded] = useState(false);
+  const persistedDuration = callDuration(call);
 
   const isDentalCall = !!call.dentalCaseId && !call.claimId;
 
@@ -76,7 +96,17 @@ function CallRow({ call }) {
           <OutcomeBadge outcome={call.outcome} missingFields={call.missingFields} />
         </span>
         <span className="px-4 py-3 text-sm font-data text-gray-600 min-w-[70px] text-right">
-          {formatDuration(call.duration)}
+          {formatDuration(persistedDuration)}
+        </span>
+        <span className="min-w-[90px] flex justify-center">
+          {call.recordingUrl ? (
+            <span className="inline-flex items-center gap-1 text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full">
+              <Mic className="w-3 h-3" />
+              Recording
+            </span>
+          ) : (
+            <span className="text-xs text-muted/40">--</span>
+          )}
         </span>
         <span className="min-w-[110px] flex justify-end">
           <StatusBadge status={call.status} />
@@ -115,6 +145,27 @@ function CallRow({ call }) {
                 )}
               </div>
             </div>
+
+            {/* Transcript */}
+            {call.recordingUrl && (
+              <div>
+                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
+                  <Mic className="w-3 h-3" />
+                  Recording
+                  {persistedDuration != null && (
+                    <span className="font-data text-muted normal-case tracking-normal">
+                      {formatDuration(persistedDuration)}
+                    </span>
+                  )}
+                </h4>
+                <audio
+                  controls
+                  preload="metadata"
+                  src={recordingPlaybackUrl(call._id)}
+                  className="h-9 w-full max-w-md"
+                />
+              </div>
+            )}
 
             {/* Transcript */}
             {call.transcript && (
@@ -425,6 +476,7 @@ export default function CallHistory() {
             <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold flex-1">Insurance</span>
             <span className="min-w-[140px] text-left text-xs uppercase tracking-wider text-muted font-semibold">Outcome</span>
             <span className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted font-semibold min-w-[70px]">Duration</span>
+            <span className="min-w-[90px] text-center text-xs uppercase tracking-wider text-muted font-semibold">Recording</span>
             <span className="min-w-[110px] text-right text-xs uppercase tracking-wider text-muted font-semibold pr-4">Status</span>
           </div>
 

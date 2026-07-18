@@ -32,6 +32,13 @@ import { api, internal } from './_generated/api';
 // Enrichment helper — mirrors calls.listRecent so the UI gets human-readable
 // labels (payer, claim/case number, patient name) without extra round-trips.
 // ---------------------------------------------------------------------------
+const STALE_LIVE_MS = 2 * 60 * 60 * 1000;
+
+function isStaleLiveCall(call: any): boolean {
+  if (!call.startedAt) return false;
+  return Date.now() - new Date(call.startedAt).getTime() > STALE_LIVE_MS;
+}
+
 async function enrichCall(ctx: any, call: any) {
   let claimNumber: string | null = null;
   let dentalCaseNumber: string | null = null;
@@ -75,6 +82,41 @@ async function enrichCall(ctx: any, call: any) {
   };
 }
 
+function routingAgentName(index: number): string {
+  return `Agent ${index + 1}`;
+}
+
+function isRoutingCallActive(call: any): boolean {
+  if (isStaleLiveCall(call)) return false;
+  const liveStatuses = new Set(['initiating', 'in_progress']);
+  const liveHandoffStates = new Set(['awaiting_human', 'accepting', 'connected']);
+  return liveStatuses.has(call.status) || liveHandoffStates.has(call.handoffState);
+}
+
+async function findAvailableRoutingAgent(ctx: any) {
+  const users = await ctx.db.query('users').collect();
+  const activeUsers = users
+    .filter((user: any) => user.status !== 'disabled')
+    .sort((a: any, b: any) => a._creationTime - b._creationTime);
+
+  for (let i = 0; i < activeUsers.length; i++) {
+    const user = activeUsers[i];
+    const assignedCalls = await ctx.db
+      .query('calls')
+      .withIndex('by_assignedAgentUserId', (q: any) => q.eq('assignedAgentUserId', user._id))
+      .collect();
+    const busy = assignedCalls.some(isRoutingCallActive);
+    if (!busy) {
+      return {
+        user,
+        displayName: routingAgentName(i),
+      };
+    }
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Queries (reactive — these power the broadcast + Live Calls view; no polling)
 // ---------------------------------------------------------------------------
@@ -114,8 +156,9 @@ export const listLive = query({
 
     const live = recent.filter(
       (c) =>
-        LIVE_STATUSES.has(c.status) ||
-        (c.handoffState && LIVE_HANDOFF.has(c.handoffState))
+        !isStaleLiveCall(c) &&
+        (LIVE_STATUSES.has(c.status) ||
+          (c.handoffState && LIVE_HANDOFF.has(c.handoffState)))
     );
     return Promise.all(live.map((c) => enrichCall(ctx, c)));
   },
@@ -196,13 +239,29 @@ export const requestHandoff = internalMutation({
     ) {
       return { ok: true, alreadySet: true };
     }
-    await ctx.db.patch(args.callId, {
+
+    const assignedAgent = await findAvailableRoutingAgent(ctx);
+
+    const handoffPatch: any = {
       handoffState: 'awaiting_human',
       handoffRequestedAt: new Date().toISOString(),
       handoffReason: args.reason,
       conferenceName: `cadence-${args.callId}`,
-    });
-    await logEvent(ctx, args.callId, 'handoff_requested', args.reason);
+    };
+    if (assignedAgent) {
+      handoffPatch.assignedAgentUserId = assignedAgent.user._id;
+      handoffPatch.assignedAgentEmail = assignedAgent.user.email;
+      handoffPatch.assignedAgentName = assignedAgent.displayName;
+    }
+    await ctx.db.patch(args.callId, handoffPatch);
+    await logEvent(
+      ctx,
+      args.callId,
+      'handoff_requested',
+      assignedAgent
+        ? `${args.reason || 'handoff_requested'}; assigned to ${assignedAgent.displayName}`
+        : `${args.reason || 'handoff_requested'}; no available agent`
+    );
 
     // Safety net: if no agent accepts within the window, mark the handoff failed
     // so the Live Calls view doesn't show a stuck "awaiting" card forever.
@@ -286,7 +345,11 @@ export const saveRecording = internalMutation({
     duration: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.callId, { recordingUrl: args.recordingUrl });
+    const patch: any = {
+      recordingUrl: args.recordingUrl,
+    };
+    if (args.duration !== undefined) patch.duration = args.duration;
+    await ctx.db.patch(args.callId, patch);
     await logEvent(ctx, args.callId, 'recording_ready', args.recordingUrl);
   },
 });
@@ -318,7 +381,10 @@ export const saveHumanTranscript = internalMutation({
 // mutations serializably, so the read-then-patch below cannot interleave — a
 // second concurrent accept sees state !== "awaiting_human" and is rejected.
 export const acceptHandoff = mutation({
-  args: { callId: v.id('calls') },
+  args: {
+    callId: v.id('calls'),
+    agentUserId: v.optional(v.id('users')),
+  },
   handler: async (ctx, args) => {
     const call = await ctx.db.get(args.callId);
     if (!call) return { ok: false, reason: 'not_found' };
@@ -326,8 +392,25 @@ export const acceptHandoff = mutation({
       return { ok: false, reason: 'already_taken' };
     }
     const identity = await ctx.auth.getUserIdentity();
-    const acceptedBy = identity?.subject || 'operator';
-    const acceptedEmail = identity?.email || undefined;
+    const requestedAgentId = args.agentUserId || (identity?.subject as any);
+    if (
+      call.assignedAgentUserId &&
+      requestedAgentId &&
+      requestedAgentId !== call.assignedAgentUserId
+    ) {
+      return { ok: false, reason: 'not_assigned_to_agent' };
+    }
+
+    const assignedAgent = call.assignedAgentUserId
+      ? await ctx.db.get(call.assignedAgentUserId)
+      : null;
+    const acceptedBy =
+      args.agentUserId ||
+      call.assignedAgentUserId ||
+      identity?.subject ||
+      'operator';
+    const acceptedEmail = assignedAgent?.email || identity?.email || undefined;
+    const acceptedName = call.assignedAgentName || assignedAgent?.name || acceptedEmail || acceptedBy;
 
     await ctx.db.patch(args.callId, {
       handoffState: 'accepting',
@@ -339,7 +422,7 @@ export const acceptHandoff = mutation({
       ctx,
       args.callId,
       'handoff_accepted',
-      acceptedEmail || acceptedBy
+      acceptedName
     );
     return { ok: true, conferenceName: `cadence-${args.callId}` };
   },

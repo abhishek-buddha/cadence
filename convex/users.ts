@@ -10,6 +10,95 @@ export const list = query({
   },
 });
 
+function routingAgentName(index: number): string {
+  return `Agent ${index + 1}`;
+}
+
+const STALE_LIVE_MS = 2 * 60 * 60 * 1000;
+
+function isStaleLiveCall(call: any): boolean {
+  if (!call.startedAt) return false;
+  return Date.now() - new Date(call.startedAt).getTime() > STALE_LIVE_MS;
+}
+
+function isRoutingCallActive(call: any): boolean {
+  if (isStaleLiveCall(call)) return false;
+  const liveStatuses = new Set(['initiating', 'in_progress']);
+  const liveHandoffStates = new Set(['awaiting_human', 'accepting', 'connected']);
+  return liveStatuses.has(call.status) || liveHandoffStates.has(call.handoffState);
+}
+
+async function enrichRoutingCall(ctx: any, call: any) {
+  let claimNumber: string | null = null;
+  let dentalCaseNumber: string | null = null;
+  let insuranceCompany: string | null = null;
+
+  if (call.claimId) {
+    const claim = await ctx.db.get(call.claimId);
+    if (claim) {
+      claimNumber = claim.claimNumber;
+      const insurance = await ctx.db.get(claim.insuranceContactId);
+      insuranceCompany = insurance?.name ?? null;
+    }
+  } else if (call.dentalCaseId) {
+    const dentalCase = await ctx.db.get(call.dentalCaseId);
+    if (dentalCase) {
+      dentalCaseNumber = dentalCase.caseNumber;
+      const insurance = await ctx.db.get(dentalCase.insuranceContactId);
+      insuranceCompany = insurance?.name ?? null;
+    }
+  } else {
+    const insurance = await ctx.db.get(call.insuranceContactId);
+    insuranceCompany = insurance?.name ?? null;
+  }
+
+  return {
+    ...call,
+    claimNumber,
+    dentalCaseNumber,
+    insuranceCompany,
+  };
+}
+
+export const listRoutingAgents = query({
+  handler: async (ctx) => {
+    const users = await ctx.db.query('users').collect();
+    const activeUsers = users
+      .filter((user) => user.status !== 'disabled')
+      .sort((a, b) => a._creationTime - b._creationTime);
+
+    return await Promise.all(
+      activeUsers.map(async (user, index) => {
+        const assignedCalls = await ctx.db
+          .query('calls')
+          .withIndex('by_assignedAgentUserId', (q) =>
+            q.eq('assignedAgentUserId', user._id)
+          )
+          .order('desc')
+          .collect();
+
+        const activeCall = assignedCalls.find(isRoutingCallActive) || null;
+        const enrichedActiveCall = activeCall
+          ? await enrichRoutingCall(ctx, activeCall)
+          : null;
+        const availability =
+          activeCall?.handoffState === 'awaiting_human'
+            ? 'assigned'
+            : activeCall
+              ? 'in_call'
+              : 'available';
+
+        return {
+          ...user,
+          routingName: routingAgentName(index),
+          availability,
+          activeCall: enrichedActiveCall,
+        };
+      })
+    );
+  },
+});
+
 export const getById = query({
   args: { id: v.id('users') },
   handler: async (ctx, args) => {

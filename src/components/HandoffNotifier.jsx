@@ -1,8 +1,8 @@
 // HandoffNotifier — app-wide broadcast toast for incoming AI→human handoffs.
 //
 // Mounted once in Layout. Subscribes to api.handoff.listAwaitingHandoff (the
-// same reactive query the Live Calls page uses), so EVERY active user sees a
-// toast the moment a call is waiting for handoff. Clicking it routes to /live.
+// same reactive query the Live Calls page uses), so a toast appears the moment
+// a call is assigned for handoff. Clicking it routes to /live.
 // Reactively clears itself when the list empties (someone accepted / call
 // ended). Suppressed while already on /live to avoid redundancy.
 
@@ -18,11 +18,12 @@ export default function HandoffNotifier() {
 
   const list = awaiting ?? [];
   if (list.length === 0) return null;
-  if (location.pathname === '/live') return null;
+  if (location.pathname === '/live' || location.pathname === '/call-audit/live') return null;
 
   const first = list[0];
   const payer = first.insuranceCompany || 'A payer';
   const extra = list.length > 1 ? ` (+${list.length - 1} more)` : '';
+  const assigned = first.assignedAgentName || 'assigned agent';
 
   return (
     <div className="fixed bottom-6 right-6 z-50 max-w-sm animate-[slideUp_0.2s_ease-out]">
@@ -36,7 +37,7 @@ export default function HandoffNotifier() {
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-900 text-sm">Insurance rep on the line</p>
           <p className="text-sm text-gray-600 truncate">
-            {payer} is waiting for an agent{extra}
+            {payer} is waiting for {assigned}{extra}
           </p>
           <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent">
             Take the call <ArrowRight className="w-3 h-3" />

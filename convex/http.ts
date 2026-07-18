@@ -280,6 +280,25 @@ function holdTwiml(): string {
   `;
 }
 
+async function closeHandoffCall(ctx: any, callId: string, duration?: number): Promise<void> {
+  const call = await ctx.runQuery(api.calls.getById, { id: callId as any });
+  if (!call) return;
+
+  await ctx.runMutation(api.calls.updateStatus, {
+    id: call._id,
+    status: call.status === 'failed' ? 'failed' : 'completed',
+    completedAt: new Date().toISOString(),
+    duration,
+  });
+
+  if (
+    call.handoffState &&
+    ['awaiting_human', 'accepting', 'connected'].includes(call.handoffState)
+  ) {
+    await ctx.runMutation(internal.handoff.markHandoffEnded, { callId: call._id });
+  }
+}
+
 // Entry point for the AI's Conference transfer landing on our bridge number.
 // Reads the handoff token from post-dial DTMF, then redirects to the parking
 // handler with the resolved token.
@@ -357,6 +376,9 @@ async function bridgeParkedHandler(ctx: any, request: Request): Promise<Response
       <Dial>
         <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
                     waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
+                    statusCallback="${siteUrl}/twilio-conference-status?callId=${call._id}"
+                    statusCallbackEvent="end"
+                    statusCallbackMethod="POST"
                     record="record-from-start"
                     recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${call._id}"
                     recordingStatusCallbackEvent="completed">
@@ -388,10 +410,14 @@ async function agentJoinHandler(ctx: any, request: Request): Promise<Response> {
   const url = new URL(request.url);
   const callId = url.searchParams.get('callId') || '';
   const confName = `cadence-${callId}`;
+  const siteUrl = url.origin;
   return twimlResponse(`
     <Response>
       <Dial>
-        <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false">
+        <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false"
+                    statusCallback="${siteUrl}/twilio-conference-status?callId=${callId}"
+                    statusCallbackEvent="end"
+                    statusCallbackMethod="POST">
           ${confName}
         </Conference>
       </Dial>
@@ -417,10 +443,14 @@ async function softphoneOutgoingHandler(ctx: any, request: Request): Promise<Res
     }
   }
   const confName = `cadence-${callId}`;
+  const siteUrl = url.origin;
   return twimlResponse(`
     <Response>
       <Dial>
-        <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false">
+        <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false"
+                    statusCallback="${siteUrl}/twilio-conference-status?callId=${callId}"
+                    statusCallbackEvent="end"
+                    statusCallbackMethod="POST">
           ${confName}
         </Conference>
       </Dial>
@@ -456,6 +486,9 @@ async function payerConferenceHandler(ctx: any, request: Request): Promise<Respo
       <Dial>
         <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
                     waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
+                    statusCallback="${siteUrl}/twilio-conference-status?callId=${callId}"
+                    statusCallbackEvent="end"
+                    statusCallbackMethod="POST"
                     record="record-from-start"
                     recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${callId}"
                     recordingStatusCallbackEvent="completed">
@@ -500,6 +533,40 @@ async function requestHandoffHandler(ctx: any, request: Request): Promise<Respon
 }
 http.route({ path: '/twilio-request-handoff', method: 'POST', handler: httpAction(requestHandoffHandler) });
 http.route({ path: '/twilio-request-handoff', method: 'GET', handler: httpAction(requestHandoffHandler) });
+
+// ---- Conference status callback ----
+// Twilio posts `conference-end` here when the handoff conference is over. This
+// is the true end signal for the human-agent conversation after the AI has been
+// dropped from the payer leg.
+async function conferenceStatusHandler(ctx: any, request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const form = new URLSearchParams(await request.text());
+    const callId = url.searchParams.get('callId') || form.get('callId') || '';
+    const event = form.get('StatusCallbackEvent') || '';
+    const conferenceSid = form.get('ConferenceSid') || '';
+
+    if (!callId) {
+      return jsonResponse({ success: false, error: 'missing_call_id' });
+    }
+
+    console.log(
+      `[twilio-conference-status] callId=${callId} event=${event || 'unknown'} conference=${conferenceSid || 'unknown'}`
+    );
+
+    if (event === 'conference-end') {
+      await closeHandoffCall(ctx, callId);
+    }
+
+    return jsonResponse({ success: true });
+  } catch (error: any) {
+    console.error('Twilio conference status callback error:', error.message);
+    return jsonResponse({ error: error.message });
+  }
+}
+
+http.route({ path: '/twilio-conference-status', method: 'POST', handler: httpAction(conferenceStatusHandler) });
+http.route({ path: '/twilio-conference-status', method: 'GET', handler: httpAction(conferenceStatusHandler) });
 
 // ---- Conference recording status callback ----
 // Twilio calls this once the conference recording is ready. We store the URL on
@@ -588,18 +655,31 @@ http.route({
         return new Response('Invalid recording URL', { status: 400 });
       }
 
+      const requestHeaders: Record<string, string> = {
+        Authorization: `Basic ${btoa(`${ACCOUNT_SID}:${AUTH_TOKEN}`)}`,
+      };
+      const range = request.headers.get('range');
+      if (range) requestHeaders.Range = range;
+
       const twilioRes = await fetch(recordingUrl.toString(), {
-        headers: { Authorization: `Basic ${btoa(`${ACCOUNT_SID}:${AUTH_TOKEN}`)}` },
+        headers: requestHeaders,
       });
       if (!twilioRes.ok) return new Response('Recording fetch failed', { status: twilioRes.status });
 
+      const responseHeaders: Record<string, string> = {
+        'Content-Type': twilioRes.headers.get('content-type') || 'audio/mpeg',
+        'Cache-Control': 'private, max-age=300',
+        'Access-Control-Allow-Origin': '*',
+        'Accept-Ranges': twilioRes.headers.get('accept-ranges') || 'bytes',
+      };
+      const contentLength = twilioRes.headers.get('content-length');
+      const contentRange = twilioRes.headers.get('content-range');
+      if (contentLength) responseHeaders['Content-Length'] = contentLength;
+      if (contentRange) responseHeaders['Content-Range'] = contentRange;
+
       return new Response(twilioRes.body, {
-        status: 200,
-        headers: {
-          'Content-Type': twilioRes.headers.get('content-type') || 'audio/mpeg',
-          'Cache-Control': 'private, max-age=300',
-          'Access-Control-Allow-Origin': '*',
-        },
+        status: twilioRes.status === 206 ? 206 : 200,
+        headers: responseHeaders,
       });
     } catch (error: any) {
       console.error('[recording-media] error:', error.message);
@@ -664,20 +744,11 @@ http.route({
 
       if (call) {
         if (callStatus === 'completed') {
-          await ctx.runMutation(api.calls.updateStatus, {
-            id: call._id,
-            status: call.status === 'failed' ? 'failed' : 'completed',
-            completedAt: new Date().toISOString(),
-            duration: duration ? parseInt(duration, 10) : undefined,
-          });
-          // If this call went through a live handoff, close it out so the Live
-          // Calls view stops showing it as active.
-          if (
-            call.handoffState &&
-            ['awaiting_human', 'accepting', 'connected'].includes(call.handoffState)
-          ) {
-            await ctx.runMutation(internal.handoff.markHandoffEnded, { callId: call._id });
-          }
+          await closeHandoffCall(
+            ctx,
+            call._id,
+            duration ? parseInt(duration, 10) : undefined
+          );
         } else if (callStatus === 'failed' || callStatus === 'busy' || callStatus === 'no-answer') {
           await ctx.runMutation(api.calls.updateStatus, {
             id: call._id,

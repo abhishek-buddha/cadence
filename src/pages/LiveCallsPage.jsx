@@ -39,6 +39,21 @@ function recordingPlaybackUrl(callId) {
   return `${convexSiteUrl()}/twilio-recording-media?callId=${encodeURIComponent(callId)}`;
 }
 
+function formatDuration(seconds) {
+  if (seconds == null) return '--:--';
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function callDuration(call) {
+  if (call.duration != null && call.duration > 0) return call.duration;
+  if (call.startedAt && call.completedAt) {
+    return Math.max(0, Math.round((new Date(call.completedAt).getTime() - new Date(call.startedAt).getTime()) / 1000));
+  }
+  return null;
+}
+
 function elapsedSince(iso) {
   if (!iso) return '';
   const secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -73,7 +88,10 @@ function IncomingCard({ call, softphone, onAccepted }) {
     setBusy(true);
     setNotice(null);
     // 1) Atomic first-wins claim.
-    const res = await acceptHandoff({ callId: call._id });
+    const res = await acceptHandoff({
+      callId: call._id,
+      agentUserId: call.assignedAgentUserId,
+    });
     if (!res?.ok) {
       setNotice(res?.reason === 'already_taken' ? 'Already taken by another agent' : 'Could not accept');
       setBusy(false);
@@ -130,6 +148,11 @@ function IncomingCard({ call, softphone, onAccepted }) {
               Waiting {elapsedSince(call.handoffRequestedAt)}
               {call.handoffReason ? ` · ${call.handoffReason}` : ''}
             </p>
+            {call.assignedAgentName && (
+              <p className="text-xs text-accent mt-1 font-medium">
+                Assigned to {call.assignedAgentName}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -165,6 +188,7 @@ function ActiveCallRow({ call }) {
   const detail = useQuery(api.handoff.getHandoff, { callId: call._id });
   const events = detail?.events ?? [];
   const c = detail?.call || call;
+  const persistedDuration = callDuration(c);
 
   return (
     <div className="rounded-xl border border-border bg-white p-4">
@@ -188,10 +212,13 @@ function ActiveCallRow({ call }) {
               <div className="flex items-center gap-2">
                 <Mic className="w-3.5 h-3.5" />
                 <span>Call recorded</span>
+                {persistedDuration != null && (
+                  <span className="font-data text-gray-500">{formatDuration(persistedDuration)}</span>
+                )}
               </div>
               <audio
                 controls
-                preload="none"
+                preload="metadata"
                 src={recordingPlaybackUrl(c._id)}
                 className="h-9 w-full max-w-md"
               />
@@ -320,7 +347,13 @@ export default function LiveCallsPage() {
   }, []);
 
   const awaitingList = awaiting ?? [];
-  const liveList = live ?? [];
+  const awaitingIds = new Set(awaitingList.map((call) => call._id));
+  const seenLiveIds = new Set();
+  const liveList = (live ?? []).filter((call) => {
+    if (awaitingIds.has(call._id) || seenLiveIds.has(call._id)) return false;
+    seenLiveIds.add(call._id);
+    return true;
+  });
   const loading = awaiting === undefined || live === undefined;
 
   return (

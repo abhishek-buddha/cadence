@@ -202,6 +202,9 @@ export default defineSchema({
     handoffAcceptedByUserId: v.optional(v.string()),
     handoffAcceptedByEmail: v.optional(v.string()),
     handoffAcceptedAt: v.optional(v.string()),
+    assignedAgentUserId: v.optional(v.id('users')),
+    assignedAgentEmail: v.optional(v.string()),
+    assignedAgentName: v.optional(v.string()),
     // Deterministic Twilio conference name (cadence-<callId>) that every leg
     // (payer, AI media, our human) joins so participants can be swapped live.
     conferenceName: v.optional(v.string()),
@@ -228,6 +231,7 @@ export default defineSchema({
     .index('by_status', ['status'])
     .index('by_outcome', ['outcome'])
     .index('by_handoffState', ['handoffState'])
+    .index('by_assignedAgentUserId', ['assignedAgentUserId'])
     .index('by_elevenLabsConversationId', ['elevenLabsConversationId']),
 
   // Call sessions for multi-patient calls (RFP requirement R-CONV-6)

@@ -67,6 +67,112 @@ function formatDate(isoString) {
   });
 }
 
+
+function titleCase(value) {
+  if (!value) return '--';
+  return String(value).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function fieldValue(value) {
+  if (value === null || value === undefined || value === '') return '--';
+  return value;
+}
+
+function inferCallbackRequested(result, call) {
+  const text = [
+    result?.nextSteps,
+    result?.rawExtraction,
+    call?.transcript,
+    call?.humanTranscript,
+    call?.outcomeReason,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  if (result?.expectedDecisionDate) return 'Yes';
+  if (/call\s*back|callback|follow\s*up|call again|try again|later/.test(text)) return 'Yes';
+  return 'No';
+}
+
+function inferSentiment(result, call) {
+  const text = [result?.rawExtraction, result?.nextSteps, call?.transcript, call?.humanTranscript]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  if (/angry|frustrated|upset|complaint|escalat/.test(text)) return 'Negative';
+  if (/thank|resolved|confirmed|approved|paid|completed/.test(text)) return 'Positive';
+  return 'Neutral';
+}
+
+function FieldTile({ label, value, tone = 'default' }) {
+  const toneClass = {
+    default: 'text-gray-900',
+    success: 'text-success',
+    warn: 'text-warn',
+    danger: 'text-danger',
+    accent: 'text-accent',
+  }[tone] || 'text-gray-900';
+
+  return (
+    <div className="rounded-lg border border-border bg-white px-3 py-2 min-w-0">
+      <p className="text-[11px] uppercase tracking-[0.08em] text-muted/70 font-semibold truncate">{label}</p>
+      <p className={`mt-1 text-sm font-medium font-data truncate ${toneClass}`} title={String(fieldValue(value))}>
+        {fieldValue(value)}
+      </p>
+    </div>
+  );
+}
+
+function AuditExtractedFields({ call, result, isDentalCall, humanHandoffCompleted }) {
+  if (!result && !humanHandoffCompleted) return null;
+
+  const callbackRequested = inferCallbackRequested(result, call);
+  const sentiment = inferSentiment(result, call);
+  const referenceNumber = result?.referenceNumber || (!isDentalCall ? call?.referenceNumber : null);
+  const denialCode = !isDentalCall ? result?.denialCode || call?.denialCode : null;
+  const claimStatus = isDentalCall
+    ? result?.isActive == null
+      ? call?.outcome
+      : result.isActive
+        ? 'Coverage active'
+        : 'Coverage inactive'
+    : result?.claimStatus || call?.outcome;
+  const confidence = result?.confidence != null ? `${Math.round(result.confidence * 100)}%` : null;
+
+  return (
+    <div>
+      <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5">
+        Extracted Fields
+      </h4>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <FieldTile label={isDentalCall ? 'EV Status' : 'Claim Status'} value={titleCase(claimStatus)} tone="accent" />
+        <FieldTile label="Reference #" value={referenceNumber} />
+        <FieldTile label="Denial Code" value={denialCode || '--'} tone={denialCode ? 'danger' : 'default'} />
+        <FieldTile label="Callback Requested" value={callbackRequested} tone={callbackRequested === 'Yes' ? 'warn' : 'success'} />
+        <FieldTile label="Sentiment" value={sentiment} tone={sentiment === 'Negative' ? 'danger' : sentiment === 'Positive' ? 'success' : 'default'} />
+        <FieldTile label="Rep Name" value={result?.repName} />
+        <FieldTile label="Confidence" value={confidence} tone="accent" />
+        <FieldTile label="Next Step Date" value={result?.expectedDecisionDate || result?.appealDeadline} />
+      </div>
+      {(result?.nextSteps || result?.denialReason || result?.rawExtraction || humanHandoffCompleted) && (
+        <div className="mt-2 rounded-lg border border-border bg-white p-3 text-sm text-gray-700">
+          {result?.denialReason && (
+            <p><span className="font-medium text-gray-900">Denial reason:</span> {result.denialReason}</p>
+          )}
+          {result?.nextSteps && (
+            <p className={result?.denialReason ? 'mt-1' : ''}>
+              <span className="font-medium text-gray-900">Next steps:</span> {result.nextSteps}
+            </p>
+          )}
+          {!result?.nextSteps && humanHandoffCompleted && (
+            <p><span className="font-medium text-gray-900">Next steps:</span> {HUMAN_HANDOFF_UPDATE}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CallRow({ call }) {
   const [expanded, setExpanded] = useState(false);
   const persistedDuration = callDuration(call);
@@ -173,6 +279,13 @@ function CallRow({ call }) {
                 </div>
               </div>
             )}
+
+            <AuditExtractedFields
+              call={call}
+              result={isDentalCall ? evResult : callResult}
+              isDentalCall={isDentalCall}
+              humanHandoffCompleted={humanHandoffCompleted}
+            />
 
             {/* Recording */}
             {call.recordingUrl && (

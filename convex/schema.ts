@@ -335,9 +335,8 @@ export default defineSchema({
     ssoProvider: v.optional(v.string()),
     ssoSubject: v.optional(v.string()),
     lastLoginAt: v.optional(v.string()),
-    payerRouting: v.optional(v.string()),
-    providerRouting: v.optional(v.string()),
-    claimTypeRouting: v.optional(v.string()),
+    insuranceContactIds: v.optional(v.array(v.id('insuranceContacts'))),
+    specializations: v.optional(v.array(v.string())), // "claim_status" | "denial_claim" | "claim_eligibility_check"
     teamLeadName: v.optional(v.string()),
     createdAt: v.string(),
   })

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { UserCog, UserPlus, Lock, ChevronDown, AlertTriangle } from 'lucide-react';
+import { UserCog, UserPlus, Pencil, Lock, ChevronDown, AlertTriangle } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 import { useAuth, hasRole } from '../context/AuthContext';
@@ -12,6 +12,16 @@ const ROLE_OPTIONS = [
   { value: 'operator', label: 'Operator', color: 'bg-success/10 text-success' },
   { value: 'viewer', label: 'Viewer', color: 'bg-gray-500/10 text-gray-600' },
 ];
+
+const SPECIALIZATION_OPTIONS = [
+  { value: 'claim_status', label: 'Claim Status' },
+  { value: 'denial_claim', label: 'Denial Claim' },
+  { value: 'claim_eligibility_check', label: 'Claim Eligibility Check' },
+];
+
+export const SPECIALIZATION_LABELS = Object.fromEntries(
+  SPECIALIZATION_OPTIONS.map((o) => [o.value, o.label])
+);
 
 const INPUT_CLASS =
   'w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
@@ -146,93 +156,126 @@ function formatLastLogin(ts) {
 }
 
 // ---------------------------------------------------------------------------
-// Invite User Modal
+// Add / Edit User Modal
 // ---------------------------------------------------------------------------
-function InviteUserModal({ open, onClose, createUser }) {
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('viewer');
-  const [payerRouting, setPayerRouting] = useState('');
-  const [providerRouting, setProviderRouting] = useState('');
-  const [claimTypeRouting, setClaimTypeRouting] = useState('');
-  const [teamLeadName, setTeamLeadName] = useState('');
+const EMPTY_FORM = {
+  email: '',
+  name: '',
+  role: 'viewer',
+  insuranceContactIds: [],
+  specializations: [],
+  teamLeadName: '',
+};
+
+function UserModal({ open, onClose, editing, insuranceContacts, createUser, updateUser }) {
+  const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  function reset() {
-    setEmail('');
-    setName('');
-    setRole('viewer');
-    setPayerRouting('');
-    setProviderRouting('');
-    setClaimTypeRouting('');
-    setTeamLeadName('');
+  useEffect(() => {
+    if (!open) return;
     setError(null);
+    setForm(
+      editing
+        ? {
+            email: editing.email,
+            name: editing.name ?? '',
+            role: editing.role,
+            insuranceContactIds: editing.insuranceContactIds ?? [],
+            specializations: editing.specializations ?? [],
+            teamLeadName: editing.teamLeadName ?? '',
+          }
+        : EMPTY_FORM
+    );
+  }, [open, editing]);
+
+  function setField(field, value) {
+    setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  function handleClose() {
-    reset();
-    onClose();
+  function toggleInsurance(id) {
+    setForm((prev) => ({
+      ...prev,
+      insuranceContactIds: prev.insuranceContactIds.includes(id)
+        ? prev.insuranceContactIds.filter((i) => i !== id)
+        : [...prev.insuranceContactIds, id],
+    }));
+  }
+
+  function toggleSpecialization(value) {
+    setForm((prev) => ({
+      ...prev,
+      specializations: prev.specializations.includes(value)
+        ? prev.specializations.filter((s) => s !== value)
+        : [...prev.specializations, value],
+    }));
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!email || !email.includes('@')) {
+    if (!editing && (!form.email || !form.email.includes('@'))) {
       setError('Please enter a valid email address.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      await createUser({
-        email,
-        name: name.trim() || undefined,
-        role,
-        payerRouting: payerRouting.trim() || undefined,
-        providerRouting: providerRouting.trim() || undefined,
-        claimTypeRouting: claimTypeRouting.trim() || undefined,
-        teamLeadName: teamLeadName.trim() || undefined,
-      });
-      handleClose();
+      const routingPayload = {
+        name: form.name.trim() || undefined,
+        role: form.role,
+        insuranceContactIds: form.insuranceContactIds,
+        specializations: form.specializations,
+        teamLeadName: form.teamLeadName.trim() || undefined,
+      };
+      if (editing) {
+        await updateUser({ id: editing._id, ...routingPayload });
+      } else {
+        await createUser({ email: form.email, ...routingPayload });
+      }
+      onClose();
     } catch (err) {
-      setError(err.message || 'Failed to invite user.');
+      setError(err.message || 'Failed to save user.');
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Modal open={open} onClose={handleClose} title="Invite User">
+    <Modal open={open} onClose={onClose} title={editing ? 'Edit User' : 'Add User'} wide>
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="bg-accent/5 border border-accent/10 rounded-lg p-3">
-          <p className="text-xs text-gray-600 leading-relaxed">
-            <strong className="text-accent">Note:</strong> This records the user in the system. They will be
-            able to sign in once SSO is configured for their email.
-          </p>
-        </div>
+        {!editing && (
+          <div className="bg-accent/5 border border-accent/10 rounded-lg p-3">
+            <p className="text-xs text-gray-600 leading-relaxed">
+              <strong className="text-accent">Note:</strong> This records the user in the system. They will be
+              able to sign in once SSO is configured for their email.
+            </p>
+          </div>
+        )}
 
-        <div>
-          <label className={LABEL_CLASS}>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="user@example.com"
-            className={INPUT_CLASS}
-            required
-            autoFocus
-          />
-        </div>
-
-        <div>
-          <label className={LABEL_CLASS}>Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="A. Reyes"
-            className={INPUT_CLASS}
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={LABEL_CLASS}>Email</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setField('email', e.target.value)}
+              placeholder="user@example.com"
+              className={INPUT_CLASS}
+              required
+              autoFocus={!editing}
+              disabled={!!editing}
+            />
+          </div>
+          <div>
+            <label className={LABEL_CLASS}>Name</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setField('name', e.target.value)}
+              placeholder="A. Reyes"
+              className={INPUT_CLASS}
+            />
+          </div>
         </div>
 
         <div>
@@ -242,9 +285,9 @@ function InviteUserModal({ open, onClose, createUser }) {
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => setRole(opt.value)}
+                onClick={() => setField('role', opt.value)}
                 className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                  role === opt.value
+                  form.role === opt.value
                     ? 'bg-accent/5 border-accent text-accent'
                     : 'bg-white border-border hover:border-accent/40 text-gray-700'
                 }`}
@@ -255,23 +298,66 @@ function InviteUserModal({ open, onClose, createUser }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className={LABEL_CLASS}>Payer Routing</label>
-            <input value={payerRouting} onChange={(e) => setPayerRouting(e.target.value)} placeholder="Aetna, Cigna or All payers" className={INPUT_CLASS} />
+        <div>
+          <label className={LABEL_CLASS}>Specialization</label>
+          <div className="grid grid-cols-3 gap-2">
+            {SPECIALIZATION_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                  form.specializations.includes(opt.value)
+                    ? 'border-accent bg-accent/5'
+                    : 'border-border hover:border-accent/40 bg-white'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={form.specializations.includes(opt.value)}
+                  onChange={() => toggleSpecialization(opt.value)}
+                  className="rounded border-border-light text-accent focus:ring-accent"
+                />
+                <span className="text-sm text-gray-700">{opt.label}</span>
+              </label>
+            ))}
           </div>
-          <div>
-            <label className={LABEL_CLASS}>Provider Routing</label>
-            <input value={providerRouting} onChange={(e) => setProviderRouting(e.target.value)} placeholder="Riverside or All clients" className={INPUT_CLASS} />
-          </div>
-          <div>
-            <label className={LABEL_CLASS}>Claim Types</label>
-            <input value={claimTypeRouting} onChange={(e) => setClaimTypeRouting(e.target.value)} placeholder="Enquiry, Status check" className={INPUT_CLASS} />
-          </div>
-          <div>
-            <label className={LABEL_CLASS}>Team Lead</label>
-            <input value={teamLeadName} onChange={(e) => setTeamLeadName(e.target.value)} placeholder="K. Nolan" className={INPUT_CLASS} />
-          </div>
+        </div>
+
+        <div>
+          <label className={LABEL_CLASS}>Insurance companies this user can handle</label>
+          {(insuranceContacts ?? []).length === 0 ? (
+            <p className="text-xs text-muted italic">No insurance companies in Master Data yet.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+              {(insuranceContacts ?? []).map((c) => (
+                <label
+                  key={c._id}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                    form.insuranceContactIds.includes(c._id)
+                      ? 'border-accent bg-accent/5'
+                      : 'border-border hover:border-accent/40 bg-white'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.insuranceContactIds.includes(c._id)}
+                    onChange={() => toggleInsurance(c._id)}
+                    className="rounded border-border-light text-accent focus:ring-accent"
+                  />
+                  <span className="text-sm text-gray-700 truncate">{c.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className={LABEL_CLASS}>Team Lead</label>
+          <input
+            value={form.teamLeadName}
+            onChange={(e) => setField('teamLeadName', e.target.value)}
+            placeholder="K. Nolan"
+            className={INPUT_CLASS}
+          />
         </div>
 
         {error && (
@@ -284,7 +370,7 @@ function InviteUserModal({ open, onClose, createUser }) {
         <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
           <button
             type="button"
-            onClick={handleClose}
+            onClick={onClose}
             className="px-4 py-2 text-sm text-muted hover:text-gray-900 transition-colors"
           >
             Cancel
@@ -294,7 +380,7 @@ function InviteUserModal({ open, onClose, createUser }) {
             disabled={saving}
             className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
           >
-            {saving ? 'Inviting...' : 'Invite User'}
+            {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add User'}
           </button>
         </div>
       </form>
@@ -332,12 +418,27 @@ export default function UsersPage() {
 
 function UsersPageContent({ currentEmail }) {
   const users = useQuery(api.users?.list);
+  const insuranceContacts = useQuery(api.insuranceContacts.list);
   const updateRole = useMutation(api.users?.updateRole);
   const setStatus = useMutation(api.users?.setStatus);
   const createUser = useMutation(api.users?.create);
-  const [inviteOpen, setInviteOpen] = useState(false);
+  const updateUser = useMutation(api.users?.updateRoutingProfile);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
 
   const isLoading = users === undefined;
+  const insuranceMap = {};
+  (insuranceContacts ?? []).forEach((c) => { insuranceMap[c._id] = c.name; });
+
+  function openCreate() {
+    setEditing(null);
+    setModalOpen(true);
+  }
+
+  function openEdit(user) {
+    setEditing(user);
+    setModalOpen(true);
+  }
 
   async function handleRoleChange(userId, role) {
     await updateRole({ id: userId, role });
@@ -357,11 +458,11 @@ function UsersPageContent({ currentEmail }) {
           </p>
         </div>
         <button
-          onClick={() => setInviteOpen(true)}
+          onClick={openCreate}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
         >
           <UserPlus className="w-4 h-4" />
-          Invite User
+          Add User
         </button>
       </div>
 
@@ -373,12 +474,12 @@ function UsersPageContent({ currentEmail }) {
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Email</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Name</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Role</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Payer</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Provider</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Claim Types</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Insurance</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Specialization</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Team Lead</th>
               <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Active</th>
               <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Last Login</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Edit</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -398,14 +499,14 @@ function UsersPageContent({ currentEmail }) {
                   <EmptyState
                     icon={UserCog}
                     title="No users yet"
-                    description="Invite your first team member to get started."
+                    description="Add your first team member to get started."
                     action={
                       <button
-                        onClick={() => setInviteOpen(true)}
+                        onClick={openCreate}
                         className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
                       >
                         <UserPlus className="w-4 h-4" />
-                        Invite User
+                        Add User
                       </button>
                     }
                   />
@@ -415,6 +516,8 @@ function UsersPageContent({ currentEmail }) {
               users.map((user) => {
                 const seed = user.name || user.email;
                 const isSelf = user.email === currentEmail;
+                const insuranceNames = (user.insuranceContactIds ?? []).map((id) => insuranceMap[id]).filter(Boolean);
+                const specLabels = (user.specializations ?? []).map((s) => SPECIALIZATION_LABELS[s] ?? s);
                 return (
                   <tr key={user._id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="px-4 py-3.5">
@@ -443,9 +546,12 @@ function UsersPageContent({ currentEmail }) {
                         onChange={handleRoleChange}
                       />
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">{user.payerRouting || (user.role === 'operator' ? 'All payers' : '--')}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">{user.providerRouting || (user.role === 'operator' ? 'All clients' : '--')}</td>
-                    <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">{user.claimTypeRouting || (user.role === 'operator' ? 'Claim Followup, Live Handoff' : '--')}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-600">
+                      {insuranceNames.length > 0 ? insuranceNames.join(', ') : (user.role === 'operator' ? 'All payers' : '--')}
+                    </td>
+                    <td className="px-4 py-3.5 text-sm text-gray-600">
+                      {specLabels.length > 0 ? specLabels.join(', ') : '--'}
+                    </td>
                     <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">{user.teamLeadName || '--'}</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap">
                       {isSelf ? (
@@ -457,6 +563,15 @@ function UsersPageContent({ currentEmail }) {
                     <td className="px-4 py-3.5 text-xs text-gray-600 font-data text-right whitespace-nowrap">
                       {formatLastLogin(user.lastLoginAt)}
                     </td>
+                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => openEdit(user)}
+                        className="p-1.5 rounded-lg text-muted hover:text-accent hover:bg-accent/5 transition-colors"
+                        title="Edit"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 );
               })
@@ -465,10 +580,13 @@ function UsersPageContent({ currentEmail }) {
         </table>
       </div>
 
-      <InviteUserModal
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
+      <UserModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        editing={editing}
+        insuranceContacts={insuranceContacts}
         createUser={createUser}
+        updateUser={updateUser}
       />
     </div>
   );

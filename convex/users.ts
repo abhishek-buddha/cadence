@@ -3,6 +3,15 @@ import { v } from 'convex/values';
 
 const VALID_ROLES = ['admin', 'manager', 'operator', 'viewer'];
 const VALID_STATUSES = ['active', 'disabled'];
+const VALID_SPECIALIZATIONS = ['claim_status', 'denial_claim', 'claim_eligibility_check'];
+
+function validateSpecializations(specializations?: string[]) {
+  for (const s of specializations ?? []) {
+    if (!VALID_SPECIALIZATIONS.includes(s)) {
+      throw new Error(`Invalid specialization: ${s}`);
+    }
+  }
+}
 
 export const list = query({
   handler: async (ctx) => {
@@ -184,9 +193,8 @@ export const create = mutation({
     status: v.optional(v.string()),
     ssoProvider: v.optional(v.string()),
     ssoSubject: v.optional(v.string()),
-    payerRouting: v.optional(v.string()),
-    providerRouting: v.optional(v.string()),
-    claimTypeRouting: v.optional(v.string()),
+    insuranceContactIds: v.optional(v.array(v.id('insuranceContacts'))),
+    specializations: v.optional(v.array(v.string())),
     teamLeadName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -197,6 +205,7 @@ export const create = mutation({
     if (!VALID_STATUSES.includes(status)) {
       throw new Error(`Invalid status: ${status}`);
     }
+    validateSpecializations(args.specializations);
     const existing = await ctx.db
       .query('users')
       .withIndex('by_email', (q) => q.eq('email', args.email))
@@ -210,9 +219,8 @@ export const create = mutation({
       status,
       ssoProvider: args.ssoProvider,
       ssoSubject: args.ssoSubject,
-      payerRouting: args.payerRouting,
-      providerRouting: args.providerRouting,
-      claimTypeRouting: args.claimTypeRouting,
+      insuranceContactIds: args.insuranceContactIds,
+      specializations: args.specializations,
       teamLeadName: args.teamLeadName,
       createdAt: new Date().toISOString(),
     });
@@ -249,13 +257,18 @@ export const setStatus = mutation({
 export const updateRoutingProfile = mutation({
   args: {
     id: v.id('users'),
-    payerRouting: v.optional(v.string()),
-    providerRouting: v.optional(v.string()),
-    claimTypeRouting: v.optional(v.string()),
+    name: v.optional(v.string()),
+    role: v.optional(v.string()),
+    insuranceContactIds: v.optional(v.array(v.id('insuranceContacts'))),
+    specializations: v.optional(v.array(v.string())),
     teamLeadName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...patch } = args;
+    if (patch.role !== undefined && !VALID_ROLES.includes(patch.role)) {
+      throw new Error(`Invalid role: ${patch.role}`);
+    }
+    validateSpecializations(patch.specializations);
     const filtered = Object.fromEntries(
       Object.entries(patch).filter(([, value]) => value !== undefined)
     );

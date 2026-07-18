@@ -17,16 +17,13 @@ import {
 } from 'lucide-react';
 import HandoffContextCard from '../components/HandoffContextCard';
 import { useSoftphone } from '../hooks/useSoftphone';
+import { SPECIALIZATION_LABELS } from './UsersPage';
 
 const ROLE_LABELS = {
   admin: 'Admin',
   manager: 'Manager',
   operator: 'Operator',
   viewer: 'Viewer',
-};
-
-const ROLE_SPECIALIZATIONS = {
-  operator: ['Claim Followup', 'Live Handoff'],
 };
 
 const AVAILABILITY_CONFIG = {
@@ -127,6 +124,7 @@ function SoftphonePanel({ softphone }) {
 
 export default function ClaimUserRoutingPage({ standalone = false }) {
   const users = useQuery(api.users?.listRoutingAgents);
+  const insuranceContacts = useQuery(api.insuranceContacts.list);
   const acceptHandoff = useMutation(api.handoff.acceptHandoff);
   const redirectPayer = useAction(api.handoff.redirectPayerToConference);
   const markConnected = useMutation(api.handoff.markConnectedFromClient);
@@ -142,6 +140,8 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
 
   const isLoading = users === undefined;
   const activeUsers = users ?? [];
+  const insuranceMap = {};
+  (insuranceContacts ?? []).forEach((c) => { insuranceMap[c._id] = c.name; });
 
   function toggleExpanded(userId) {
     setExpandedRows((prev) => {
@@ -221,8 +221,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
               <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Username</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Role</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Insurance</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Provider</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Claim Types Handling</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Specialization</th>
               <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Availability</th>
               <th className="text-right px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Action</th>
             </tr>
@@ -231,7 +230,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
             {isLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
+                  {Array.from({ length: 6 }).map((_, j) => (
                     <td key={j} className="px-4 py-3.5">
                       <div className="shimmer rounded h-4 w-full" />
                     </td>
@@ -240,7 +239,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
               ))
             ) : activeUsers.length === 0 ? (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={6}>
                   <EmptyState
                     icon={UserCog}
                     title="No active users"
@@ -250,7 +249,8 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
               </tr>
             ) : (
               activeUsers.map((user) => {
-                const specializations = ROLE_SPECIALIZATIONS[user.role] ?? ['Claim Followup'];
+                const insuranceNames = (user.insuranceContactIds ?? []).map((id) => insuranceMap[id]).filter(Boolean);
+                const specLabels = (user.specializations ?? []).map((s) => SPECIALIZATION_LABELS[s] ?? s);
                 const canAccept = user.availability === 'assigned' && user.activeCall;
                 const isAccepting = acceptingId === user._id;
                 const hasCallDetails = Boolean(user.activeCall);
@@ -267,10 +267,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
                         {ROLE_LABELS[user.role] ?? user.role ?? '--'}
                       </td>
                       <td className="px-4 py-3.5 text-gray-600">
-                        {user.activeCall?.insuranceCompany || routeValue(user.payerRouting, 'All payers')}
-                      </td>
-                      <td className="px-4 py-3.5 text-gray-600">
-                        {user.activeCall?.providerName || routeValue(user.providerRouting, 'All clients')}
+                        {user.activeCall?.insuranceCompany || routeValue(insuranceNames.join(', '), 'All payers')}
                       </td>
                       <td className="px-4 py-3.5 text-gray-600">
                         {hasCallDetails ? (
@@ -285,7 +282,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
                             <span className="truncate">{subjectLabel(user.activeCall)}</span>
                           </button>
                         ) : (
-                          user.claimTypeRouting || specializations.join(', ')
+                          routeValue(specLabels.join(', '), '--')
                         )}
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
@@ -317,7 +314,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
                     </tr>
                     {isExpanded && (
                       <tr className="bg-surface/60">
-                        <td colSpan={7} className="px-5 py-4">
+                        <td colSpan={6} className="px-5 py-4">
                           <HandoffContextCard call={user.activeCall} embedded />
                         </td>
                       </tr>

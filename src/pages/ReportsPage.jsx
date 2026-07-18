@@ -36,52 +36,6 @@ const INPUT_CLASS =
 const SELECT_CLASS =
   'bg-white border border-border-light rounded-lg px-2.5 py-1.5 text-xs text-gray-700 focus:border-accent focus:ring-1 focus:ring-accent outline-none appearance-none cursor-pointer';
 
-function toISODate(d) {
-  return d.toISOString().split('T')[0];
-}
-
-const DATE_PRESETS = [
-  {
-    key: 'today',
-    label: 'Today',
-    range: () => {
-      const t = new Date();
-      return [toISODate(t), toISODate(t)];
-    },
-  },
-  {
-    key: 'week',
-    label: 'This Week',
-    range: () => {
-      const t = new Date();
-      const dayOfWeek = (t.getDay() + 6) % 7; // 0 = Monday
-      const monday = new Date(t);
-      monday.setDate(t.getDate() - dayOfWeek);
-      return [toISODate(monday), toISODate(t)];
-    },
-  },
-  {
-    key: 'month',
-    label: 'This Month',
-    range: () => {
-      const t = new Date();
-      const first = new Date(t.getFullYear(), t.getMonth(), 1);
-      return [toISODate(first), toISODate(t)];
-    },
-  },
-  {
-    key: 'last30',
-    label: 'Last 30 Days',
-    range: () => {
-      const t = new Date();
-      const from = new Date(t);
-      from.setDate(t.getDate() - 29);
-      return [toISODate(from), toISODate(t)];
-    },
-  },
-];
-
-
 function formatSecondsCompact(seconds) {
   const total = Number(seconds || 0);
   if (!Number.isFinite(total) || total <= 0) return '0m';
@@ -855,17 +809,6 @@ export default function ReportsPage() {
     ...(insuranceContacts ?? []).map((c) => ({ value: c._id, label: c.name })),
   ];
 
-  function applyPreset(preset) {
-    const [from, to] = preset.range();
-    setDateFrom(from);
-    setDateTo(to);
-  }
-
-  const activePresetKey = DATE_PRESETS.find((p) => {
-    const [from, to] = p.range();
-    return from === dateFrom && to === dateTo;
-  })?.key;
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -900,41 +843,37 @@ export default function ReportsPage() {
         </div>
 
         {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border">
-          <div className="flex items-center gap-1">
-            {DATE_PRESETS.map((preset) => (
-              <button
-                key={preset.key}
-                type="button"
-                onClick={() => applyPreset(preset)}
-                className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${
-                  activePresetKey === preset.key
-                    ? 'border-accent bg-accent/5 text-accent'
-                    : 'border-border-light text-gray-600 hover:border-accent/40 hover:text-gray-900'
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
+        <div className="flex flex-wrap items-end gap-5 px-4 py-3 border-b border-border bg-surface/40">
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-muted font-medium mb-1">Date Range</label>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className={`${INPUT_CLASS} w-32`}
+              />
+              <span className="text-[11px] text-muted">–</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className={`${INPUT_CLASS} w-32`}
+              />
+            </div>
           </div>
 
-          <div className="w-px h-5 bg-border mx-1" />
+          <div className="w-px h-8 bg-border" />
 
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className={`${INPUT_CLASS} w-28`}
-          />
-          <span className="text-[11px] text-muted px-0.5">to</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className={`${INPUT_CLASS} w-28`}
-          />
-          <FilterSelect value={payerId} onChange={setPayerId} options={payerOptions} className="w-36 ml-1.5" />
-          <FilterSelect value={useCase} onChange={setUseCase} options={USE_CASE_OPTIONS} className="w-32" />
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-muted font-medium mb-1">Payer</label>
+            <FilterSelect value={payerId} onChange={setPayerId} options={payerOptions} className="w-40" />
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-muted font-medium mb-1">Case Type</label>
+            <FilterSelect value={useCase} onChange={setUseCase} options={USE_CASE_OPTIONS} className="w-36" />
+          </div>
         </div>
 
         {/* Tab content */}

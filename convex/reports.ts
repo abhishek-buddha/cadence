@@ -392,6 +392,81 @@ export const exceptionReport = query({
   },
 });
 
+
+export const operationalKpis = query({
+  args: {
+    fromDate: v.optional(v.string()),
+    toDate: v.optional(v.string()),
+    payerId: v.optional(v.id('insuranceContacts')),
+    useCase: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject || 'default';
+    const calls = await ctx.db
+      .query('calls')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .collect();
+
+    const filtered = calls.filter((c) => {
+      if (args.payerId && c.insuranceContactId !== args.payerId) return false;
+      if (args.useCase && c.useCase !== args.useCase) return false;
+      if (args.fromDate || args.toDate) {
+        if (!inRange(c.startedAt, args.fromDate, args.toDate)) return false;
+      }
+      return true;
+    });
+
+    const completed = filtered.filter((c) => c.status === 'completed' || c.completedAt);
+    const failed = filtered.filter((c) => c.status === 'failed' || c.outcome === 'failed');
+    const transferred = filtered.filter((c) =>
+      c.outcome === 'transferred_to_human' ||
+      c.handoffState === 'connected' ||
+      c.handoffState === 'handoff_ended' ||
+      !!c.humanTranscript
+    );
+    const ivrAttempted = filtered.filter((c) =>
+      c.ivrSequenceUsed || c.callPhase || c.holdStartedAt || c.humanDetectedAt || c.holdDuration
+    );
+    const ivrTraversed = ivrAttempted.filter((c) =>
+      c.humanDetectedAt || c.holdDuration || c.callPhase === 'connecting' || transferred.includes(c)
+    );
+    const automated = completed.filter((c) => !transferred.includes(c));
+    const totalDurationSeconds = completed.reduce((sum, c) => sum + (c.duration || 0), 0);
+    const totalHoldSeconds = filtered.reduce((sum, c) => sum + (c.holdDuration || 0), 0);
+    const firstStart = filtered.reduce<string | null>((min, c) => {
+      if (!c.startedAt) return min;
+      return !min || c.startedAt < min ? c.startedAt : min;
+    }, null);
+    const lastEnd = filtered.reduce<string | null>((max, c) => {
+      const ts = c.completedAt || c.startedAt;
+      if (!ts) return max;
+      return !max || ts > max ? ts : max;
+    }, null);
+    const elapsedHours = firstStart && lastEnd
+      ? Math.max(1, (new Date(lastEnd).getTime() - new Date(firstStart).getTime()) / 3600000)
+      : 1;
+
+    const estimatedMinutesSaved = Math.round((totalDurationSeconds + totalHoldSeconds) / 60);
+    const estimatedCostSavings = Math.round((estimatedMinutesSaved / 60) * 28);
+
+    return {
+      totalCalls: filtered.length,
+      completedCalls: completed.length,
+      failedCalls: failed.length,
+      transferredCalls: transferred.length,
+      ivrAttempted: ivrAttempted.length,
+      ivrTraversed: ivrTraversed.length,
+      ivrTraversalRate: ivrAttempted.length > 0 ? Math.round((ivrTraversed.length / ivrAttempted.length) * 1000) / 10 : 0,
+      transferRate: filtered.length > 0 ? Math.round((transferred.length / filtered.length) * 1000) / 10 : 0,
+      automationRate: completed.length > 0 ? Math.round((automated.length / completed.length) * 1000) / 10 : 0,
+      callsPerHour: Math.round((completed.length / elapsedHours) * 10) / 10,
+      estimatedMinutesSaved,
+      estimatedCostSavings,
+    };
+  },
+});
+
 // Volume tier breakdown for current month per payer
 export const volumeByTier = query({
   args: {},

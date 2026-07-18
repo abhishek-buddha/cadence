@@ -19,6 +19,7 @@ const TABS = [
   { value: 'data_accuracy', label: 'Data Accuracy', icon: Target },
   { value: 'turnaround_time', label: 'Turnaround Time', icon: Clock },
   { value: 'hold_metrics', label: 'Hold Metrics', icon: Clock },
+  { value: 'operational_kpis', label: 'Operational KPIs', icon: BarChart3 },
   { value: 'exception_report', label: 'Exception Report', icon: AlertOctagon },
   { value: 'volume_by_tier', label: 'Volume by Tier', icon: Layers },
 ];
@@ -160,6 +161,24 @@ function downloadCsv(filename, headers, rows) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+
+function MetricCard({ label, value, caption, tone = 'default' }) {
+  const toneClass = {
+    default: 'text-gray-900',
+    success: 'text-success',
+    warn: 'text-warn',
+    danger: 'text-danger',
+    accent: 'text-accent',
+  }[tone] || 'text-gray-900';
+  return (
+    <div className="bg-white border border-border rounded-xl p-5">
+      <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">{label}</p>
+      <p className={`text-2xl font-display font-bold font-data ${toneClass}`}>{value}</p>
+      {caption && <p className="text-xs text-muted mt-1">{caption}</p>}
+    </div>
+  );
 }
 
 function ChartCard({ title, subtitle, children, action }) {
@@ -597,6 +616,67 @@ function HoldMetricsTab({ filters }) {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Tab content: Operational KPIs
+// ---------------------------------------------------------------------------
+function OperationalKpisTab({ filters }) {
+  const data = useQuery(api.reports?.operationalKpis, filters);
+  const isLoading = data === undefined;
+  const metrics = data || {};
+
+  function exportData() {
+    downloadCsv(
+      `cadence-operational-kpis-${new Date().toISOString().split('T')[0]}.csv`,
+      ['Metric', 'Value'],
+      [
+        ['Total Calls', metrics.totalCalls ?? 0],
+        ['Completed Calls', metrics.completedCalls ?? 0],
+        ['IVR Traversal Rate', `${metrics.ivrTraversalRate ?? 0}%`],
+        ['Transfer Rate', `${metrics.transferRate ?? 0}%`],
+        ['Automation Rate', `${metrics.automationRate ?? 0}%`],
+        ['Calls Per Hour', metrics.callsPerHour ?? 0],
+        ['Estimated Minutes Saved', metrics.estimatedMinutesSaved ?? 0],
+        ['Estimated Cost Savings', `$${metrics.estimatedCostSavings ?? 0}`],
+      ]
+    );
+  }
+
+  if (isLoading) return <LoadingPlaceholder />;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <MetricCard label="IVR Traversal" value={`${metrics.ivrTraversalRate || 0}%`} caption={`${metrics.ivrTraversed || 0}/${metrics.ivrAttempted || 0} calls`} tone="accent" />
+        <MetricCard label="Transfer Rate" value={`${metrics.transferRate || 0}%`} caption={`${metrics.transferredCalls || 0} calls transferred`} tone="warn" />
+        <MetricCard label="Automation Rate" value={`${metrics.automationRate || 0}%`} caption="Completed without handoff" tone="success" />
+        <MetricCard label="Productivity" value={`${metrics.callsPerHour || 0}/hr`} caption="Completed call throughput" />
+      </div>
+
+      <ChartCard
+        title="ROI and Efficiency"
+        subtitle="Estimated from completed call duration and hold time"
+        action={
+          <button
+            onClick={exportData}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 border border-border rounded-lg hover:border-accent hover:text-accent transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+        }
+      >
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <MetricCard label="Total Calls" value={(metrics.totalCalls || 0).toLocaleString()} />
+          <MetricCard label="Completed" value={(metrics.completedCalls || 0).toLocaleString()} tone="success" />
+          <MetricCard label="Minutes Saved" value={(metrics.estimatedMinutesSaved || 0).toLocaleString()} tone="accent" />
+          <MetricCard label="Cost Savings" value={`$${(metrics.estimatedCostSavings || 0).toLocaleString()}`} tone="success" />
+        </div>
+      </ChartCard>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Tab content: Exception Report
 // ---------------------------------------------------------------------------
@@ -814,6 +894,7 @@ export default function ReportsPage() {
           {activeTab === 'data_accuracy' && <DataAccuracyTab filters={filters} />}
           {activeTab === 'turnaround_time' && <TurnaroundTimeTab filters={filters} />}
           {activeTab === 'hold_metrics' && <HoldMetricsTab filters={filters} />}
+          {activeTab === 'operational_kpis' && <OperationalKpisTab filters={filters} />}
           {activeTab === 'exception_report' && <ExceptionReportTab filters={filters} />}
           {activeTab === 'volume_by_tier' && <VolumeByTierTab filters={filters} />}
         </div>

@@ -1119,71 +1119,24 @@ http.route({
 http.route({
   path: '/test-ivr-hold',
   method: 'POST',
-  handler: httpAction(async (ctx, request) => {
+  handler: httpAction(async (_, request) => {
     const url = new URL(request.url);
     const siteUrl = url.origin;
     const forwardNumber = url.searchParams.get('forwardNumber') || '';
 
-    // ------------------------------------------------------------------
-    // PARALLEL DIAL: when an insurance human-agent number is configured, we
-    // dial that mobile AT THE SAME TIME as the caller starts hearing hold
-    // music — not after. Mechanism: park the caller in a conference whose
-    // waitUrl plays the hold song (music plays only while they're alone), and
-    // in parallel place a REST call that dials the mobile into the SAME
-    // conference. The instant the human answers and joins, the caller is no
-    // longer alone → Twilio stops the waitUrl music automatically and the two
-    // are bridged. No "Transferring you now" gap, no sequential wait.
-    // ------------------------------------------------------------------
-    if (forwardNumber) {
-      const confName = `payer-transfer-${Date.now()}`;
-      const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-      const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+    // After hold music, either dial the human agent number or fall back to TTS Michael
+    const afterHold = forwardNumber
+      ? `<Say voice="Polly.Joanna">Transferring you now.</Say>
+         <Dial callerId="+12272573081" timeout="30">${forwardNumber}</Dial>
+         <Say voice="Polly.Joanna">We were unable to reach the representative. Please try again later.</Say>
+         <Hangup/>`
+      : `<Gather input="speech" timeout="180" speechTimeout="auto" action="${siteUrl}/test-ivr-agent" method="POST">
+          <Say voice="Polly.Matthew">Hi there, thanks so much for holding. This is Michael with the Acme Health Insurance claims department. How can I help you today?</Say>
+          <Pause length="180"/>
+        </Gather>
+        <Say voice="Polly.Matthew">Thank you for calling. Goodbye.</Say>
+        <Hangup/>`;
 
-      // Fire the outbound call to the insurance agent's mobile in parallel.
-      // Their TwiML (/test-ivr-agent-join) drops them straight into the
-      // conference. Done best-effort; if it fails the caller still holds.
-      if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
-        try {
-          const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
-          const joinUrl = `${siteUrl}/test-ivr-agent-join?conf=${encodeURIComponent(confName)}`;
-          const params = new URLSearchParams();
-          params.append('To', forwardNumber);
-          params.append('From', '+12272573081');
-          params.append('Url', joinUrl);
-          params.append('Timeout', '30');
-          await fetch(
-            `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls.json`,
-            {
-              method: 'POST',
-              headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: params.toString(),
-            }
-          );
-        } catch (e: any) {
-          console.error('[test-ivr-hold] parallel dial failed (non-fatal):', e.message);
-        }
-      }
-
-      // Park the caller in the conference with the song as hold music. The
-      // song plays ONLY while they're alone (startConferenceOnEnter so it
-      // begins immediately; the agent joining ends the solo hold).
-      return twimlResponse(`
-        <Response>
-          <Say voice="Polly.Joanna">Please hold while we transfer you to the next available claims representative.
-            Your estimated wait time is approximately 2 minutes. Your call is important to us.</Say>
-          <Dial>
-            <Conference startConferenceOnEnter="true" endConferenceOnExit="true"
-                        waitUrl="${siteUrl}/test-ivr-hold-music" beep="false">
-              ${confName}
-            </Conference>
-          </Dial>
-          <Say voice="Polly.Joanna">We were unable to reach the representative. Please try again later.</Say>
-          <Hangup/>
-        </Response>
-      `);
-    }
-
-    // No forward number — fall back to the simulated TTS rep "Michael".
     return twimlResponse(`
       <Response>
         <Say voice="Polly.Joanna">Please hold while we transfer you to the next available claims representative.
@@ -1191,68 +1144,11 @@ http.route({
         <Play>http://com.twilio.music.soft-rock.s3.amazonaws.com/_ghost_-_promo_2_sample_pack.mp3</Play>
         <Say voice="Polly.Joanna">Thank you for your continued patience.</Say>
         <Pause length="2"/>
-        <Gather input="speech" timeout="180" speechTimeout="auto" action="${siteUrl}/test-ivr-agent" method="POST">
-          <Say voice="Polly.Matthew">Hi there, thanks so much for holding. This is Michael with the Acme Health Insurance claims department. How can I help you today?</Say>
-          <Pause length="180"/>
-        </Gather>
-        <Say voice="Polly.Matthew">Thank you for calling. Goodbye.</Say>
-        <Hangup/>
+        ${afterHold}
       </Response>
     `);
   }),
 });
-
-// Hold music for the payer-transfer conference (waitUrl). Plays only while the
-// caller is alone; stops automatically when the insurance agent joins.
-http.route({
-  path: '/test-ivr-hold-music',
-  method: 'POST',
-  handler: httpAction(async () =>
-    twimlResponse(`
-      <Response>
-        <Play>http://com.twilio.music.soft-rock.s3.amazonaws.com/_ghost_-_promo_2_sample_pack.mp3</Play>
-      </Response>
-    `)
-  ),
-});
-http.route({
-  path: '/test-ivr-hold-music',
-  method: 'GET',
-  handler: httpAction(async () =>
-    twimlResponse(`
-      <Response>
-        <Play>http://com.twilio.music.soft-rock.s3.amazonaws.com/_ghost_-_promo_2_sample_pack.mp3</Play>
-      </Response>
-    `)
-  ),
-});
-
-// TwiML for the insurance agent's MOBILE leg — drops them straight into the
-// payer-transfer conference so they're bridged with the waiting caller. Joining
-// ends the caller's solo hold, so the music stops the instant they answer.
-async function testIvrAgentJoinHandler(_ctx: any, request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  let conf = url.searchParams.get('conf') || '';
-  if (!conf) {
-    try {
-      const form = new URLSearchParams(await request.text());
-      conf = form.get('conf') || '';
-    } catch {
-      // ignore
-    }
-  }
-  return twimlResponse(`
-    <Response>
-      <Dial>
-        <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false">
-          ${conf}
-        </Conference>
-      </Dial>
-    </Response>
-  `);
-}
-http.route({ path: '/test-ivr-agent-join', method: 'POST', handler: httpAction(testIvrAgentJoinHandler) });
-http.route({ path: '/test-ivr-agent-join', method: 'GET', handler: httpAction(testIvrAgentJoinHandler) });
 
 http.route({
   path: '/test-ivr-agent',

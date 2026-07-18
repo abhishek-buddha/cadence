@@ -150,13 +150,23 @@ function formatLastLogin(ts) {
 // ---------------------------------------------------------------------------
 function InviteUserModal({ open, onClose, createUser }) {
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [role, setRole] = useState('viewer');
+  const [payerRouting, setPayerRouting] = useState('');
+  const [providerRouting, setProviderRouting] = useState('');
+  const [claimTypeRouting, setClaimTypeRouting] = useState('');
+  const [teamLeadName, setTeamLeadName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
   function reset() {
     setEmail('');
+    setName('');
     setRole('viewer');
+    setPayerRouting('');
+    setProviderRouting('');
+    setClaimTypeRouting('');
+    setTeamLeadName('');
     setError(null);
   }
 
@@ -174,7 +184,15 @@ function InviteUserModal({ open, onClose, createUser }) {
     setSaving(true);
     setError(null);
     try {
-      await createUser({ email, role });
+      await createUser({
+        email,
+        name: name.trim() || undefined,
+        role,
+        payerRouting: payerRouting.trim() || undefined,
+        providerRouting: providerRouting.trim() || undefined,
+        claimTypeRouting: claimTypeRouting.trim() || undefined,
+        teamLeadName: teamLeadName.trim() || undefined,
+      });
       handleClose();
     } catch (err) {
       setError(err.message || 'Failed to invite user.');
@@ -207,6 +225,17 @@ function InviteUserModal({ open, onClose, createUser }) {
         </div>
 
         <div>
+          <label className={LABEL_CLASS}>Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="A. Reyes"
+            className={INPUT_CLASS}
+          />
+        </div>
+
+        <div>
           <label className={LABEL_CLASS}>Role</label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {ROLE_OPTIONS.map((opt) => (
@@ -223,6 +252,25 @@ function InviteUserModal({ open, onClose, createUser }) {
                 {opt.label}
               </button>
             ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className={LABEL_CLASS}>Payer Routing</label>
+            <input value={payerRouting} onChange={(e) => setPayerRouting(e.target.value)} placeholder="Aetna, Cigna or All payers" className={INPUT_CLASS} />
+          </div>
+          <div>
+            <label className={LABEL_CLASS}>Provider Routing</label>
+            <input value={providerRouting} onChange={(e) => setProviderRouting(e.target.value)} placeholder="Riverside or All clients" className={INPUT_CLASS} />
+          </div>
+          <div>
+            <label className={LABEL_CLASS}>Claim Types</label>
+            <input value={claimTypeRouting} onChange={(e) => setClaimTypeRouting(e.target.value)} placeholder="Enquiry, Status check" className={INPUT_CLASS} />
+          </div>
+          <div>
+            <label className={LABEL_CLASS}>Team Lead</label>
+            <input value={teamLeadName} onChange={(e) => setTeamLeadName(e.target.value)} placeholder="K. Nolan" className={INPUT_CLASS} />
           </div>
         </div>
 
@@ -325,6 +373,10 @@ function UsersPageContent({ currentEmail }) {
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Email</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Name</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Role</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Payer</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Provider</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Claim Types</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Team Lead</th>
               <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Active</th>
               <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Last Login</th>
             </tr>
@@ -333,7 +385,7 @@ function UsersPageContent({ currentEmail }) {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
+                  {Array.from({ length: 10 }).map((_, j) => (
                     <td key={j} className="px-4 py-3.5">
                       <div className="shimmer rounded h-4 w-full" />
                     </td>
@@ -342,7 +394,7 @@ function UsersPageContent({ currentEmail }) {
               ))
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={10}>
                   <EmptyState
                     icon={UserCog}
                     title="No users yet"
@@ -391,6 +443,10 @@ function UsersPageContent({ currentEmail }) {
                         onChange={handleRoleChange}
                       />
                     </td>
+                    <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">{user.payerRouting || (user.role === 'operator' ? 'All payers' : '--')}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">{user.providerRouting || (user.role === 'operator' ? 'All clients' : '--')}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">{user.claimTypeRouting || (user.role === 'operator' ? 'Claim Followup, Live Handoff' : '--')}</td>
+                    <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">{user.teamLeadName || '--'}</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap">
                       {isSelf ? (
                         <span className="text-xs text-muted">—</span>

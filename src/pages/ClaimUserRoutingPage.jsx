@@ -47,6 +47,10 @@ function displayName(user) {
   return user.name || user.email || user.routingName || 'Unknown user';
 }
 
+function routeValue(value, fallback) {
+  return value || <span className="text-muted/50 italic">{fallback}</span>;
+}
+
 function subjectLabel(call) {
   if (!call) return '--';
   if (call.claimNumber) return `Claim ${call.claimNumber}`;
@@ -201,6 +205,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
               <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Username</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Role</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Insurance</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Provider</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Claim Types Handling</th>
               <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Availability</th>
               <th className="text-right px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Action</th>
@@ -210,7 +215,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
             {isLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
+                  {Array.from({ length: 7 }).map((_, j) => (
                     <td key={j} className="px-4 py-3.5">
                       <div className="shimmer rounded h-4 w-full" />
                     </td>
@@ -219,7 +224,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
               ))
             ) : activeUsers.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <EmptyState
                     icon={UserCog}
                     title="No active users"
@@ -242,12 +247,13 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
                       {ROLE_LABELS[user.role] ?? user.role ?? '--'}
                     </td>
                     <td className="px-4 py-3.5 text-gray-600">
-                      {user.activeCall?.insuranceCompany || (
-                        <span className="text-muted/50 italic">All providers</span>
-                      )}
+                      {user.activeCall?.insuranceCompany || routeValue(user.payerRouting, 'All payers')}
                     </td>
                     <td className="px-4 py-3.5 text-gray-600">
-                      {user.activeCall ? subjectLabel(user.activeCall) : specializations.join(', ')}
+                      {routeValue(user.providerRouting, 'All clients')}
+                    </td>
+                    <td className="px-4 py-3.5 text-gray-600">
+                      {user.activeCall ? subjectLabel(user.activeCall) : (user.claimTypeRouting || specializations.join(', '))}
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       <AvailabilityBadge value={user.availability ?? 'offline'} />

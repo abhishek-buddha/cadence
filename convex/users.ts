@@ -125,6 +125,10 @@ export const create = mutation({
     status: v.optional(v.string()),
     ssoProvider: v.optional(v.string()),
     ssoSubject: v.optional(v.string()),
+    payerRouting: v.optional(v.string()),
+    providerRouting: v.optional(v.string()),
+    claimTypeRouting: v.optional(v.string()),
+    teamLeadName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     if (!VALID_ROLES.includes(args.role)) {
@@ -147,6 +151,10 @@ export const create = mutation({
       status,
       ssoProvider: args.ssoProvider,
       ssoSubject: args.ssoSubject,
+      payerRouting: args.payerRouting,
+      providerRouting: args.providerRouting,
+      claimTypeRouting: args.claimTypeRouting,
+      teamLeadName: args.teamLeadName,
       createdAt: new Date().toISOString(),
     });
   },
@@ -175,6 +183,24 @@ export const setStatus = mutation({
       throw new Error(`Invalid status: ${args.status}`);
     }
     await ctx.db.patch(args.id, { status: args.status });
+  },
+});
+
+
+export const updateRoutingProfile = mutation({
+  args: {
+    id: v.id('users'),
+    payerRouting: v.optional(v.string()),
+    providerRouting: v.optional(v.string()),
+    claimTypeRouting: v.optional(v.string()),
+    teamLeadName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...patch } = args;
+    const filtered = Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined)
+    );
+    await ctx.db.patch(id, filtered);
   },
 });
 

@@ -335,6 +335,10 @@ export default defineSchema({
     ssoProvider: v.optional(v.string()),
     ssoSubject: v.optional(v.string()),
     lastLoginAt: v.optional(v.string()),
+    payerRouting: v.optional(v.string()),
+    providerRouting: v.optional(v.string()),
+    claimTypeRouting: v.optional(v.string()),
+    teamLeadName: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index('by_email', ['email'])

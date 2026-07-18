@@ -1,13 +1,6 @@
 import { query } from './_generated/server';
 import { v } from 'convex/values';
-
-// Helper: stable hash → number in [min, max]
-function hashRange(s: string, min: number, max: number): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  const norm = (h % 10000) / 10000;
-  return min + norm * (max - min);
-}
+import type { Doc } from './_generated/dataModel';
 
 function inRange(ts: string | undefined, fromDate?: string, toDate?: string): boolean {
   if (!ts) return false;
@@ -165,22 +158,85 @@ export const successRateByWeek = query({
   },
 });
 
-// Synthetic data accuracy score for now — real implementation requires QA-sample comparison.
+// Real field-capture-rate report: for each call that has an AI extraction
+// (callResults), how often was each key field actually populated, and how
+// confident was the extraction when it was.
+const ACCURACY_FIELDS: Array<{ key: keyof Doc<'callResults'>; label: string }> = [
+  { key: 'claimStatus', label: 'Claim status' },
+  { key: 'paidAmount', label: 'Paid amount' },
+  { key: 'referenceNumber', label: 'Reference number' },
+  { key: 'repName', label: 'Rep name' },
+  { key: 'denialReason', label: 'Denial reason' },
+  { key: 'expectedDecisionDate', label: 'Expected decision date' },
+];
+
 export const dataAccuracy = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    fromDate: v.optional(v.string()),
+    toDate: v.optional(v.string()),
+    payerId: v.optional(v.id('insuranceContacts')),
+    useCase: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject || 'default';
-    const insurances = await ctx.db
-      .query('insuranceContacts')
+    const allCalls = await ctx.db
+      .query('calls')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .collect();
-    return insurances.map((ins) => ({
-      payer: ins._id,
-      payerName: ins.name,
-      payerKind: ins.payerKind ?? 'unknown',
-      accuracy: Math.round(hashRange(ins._id as unknown as string, 0.85, 0.97) * 1000) / 1000,
-    }));
+    const calls = allCalls.filter((c) => {
+      if (args.payerId && c.insuranceContactId !== args.payerId) return false;
+      if (args.useCase && c.useCase !== args.useCase) return false;
+      if (args.fromDate || args.toDate) {
+        if (!inRange(c.startedAt, args.fromDate, args.toDate)) return false;
+      }
+      return true;
+    });
+
+    const resultsPerCall = await Promise.all(
+      calls.map((c) =>
+        ctx.db
+          .query('callResults')
+          .withIndex('by_callId', (q) => q.eq('callId', c._id))
+          .first()
+      )
+    );
+    const results = resultsPerCall.filter((r): r is NonNullable<typeof r> => r != null);
+
+    const byField = ACCURACY_FIELDS.map(({ key, label }) => {
+      const captured = results.filter((r) => {
+        const val = r[key];
+        return val !== undefined && val !== null && val !== '';
+      });
+      const confidences = captured
+        .map((r) => r.confidence)
+        .filter((c): c is number => typeof c === 'number');
+      return {
+        field: label,
+        totalCalls: results.length,
+        capturedCount: captured.length,
+        captureRate: results.length > 0 ? captured.length / results.length : 0,
+        // null (not 0) when no call in range has a confidence score at all —
+        // "no sample" is different from "measured at zero confidence".
+        avgConfidence: confidences.length > 0
+          ? confidences.reduce((s, c) => s + c, 0) / confidences.length
+          : null,
+      };
+    });
+
+    const overallConfidences = results
+      .map((r) => r.confidence)
+      .filter((c): c is number => typeof c === 'number');
+
+    return {
+      overall: {
+        captureRate: byField.length > 0 ? byField.reduce((s, f) => s + f.captureRate, 0) / byField.length : 0,
+        avgConfidence: overallConfidences.length > 0
+          ? overallConfidences.reduce((s, c) => s + c, 0) / overallConfidences.length
+          : null,
+      },
+      byField,
+    };
   },
 });
 

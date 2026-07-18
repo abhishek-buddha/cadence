@@ -1259,10 +1259,8 @@ http.route({
     return twimlResponse(`
       <Response>
         <Say voice="Polly.Joanna">Please hold while we transfer you to the next available claims representative.
-          Your estimated wait time is approximately 20 seconds. Your call is important to us.</Say>
-        <Pause length="18"/>
-        <Say voice="Polly.Joanna">Thank you for your continued patience.</Say>
-        <Pause length="2"/>
+          Your estimated wait time is approximately 15 seconds. Your call is important to us.</Say>
+        <Pause length="15"/>
         ${afterHold}
       </Response>
     `);

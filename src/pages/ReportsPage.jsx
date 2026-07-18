@@ -26,7 +26,7 @@ const TABS = [
 ];
 
 const USE_CASE_OPTIONS = [
-  { value: '', label: 'All Use Cases' },
+  { value: '', label: 'All Case Types' },
   { value: 'claim_followup', label: 'Claim Follow-up' },
   { value: 'dental_ev', label: 'Dental EV' },
 ];
@@ -35,6 +35,51 @@ const INPUT_CLASS =
   'bg-white border border-border-light rounded-lg px-2.5 py-1.5 text-xs text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none w-full';
 const SELECT_CLASS =
   'bg-white border border-border-light rounded-lg px-2.5 py-1.5 text-xs text-gray-700 focus:border-accent focus:ring-1 focus:ring-accent outline-none appearance-none cursor-pointer';
+
+function toISODate(d) {
+  return d.toISOString().split('T')[0];
+}
+
+const DATE_PRESETS = [
+  {
+    key: 'today',
+    label: 'Today',
+    range: () => {
+      const t = new Date();
+      return [toISODate(t), toISODate(t)];
+    },
+  },
+  {
+    key: 'week',
+    label: 'This Week',
+    range: () => {
+      const t = new Date();
+      const dayOfWeek = (t.getDay() + 6) % 7; // 0 = Monday
+      const monday = new Date(t);
+      monday.setDate(t.getDate() - dayOfWeek);
+      return [toISODate(monday), toISODate(t)];
+    },
+  },
+  {
+    key: 'month',
+    label: 'This Month',
+    range: () => {
+      const t = new Date();
+      const first = new Date(t.getFullYear(), t.getMonth(), 1);
+      return [toISODate(first), toISODate(t)];
+    },
+  },
+  {
+    key: 'last30',
+    label: 'Last 30 Days',
+    range: () => {
+      const t = new Date();
+      const from = new Date(t);
+      from.setDate(t.getDate() - 29);
+      return [toISODate(from), toISODate(t)];
+    },
+  },
+];
 
 
 function formatSecondsCompact(seconds) {
@@ -810,6 +855,17 @@ export default function ReportsPage() {
     ...(insuranceContacts ?? []).map((c) => ({ value: c._id, label: c.name })),
   ];
 
+  function applyPreset(preset) {
+    const [from, to] = preset.range();
+    setDateFrom(from);
+    setDateTo(to);
+  }
+
+  const activePresetKey = DATE_PRESETS.find((p) => {
+    const [from, to] = p.range();
+    return from === dateFrom && to === dateTo;
+  })?.key;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -845,6 +901,25 @@ export default function ReportsPage() {
 
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border">
+          <div className="flex items-center gap-1">
+            {DATE_PRESETS.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => applyPreset(preset)}
+                className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${
+                  activePresetKey === preset.key
+                    ? 'border-accent bg-accent/5 text-accent'
+                    : 'border-border-light text-gray-600 hover:border-accent/40 hover:text-gray-900'
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-5 bg-border mx-1" />
+
           <input
             type="date"
             value={dateFrom}

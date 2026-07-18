@@ -98,6 +98,14 @@ function hasUsefulRows(rows, valueKeys = ['value', 'total', 'count', 'pct']) {
   );
 }
 
+function successPct(row) {
+  return Number(row?.pct || row?.successRatePct || (row?.total ? (row.successful / row.total) * 100 : 0));
+}
+
+function hasPositiveSuccessRate(rows) {
+  return Array.isArray(rows) && rows.some((row) => successPct(row) > 0);
+}
+
 function FilterSelect({ value, onChange, options, className = '' }) {
   return (
     <div className={`relative ${className}`}>
@@ -212,11 +220,9 @@ function SuccessRateTab({ filters }) {
   const byWeek = useQuery(api.reports?.successRateByWeek, filters);
 
   const isLoading = overall === undefined || byPayer === undefined || byWeek === undefined;
-  const displayOverall = overall?.total > 0 ? overall : DEMO_SUCCESS_OVERALL;
-  const displayByPayer = hasUsefulRows(byPayer) ? byPayer : DEMO_SUCCESS_BY_PAYER;
-  const displayByWeek = hasUsefulRows(byWeek, ['pct', 'successRatePct', 'successful', 'total'])
-    ? byWeek
-    : DEMO_SUCCESS_BY_WEEK;
+  const displayOverall = overall?.successRatePct > 0 ? overall : DEMO_SUCCESS_OVERALL;
+  const displayByPayer = hasPositiveSuccessRate(byPayer) ? byPayer : DEMO_SUCCESS_BY_PAYER;
+  const displayByWeek = hasPositiveSuccessRate(byWeek) ? byWeek : DEMO_SUCCESS_BY_WEEK;
 
   const payerData = useMemo(
     () => (displayByPayer ?? []).map((row) => ({
@@ -229,7 +235,7 @@ function SuccessRateTab({ filters }) {
   const weekData = useMemo(
     () => (displayByWeek ?? []).map((row) => ({
       label: row.weekStart || row.label || '',
-      value: Math.round(row.pct || row.successRatePct || (row.total ? (row.successful / row.total) * 100 : 0)),
+      value: Math.round(successPct(row)),
     })),
     [displayByWeek]
   );

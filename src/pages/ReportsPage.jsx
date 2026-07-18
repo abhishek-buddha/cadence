@@ -18,6 +18,7 @@ const TABS = [
   { value: 'success_rate', label: 'Success Rate', icon: TrendingUp },
   { value: 'data_accuracy', label: 'Data Accuracy', icon: Target },
   { value: 'turnaround_time', label: 'Turnaround Time', icon: Clock },
+  { value: 'hold_metrics', label: 'Hold Metrics', icon: Clock },
   { value: 'exception_report', label: 'Exception Report', icon: AlertOctagon },
   { value: 'volume_by_tier', label: 'Volume by Tier', icon: Layers },
 ];
@@ -78,6 +79,22 @@ const DEMO_TURNAROUND = [
   { useCase: 'live_handoff', count: 14, p50: 321, p95: 804, p99: 960 },
 ];
 
+const DEMO_HOLD_METRICS = {
+  totalCalls: 114,
+  callsWithHold: 67,
+  avgHoldSeconds: 428,
+  p95HoldSeconds: 1120,
+  maxHoldSeconds: 1840,
+  longHoldCount: 12,
+  over30MinCount: 1,
+  byPayer: [
+    { payer: 'demo-anthem', payerName: 'Anthem BlueCard', totalCalls: 21, callsWithHold: 17, avgHoldSeconds: 612, maxHoldSeconds: 1840, longHoldCount: 5 },
+    { payer: 'demo-cigna', payerName: 'Cigna', totalCalls: 24, callsWithHold: 14, avgHoldSeconds: 470, maxHoldSeconds: 1260, longHoldCount: 3 },
+    { payer: 'demo-aetna', payerName: 'Aetna', totalCalls: 29, callsWithHold: 15, avgHoldSeconds: 392, maxHoldSeconds: 980, longHoldCount: 2 },
+    { payer: 'demo-uhc', payerName: 'UnitedHealthcare', totalCalls: 17, callsWithHold: 9, avgHoldSeconds: 318, maxHoldSeconds: 760, longHoldCount: 1 },
+  ],
+};
+
 const DEMO_EXCEPTIONS = [
   { exception: 'long_hold_over_10min', payer: 'demo-anthem', payerName: 'Anthem BlueCard', count: 4, lastSeenAt: '2026-07-18T09:42:00.000Z' },
   { exception: 'high_partial_rate', payer: 'demo-cigna', payerName: 'Cigna', count: 3, lastSeenAt: '2026-07-18T08:15:00.000Z' },
@@ -96,6 +113,29 @@ function hasUsefulRows(rows, valueKeys = ['value', 'total', 'count', 'pct']) {
   return Array.isArray(rows) && rows.some((row) =>
     valueKeys.some((key) => Number(row?.[key] || 0) > 0)
   );
+}
+
+
+function hasHoldMetrics(data) {
+  return Boolean(
+    data &&
+      (Number(data.callsWithHold || 0) > 0 ||
+        Number(data.avgHoldSeconds || 0) > 0 ||
+        hasUsefulRows(data.byPayer, ['callsWithHold', 'avgHoldSeconds', 'longHoldCount']))
+  );
+}
+
+function formatSecondsCompact(seconds) {
+  const total = Number(seconds || 0);
+  if (!Number.isFinite(total) || total <= 0) return '0m';
+  const mins = Math.floor(total / 60);
+  const secs = Math.round(total % 60);
+  if (mins >= 60) {
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hours}h ${remMins}m`;
+  }
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
 function successPct(row) {
@@ -477,6 +517,102 @@ function TurnaroundTimeTab({ filters }) {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Tab content: Hold Metrics
+// ---------------------------------------------------------------------------
+function HoldMetricsTab({ filters }) {
+  const data = useQuery(api.reports?.holdMetrics, filters);
+  const isLoading = data === undefined;
+  const metrics = hasHoldMetrics(data) ? data : DEMO_HOLD_METRICS;
+  const payerRows = metrics.byPayer || [];
+
+  const chartData = useMemo(
+    () => payerRows.map((row) => ({
+      label: row.payerName || 'Unknown',
+      value: Math.round((row.avgHoldSeconds || 0) / 60),
+    })),
+    [payerRows]
+  );
+
+  function exportData() {
+    downloadCsv(
+      `cadence-hold-metrics-${new Date().toISOString().split('T')[0]}.csv`,
+      ['Payer', 'Total Calls', 'Calls With Hold', 'Avg Hold', 'Longest Hold', 'Long Holds >= 10m'],
+      payerRows.map((row) => [
+        row.payerName || row.payer || '--',
+        row.totalCalls ?? 0,
+        row.callsWithHold ?? 0,
+        formatSecondsCompact(row.avgHoldSeconds),
+        formatSecondsCompact(row.maxHoldSeconds),
+        row.longHoldCount ?? 0,
+      ])
+    );
+  }
+
+  if (isLoading) return <LoadingPlaceholder />;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white border border-border rounded-xl p-5">
+          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Avg Hold Time</p>
+          <p className="text-2xl font-display font-bold text-gray-900 font-data">
+            {formatSecondsCompact(metrics.avgHoldSeconds)}
+          </p>
+        </div>
+        <div className="bg-white border border-border rounded-xl p-5">
+          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Calls With Hold</p>
+          <p className="text-2xl font-display font-bold text-gray-900 font-data">
+            {(metrics.callsWithHold || 0).toLocaleString()}
+          </p>
+        </div>
+        <div className="bg-white border border-border rounded-xl p-5">
+          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">P95 Hold</p>
+          <p className="text-2xl font-display font-bold text-warn font-data">
+            {formatSecondsCompact(metrics.p95HoldSeconds)}
+          </p>
+        </div>
+        <div className="bg-white border border-border rounded-xl p-5">
+          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Long Holds</p>
+          <p className="text-2xl font-display font-bold text-danger font-data">
+            {(metrics.longHoldCount || 0).toLocaleString()}
+          </p>
+        </div>
+      </div>
+
+      <ChartCard
+        title="Average Hold Time by Payer"
+        subtitle="Average time spent waiting on payer hold queues"
+        action={
+          <button
+            onClick={exportData}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 border border-border rounded-lg hover:border-accent hover:text-accent transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+        }
+      >
+        <BarChart data={chartData} formatValue={(n) => `${n}m`} yAxisLabel="Avg hold minutes" />
+        <div className="mt-4">
+          <DataTable
+            headers={['Payer', 'Total Calls', 'Calls With Hold', 'Avg Hold', 'Longest Hold', 'Long Holds']}
+            rows={payerRows.map((row) => [
+              row.payerName || row.payer || '--',
+              (row.totalCalls ?? 0).toLocaleString(),
+              (row.callsWithHold ?? 0).toLocaleString(),
+              formatSecondsCompact(row.avgHoldSeconds),
+              formatSecondsCompact(row.maxHoldSeconds),
+              (row.longHoldCount ?? 0).toLocaleString(),
+            ])}
+          />
+        </div>
+      </ChartCard>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Tab content: Exception Report
 // ---------------------------------------------------------------------------
@@ -693,6 +829,7 @@ export default function ReportsPage() {
           {activeTab === 'success_rate' && <SuccessRateTab filters={filters} />}
           {activeTab === 'data_accuracy' && <DataAccuracyTab filters={filters} />}
           {activeTab === 'turnaround_time' && <TurnaroundTimeTab filters={filters} />}
+          {activeTab === 'hold_metrics' && <HoldMetricsTab filters={filters} />}
           {activeTab === 'exception_report' && <ExceptionReportTab filters={filters} />}
           {activeTab === 'volume_by_tier' && <VolumeByTierTab filters={filters} />}
         </div>

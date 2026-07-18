@@ -213,6 +213,122 @@ export const turnaroundTime = query({
   },
 });
 
+
+export const holdMetrics = query({
+  args: {
+    fromDate: v.optional(v.string()),
+    toDate: v.optional(v.string()),
+    payerId: v.optional(v.id('insuranceContacts')),
+    useCase: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject || 'default';
+    const calls = await ctx.db
+      .query('calls')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .collect();
+
+    const filtered = calls.filter((c) => {
+      if (args.payerId && c.insuranceContactId !== args.payerId) return false;
+      if (args.useCase && c.useCase !== args.useCase) return false;
+      if (args.fromDate || args.toDate) {
+        if (!inRange(c.startedAt, args.fromDate, args.toDate)) return false;
+      }
+      return true;
+    });
+
+    const holdSecondsFor = (call: any): number => {
+      if (typeof call.holdDuration === 'number' && call.holdDuration > 0) {
+        return Math.round(call.holdDuration);
+      }
+      if (call.holdStartedAt && call.callPhase === 'hold') {
+        const elapsed = Math.round((Date.now() - new Date(call.holdStartedAt).getTime()) / 1000);
+        return elapsed > 0 ? elapsed : 0;
+      }
+      return 0;
+    };
+
+    const percentile = (sorted: number[], p: number): number => {
+      if (sorted.length === 0) return 0;
+      const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+      return Math.round(sorted[idx]);
+    };
+
+    const holdCalls = filtered
+      .map((call) => ({ call, holdSeconds: holdSecondsFor(call) }))
+      .filter((row) => row.holdSeconds > 0);
+    const sorted = holdCalls.map((row) => row.holdSeconds).sort((a, b) => a - b);
+    const totalHoldSeconds = sorted.reduce((sum, seconds) => sum + seconds, 0);
+    const avgHoldSeconds = sorted.length > 0 ? Math.round(totalHoldSeconds / sorted.length) : 0;
+
+    type Bucket = {
+      totalCalls: number;
+      callsWithHold: number;
+      totalHoldSeconds: number;
+      maxHoldSeconds: number;
+      longHoldCount: number;
+    };
+    const byPayer = new Map<string, Bucket>();
+
+    for (const call of filtered) {
+      const key = call.insuranceContactId as unknown as string;
+      const bucket = byPayer.get(key) ?? {
+        totalCalls: 0,
+        callsWithHold: 0,
+        totalHoldSeconds: 0,
+        maxHoldSeconds: 0,
+        longHoldCount: 0,
+      };
+      bucket.totalCalls++;
+      const holdSeconds = holdSecondsFor(call);
+      if (holdSeconds > 0) {
+        bucket.callsWithHold++;
+        bucket.totalHoldSeconds += holdSeconds;
+        bucket.maxHoldSeconds = Math.max(bucket.maxHoldSeconds, holdSeconds);
+        if (holdSeconds >= 10 * 60) bucket.longHoldCount++;
+      }
+      byPayer.set(key, bucket);
+    }
+
+    const payerRows: Array<{
+      payer: string;
+      payerName: string;
+      totalCalls: number;
+      callsWithHold: number;
+      avgHoldSeconds: number;
+      maxHoldSeconds: number;
+      longHoldCount: number;
+    }> = [];
+    for (const [key, bucket] of byPayer.entries()) {
+      const ins = await ctx.db.get(key as any);
+      payerRows.push({
+        payer: key,
+        payerName: (ins as any)?.name ?? 'Unknown',
+        totalCalls: bucket.totalCalls,
+        callsWithHold: bucket.callsWithHold,
+        avgHoldSeconds: bucket.callsWithHold > 0
+          ? Math.round(bucket.totalHoldSeconds / bucket.callsWithHold)
+          : 0,
+        maxHoldSeconds: bucket.maxHoldSeconds,
+        longHoldCount: bucket.longHoldCount,
+      });
+    }
+    payerRows.sort((a, b) => b.avgHoldSeconds - a.avgHoldSeconds);
+
+    return {
+      totalCalls: filtered.length,
+      callsWithHold: holdCalls.length,
+      avgHoldSeconds,
+      p95HoldSeconds: percentile(sorted, 95),
+      maxHoldSeconds: sorted.length ? sorted[sorted.length - 1] : 0,
+      longHoldCount: holdCalls.filter((row) => row.holdSeconds >= 10 * 60).length,
+      over30MinCount: holdCalls.filter((row) => row.holdSeconds >= 30 * 60).length,
+      byPayer: payerRows,
+    };
+  },
+});
+
 // Exception report: long holds OR high partial rate per payer in last 24h
 export const exceptionReport = query({
   args: {},

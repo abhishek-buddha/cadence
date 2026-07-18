@@ -378,7 +378,7 @@ async function bridgeParkedHandler(ctx: any, request: Request): Promise<Response
         <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
                     waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
                     statusCallback="${siteUrl}/twilio-conference-status?callId=${call._id}"
-                    statusCallbackEvent="end"
+                    statusCallbackEvent="start end join leave"
                     statusCallbackMethod="POST"
                     record="record-from-start"
                     recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${call._id}"
@@ -417,7 +417,7 @@ async function agentJoinHandler(ctx: any, request: Request): Promise<Response> {
       <Dial>
         <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false"
                     statusCallback="${siteUrl}/twilio-conference-status?callId=${callId}"
-                    statusCallbackEvent="end"
+                    statusCallbackEvent="start end join leave"
                     statusCallbackMethod="POST">
           ${confName}
         </Conference>
@@ -450,7 +450,7 @@ async function softphoneOutgoingHandler(ctx: any, request: Request): Promise<Res
       <Dial>
         <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false"
                     statusCallback="${siteUrl}/twilio-conference-status?callId=${callId}"
-                    statusCallbackEvent="end"
+                    statusCallbackEvent="start end join leave"
                     statusCallbackMethod="POST">
           ${confName}
         </Conference>
@@ -488,7 +488,7 @@ async function payerConferenceHandler(ctx: any, request: Request): Promise<Respo
         <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
                     waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
                     statusCallback="${siteUrl}/twilio-conference-status?callId=${callId}"
-                    statusCallbackEvent="end"
+                    statusCallbackEvent="start end join leave"
                     statusCallbackMethod="POST"
                     record="record-from-start"
                     recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${callId}"
@@ -546,19 +546,37 @@ async function conferenceStatusHandler(ctx: any, request: Request): Promise<Resp
     const callId = url.searchParams.get('callId') || form.get('callId') || '';
     const event = form.get('StatusCallbackEvent') || '';
     const conferenceSid = form.get('ConferenceSid') || '';
+    const participantCallSid =
+      form.get('CallSid') ||
+      form.get('ParticipantCallSid') ||
+      form.get('ParticipantSid') ||
+      '';
+    const participantStatus = form.get('ParticipantCallStatus') || '';
+    const participantLeftReason = form.get('ReasonParticipantLeft') || '';
 
     if (!callId) {
       return jsonResponse({ success: false, error: 'missing_call_id' });
     }
 
     console.log(
-      `[twilio-conference-status] callId=${callId} event=${event || 'unknown'} conference=${conferenceSid || 'unknown'}`
+      `[twilio-conference-status] callId=${callId} event=${event || 'unknown'} conference=${conferenceSid || 'unknown'} participant=${participantCallSid || 'unknown'} status=${participantStatus || 'unknown'} reason=${participantLeftReason || 'unknown'}`
     );
 
     if (event === 'conference-end') {
       await closeHandoffCall(ctx, callId);
-    }
+    } else if (event === 'participant-leave') {
+      const call = await ctx.runQuery(api.calls.getById, { id: callId as any });
+      const payerLeft = call?.twilioCallSid && participantCallSid === call.twilioCallSid;
+      const browserLeft = call?.humanParticipantCallSid && participantCallSid === call.humanParticipantCallSid;
+      const connectedHandoff = ['awaiting_human', 'accepting', 'connected'].includes(call?.handoffState || '');
 
+      if (call && connectedHandoff && (payerLeft || browserLeft || participantStatus === 'completed')) {
+        const duration = call.startedAt
+          ? Math.max(0, Math.round((Date.now() - new Date(call.startedAt).getTime()) / 1000))
+          : undefined;
+        await closeHandoffCall(ctx, callId, duration);
+      }
+    }
     return jsonResponse({ success: true });
   } catch (error: any) {
     console.error('Twilio conference status callback error:', error.message);

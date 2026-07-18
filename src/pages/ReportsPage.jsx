@@ -79,22 +79,6 @@ const DEMO_TURNAROUND = [
   { useCase: 'live_handoff', count: 14, p50: 321, p95: 804, p99: 960 },
 ];
 
-const DEMO_HOLD_METRICS = {
-  totalCalls: 114,
-  callsWithHold: 67,
-  avgHoldSeconds: 428,
-  p95HoldSeconds: 1120,
-  maxHoldSeconds: 1840,
-  longHoldCount: 12,
-  over30MinCount: 1,
-  byPayer: [
-    { payer: 'demo-anthem', payerName: 'Anthem BlueCard', totalCalls: 21, callsWithHold: 17, avgHoldSeconds: 612, maxHoldSeconds: 1840, longHoldCount: 5 },
-    { payer: 'demo-cigna', payerName: 'Cigna', totalCalls: 24, callsWithHold: 14, avgHoldSeconds: 470, maxHoldSeconds: 1260, longHoldCount: 3 },
-    { payer: 'demo-aetna', payerName: 'Aetna', totalCalls: 29, callsWithHold: 15, avgHoldSeconds: 392, maxHoldSeconds: 980, longHoldCount: 2 },
-    { payer: 'demo-uhc', payerName: 'UnitedHealthcare', totalCalls: 17, callsWithHold: 9, avgHoldSeconds: 318, maxHoldSeconds: 760, longHoldCount: 1 },
-  ],
-};
-
 const DEMO_EXCEPTIONS = [
   { exception: 'long_hold_over_10min', payer: 'demo-anthem', payerName: 'Anthem BlueCard', count: 4, lastSeenAt: '2026-07-18T09:42:00.000Z' },
   { exception: 'high_partial_rate', payer: 'demo-cigna', payerName: 'Cigna', count: 3, lastSeenAt: '2026-07-18T08:15:00.000Z' },
@@ -115,15 +99,6 @@ function hasUsefulRows(rows, valueKeys = ['value', 'total', 'count', 'pct']) {
   );
 }
 
-
-function hasHoldMetrics(data) {
-  return Boolean(
-    data &&
-      (Number(data.callsWithHold || 0) > 0 ||
-        Number(data.avgHoldSeconds || 0) > 0 ||
-        hasUsefulRows(data.byPayer, ['callsWithHold', 'avgHoldSeconds', 'longHoldCount']))
-  );
-}
 
 function formatSecondsCompact(seconds) {
   const total = Number(seconds || 0);
@@ -524,7 +499,16 @@ function TurnaroundTimeTab({ filters }) {
 function HoldMetricsTab({ filters }) {
   const data = useQuery(api.reports?.holdMetrics, filters);
   const isLoading = data === undefined;
-  const metrics = hasHoldMetrics(data) ? data : DEMO_HOLD_METRICS;
+  const metrics = data || {
+    totalCalls: 0,
+    callsWithHold: 0,
+    avgHoldSeconds: 0,
+    p95HoldSeconds: 0,
+    maxHoldSeconds: 0,
+    longHoldCount: 0,
+    over30MinCount: 0,
+    byPayer: [],
+  };
   const payerRows = metrics.byPayer || [];
 
   const chartData = useMemo(

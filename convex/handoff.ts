@@ -44,27 +44,65 @@ async function enrichCall(ctx: any, call: any) {
   let dentalCaseNumber: string | null = null;
   let insuranceCompany: string | null = null;
   let patientName: string | null = null;
+  let patientDob: string | null = null;
+  let memberId: string | null = null;
+  let providerName: string | null = null;
+  let providerNpi: string | null = null;
+  let claimAmount: number | null = null;
+  let dateOfService: string | null = null;
+  let cptCodes: string[] | null = null;
+  let diagnosisCodes: string[] | null = null;
+  let claimStatus: string | null = null;
+  let claimPriority: string | null = null;
   let humanAgentNumber: string | null = null;
 
   if (call.claimId) {
     const claim = await ctx.db.get(call.claimId);
     if (claim) {
       claimNumber = claim.claimNumber;
+      claimAmount = claim.amount ?? null;
+      dateOfService = claim.dateOfService ?? null;
+      cptCodes = claim.cptCodes ?? null;
+      diagnosisCodes = claim.diagnosisCodes ?? null;
+      claimStatus = claim.status ?? null;
+      claimPriority = claim.priority ?? null;
       const insurance = await ctx.db.get(claim.insuranceContactId);
       insuranceCompany = insurance?.name ?? null;
       humanAgentNumber = insurance?.humanAgentNumber ?? null;
       const patient = await ctx.db.get(claim.patientId);
-      if (patient) patientName = `${patient.firstName} ${patient.lastName}`;
+      if (patient) {
+        patientName = `${patient.firstName} ${patient.lastName}`;
+        patientDob = patient.dateOfBirth ?? null;
+        memberId = patient.memberId ?? null;
+      }
+      const provider = await ctx.db.get(claim.providerId);
+      if (provider) {
+        providerName = provider.practiceName ?? null;
+        providerNpi = provider.npi ?? null;
+      }
     }
   } else if (call.dentalCaseId) {
     const dCase = await ctx.db.get(call.dentalCaseId);
     if (dCase) {
       dentalCaseNumber = dCase.caseNumber;
+      dateOfService = dCase.proposedDateOfService ?? null;
+      cptCodes = dCase.cdtCodes ?? null;
+      claimStatus = dCase.status ?? null;
+      claimPriority = dCase.priority ?? null;
       const insurance = await ctx.db.get(dCase.insuranceContactId);
       insuranceCompany = insurance?.name ?? null;
       humanAgentNumber = insurance?.humanAgentNumber ?? null;
       const patient = await ctx.db.get(dCase.patientId);
-      if (patient) patientName = `${patient.firstName} ${patient.lastName}`;
+      if (patient) {
+        patientName = `${patient.firstName} ${patient.lastName}`;
+        patientDob = patient.dateOfBirth ?? null;
+        memberId = patient.memberId ?? null;
+      }
+      const provider = await ctx.db.get(dCase.providerId);
+      if (provider) {
+        providerName = provider.practiceName ?? null;
+        providerNpi = provider.npi ?? null;
+      }
     }
   } else {
     const insurance = await ctx.db.get(call.insuranceContactId);
@@ -78,6 +116,16 @@ async function enrichCall(ctx: any, call: any) {
     dentalCaseNumber,
     insuranceCompany,
     patientName,
+    patientDob,
+    memberId,
+    providerName,
+    providerNpi,
+    claimAmount,
+    dateOfService,
+    cptCodes,
+    diagnosisCodes,
+    claimStatus,
+    claimPriority,
     humanAgentNumber,
   };
 }

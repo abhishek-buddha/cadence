@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import HandoffTimeline from '../components/HandoffTimeline';
+import HandoffContextCard from '../components/HandoffContextCard';
 import { useSoftphone } from '../hooks/useSoftphone';
 
 function convexSiteUrl() {
@@ -174,6 +175,7 @@ function IncomingCard({ call, softphone, onAccepted }) {
           </button>
         </div>
       </div>
+      <HandoffContextCard call={call} />
       {notice && (
         <p className="mt-2 text-xs text-warn flex items-center gap-1">
           <AlertTriangle className="w-3.5 h-3.5" /> {notice}
@@ -203,6 +205,7 @@ function ActiveCallRow({ call }) {
         <StateBadge handoffState={call.handoffState} status={call.status} />
       </div>
       <HandoffTimeline call={c} events={events} />
+      {c.handoffState && <HandoffContextCard call={c} />}
 
       {/* Post-handoff recording + transcript of the human-human portion. */}
       {(c.recordingUrl || c.humanTranscript) && (

@@ -18,15 +18,12 @@ import { useSoftphone } from '../hooks/useSoftphone';
 const ROLE_LABELS = {
   admin: 'Admin',
   manager: 'Manager',
-  operator: 'Operator',
+  operator: 'Agent',
   viewer: 'Viewer',
 };
 
 const ROLE_SPECIALIZATIONS = {
-  admin: ['Claim Management', 'Escalations'],
-  manager: ['Denial Handling', 'Followup'],
   operator: ['Claim Followup', 'Live Handoff'],
-  viewer: ['Read Only'],
 };
 
 const AVAILABILITY_CONFIG = {
@@ -47,7 +44,7 @@ function AvailabilityBadge({ value }) {
 }
 
 function displayName(user) {
-  return user.routingName || user.name || user.email || 'Unknown user';
+  return user.name || user.email || user.routingName || 'Unknown user';
 }
 
 function subjectLabel(call) {

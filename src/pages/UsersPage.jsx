@@ -9,6 +9,7 @@ import { useAuth, hasRole } from '../context/AuthContext';
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin', color: 'bg-danger/10 text-danger' },
   { value: 'manager', label: 'Manager', color: 'bg-accent/10 text-accent' },
+  { value: 'operator', label: 'Agent', color: 'bg-success/10 text-success' },
   { value: 'viewer', label: 'Viewer', color: 'bg-gray-500/10 text-gray-600' },
 ];
 
@@ -207,7 +208,7 @@ function InviteUserModal({ open, onClose, createUser }) {
 
         <div>
           <label className={LABEL_CLASS}>Role</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {ROLE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}

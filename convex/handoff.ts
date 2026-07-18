@@ -82,8 +82,8 @@ async function enrichCall(ctx: any, call: any) {
   };
 }
 
-function routingAgentName(index: number): string {
-  return `Agent ${index + 1}`;
+function routingDisplayName(user: any, index: number): string {
+  return user.name || user.email || `Agent ${index + 1}`;
 }
 
 function isRoutingCallActive(call: any): boolean {
@@ -97,7 +97,7 @@ function isRoutingCallActive(call: any): boolean {
 async function findAvailableRoutingAgent(ctx: any) {
   const users = await ctx.db.query('users').collect();
   const activeUsers = users
-    .filter((user: any) => user.status !== 'disabled')
+    .filter((user: any) => user.status !== 'disabled' && user.role === 'operator')
     .sort((a: any, b: any) => a._creationTime - b._creationTime);
 
   for (let i = 0; i < activeUsers.length; i++) {
@@ -110,7 +110,7 @@ async function findAvailableRoutingAgent(ctx: any) {
     if (!busy) {
       return {
         user,
-        displayName: routingAgentName(i),
+        displayName: routingDisplayName(user, i),
       };
     }
   }

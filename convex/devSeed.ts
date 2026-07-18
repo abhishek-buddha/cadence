@@ -238,9 +238,10 @@ export const seedDemoData = internalMutation({
 
     // ---------- 3 users ----------
     const userSeeds = [
-      { email: 'admin@cadence.demo', name: 'Agent 1', role: 'admin' },
-      { email: 'manager@cadence.demo', name: 'Agent 2', role: 'manager' },
-      { email: 'viewer@cadence.demo', name: 'Agent 3', role: 'viewer' },
+      { email: 'admin@cadence.demo', name: 'Admin User', role: 'admin' },
+      { email: 'manager@cadence.demo', name: 'Manager User', role: 'manager' },
+      { email: 'agent@cadence.demo', name: 'Agent User', role: 'operator' },
+      { email: 'viewer@cadence.demo', name: 'Viewer User', role: 'viewer' },
     ];
     for (const u of userSeeds) {
       const existing = await ctx.db
@@ -434,9 +435,10 @@ export const wipeAndReseed = internalMutation({
     });
 
     const userSeeds = [
-      { email: 'admin@cadence.demo', name: 'Agent 1', role: 'admin' },
-      { email: 'manager@cadence.demo', name: 'Agent 2', role: 'manager' },
-      { email: 'viewer@cadence.demo', name: 'Agent 3', role: 'viewer' },
+      { email: 'admin@cadence.demo', name: 'Admin User', role: 'admin' },
+      { email: 'manager@cadence.demo', name: 'Manager User', role: 'manager' },
+      { email: 'agent@cadence.demo', name: 'Agent User', role: 'operator' },
+      { email: 'viewer@cadence.demo', name: 'Viewer User', role: 'viewer' },
     ];
     for (const u of userSeeds) {
       await ctx.db.insert('users', {

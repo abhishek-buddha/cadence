@@ -10,8 +10,8 @@ export const list = query({
   },
 });
 
-function routingAgentName(index: number): string {
-  return `Agent ${index + 1}`;
+function routingDisplayName(user: any, index: number): string {
+  return user.name || user.email || `Agent ${index + 1}`;
 }
 
 const STALE_LIVE_MS = 2 * 60 * 60 * 1000;
@@ -65,7 +65,7 @@ export const listRoutingAgents = query({
   handler: async (ctx) => {
     const users = await ctx.db.query('users').collect();
     const activeUsers = users
-      .filter((user) => user.status !== 'disabled')
+      .filter((user) => user.status !== 'disabled' && user.role === 'operator')
       .sort((a, b) => a._creationTime - b._creationTime);
 
     return await Promise.all(
@@ -91,7 +91,7 @@ export const listRoutingAgents = query({
 
         return {
           ...user,
-          routingName: routingAgentName(index),
+          routingName: routingDisplayName(user, index),
           availability,
           activeCall: enrichedActiveCall,
         };

@@ -14,6 +14,21 @@ const OUTCOME_OPTIONS = [
   { value: 'transferred_to_human', label: 'Transferred' },
 ];
 
+const HUMAN_HANDOFF_UPDATE = 'Spoke to insurance human rep and clarified details.';
+
+function connectedHumanHandoff(call) {
+  return (
+    call?.handoffState === 'connected' ||
+    call?.handoffState === 'handoff_ended' ||
+    !!call?.humanTranscript
+  );
+}
+
+function displayOutcome(call) {
+  if (call?.outcome) return call.outcome;
+  return connectedHumanHandoff(call) ? 'transferred_to_human' : call?.outcome;
+}
+
 function formatDuration(seconds) {
   if (seconds == null) return '--:--';
   const mins = Math.floor(seconds / 60);
@@ -55,6 +70,7 @@ function formatDate(isoString) {
 function CallRow({ call }) {
   const [expanded, setExpanded] = useState(false);
   const persistedDuration = callDuration(call);
+  const humanHandoffCompleted = connectedHumanHandoff(call);
 
   const isDentalCall = !!call.dentalCaseId && !call.claimId;
 
@@ -93,7 +109,7 @@ function CallRow({ call }) {
           {insurancePreview?.name ?? '...'}
         </span>
         <span className="min-w-[140px] flex justify-start">
-          <OutcomeBadge outcome={call.outcome} missingFields={call.missingFields} />
+          <OutcomeBadge outcome={displayOutcome(call)} missingFields={call.missingFields} />
         </span>
         <span className="px-4 py-3 text-sm font-data text-gray-600 min-w-[70px] text-right">
           {formatDuration(persistedDuration)}
@@ -147,6 +163,18 @@ function CallRow({ call }) {
             </div>
 
             {/* Transcript */}
+            {humanHandoffCompleted && (
+              <div>
+                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5">
+                  Latest Update
+                </h4>
+                <div className="bg-white border border-border rounded-lg p-3">
+                  <p className="text-sm text-gray-700">{HUMAN_HANDOFF_UPDATE}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Recording */}
             {call.recordingUrl && (
               <div>
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
@@ -342,7 +370,7 @@ export default function CallHistory() {
   const filteredCalls = calls
     ? calls
         .filter((c) => statusFilter === 'all' || c.status === statusFilter)
-        .filter((c) => outcomeFilter.length === 0 || outcomeFilter.includes(c.outcome))
+        .filter((c) => outcomeFilter.length === 0 || outcomeFilter.includes(displayOutcome(c)))
     : [];
 
   const toggleOutcome = (value) => {

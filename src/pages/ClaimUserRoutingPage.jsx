@@ -176,10 +176,6 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
     }
   }
 
-  const consoleUsers = activeUsers.filter(
-    (user) => ['assigned', 'in_call'].includes(user.availability) && user.activeCall
-  );
-
   const content = (
     <div className={standalone ? 'space-y-5' : 'space-y-6 animate-fade-in'}>
       <div>
@@ -201,16 +197,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
         </div>
       )}
 
-      {standalone && !isLoading && consoleUsers.length === 0 && (
-        <div className="bg-white border border-dashed border-border rounded-xl p-8 text-center">
-          <PhoneCall className="w-8 h-8 mx-auto text-muted/40 mb-3" />
-          <p className="text-sm font-medium text-gray-900">No assigned calls right now</p>
-          <p className="text-xs text-muted mt-1">Leave this tab open. Assigned handoffs will appear here automatically.</p>
-        </div>
-      )}
-
-      {(!standalone || isLoading || consoleUsers.length > 0) && (
-        <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
+      <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-white">
@@ -233,7 +220,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
                   ))}
                 </tr>
               ))
-            ) : activeUsers.length === 0 || (standalone && consoleUsers.length === 0) ? (
+            ) : activeUsers.length === 0 ? (
               <tr>
                 <td colSpan={6}>
                   <EmptyState
@@ -244,7 +231,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
                 </td>
               </tr>
             ) : (
-              (standalone ? consoleUsers : activeUsers).map((user) => {
+              activeUsers.map((user) => {
                 const specializations = ROLE_SPECIALIZATIONS[user.role] ?? ['Claim Followup'];
                 const canAccept = user.availability === 'assigned' && user.activeCall;
                 const isAccepting = acceptingId === user._id;
@@ -297,8 +284,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
             )}
           </tbody>
         </table>
-        </div>
-      )}
+      </div>
 
       {!standalone && (
         <div className="flex items-start gap-2 text-xs text-muted bg-surface border border-border rounded-lg p-3">

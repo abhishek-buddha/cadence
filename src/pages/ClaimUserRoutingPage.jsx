@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import EmptyState from '../components/EmptyState';
 import {
   Check,
+  ChevronDown,
+  ChevronRight,
   Loader2,
   Mic,
   MicOff,
@@ -13,6 +15,7 @@ import {
   Route as RouteIcon,
   UserCog,
 } from 'lucide-react';
+import HandoffContextCard from '../components/HandoffContextCard';
 import { useSoftphone } from '../hooks/useSoftphone';
 
 const ROLE_LABELS = {
@@ -130,6 +133,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
   const softphone = useSoftphone();
   const [acceptingId, setAcceptingId] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [expandedRows, setExpandedRows] = useState(() => new Set());
 
   useEffect(() => {
     softphone.ensureDevice();
@@ -138,6 +142,18 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
 
   const isLoading = users === undefined;
   const activeUsers = users ?? [];
+
+  function toggleExpanded(userId) {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+      return next;
+    });
+  }
 
   async function handleAccept(user) {
     const call = user.activeCall;
@@ -237,51 +253,76 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
                 const specializations = ROLE_SPECIALIZATIONS[user.role] ?? ['Claim Followup'];
                 const canAccept = user.availability === 'assigned' && user.activeCall;
                 const isAccepting = acceptingId === user._id;
+                const hasCallDetails = Boolean(user.activeCall);
+                const isExpanded = hasCallDetails && expandedRows.has(user._id);
+                const ExpanderIcon = isExpanded ? ChevronDown : ChevronRight;
 
                 return (
-                  <tr key={user._id} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="px-5 py-3.5 text-gray-900 font-medium whitespace-nowrap">
-                      {displayName(user)}
-                    </td>
-                    <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">
-                      {ROLE_LABELS[user.role] ?? user.role ?? '--'}
-                    </td>
-                    <td className="px-4 py-3.5 text-gray-600">
-                      {user.activeCall?.insuranceCompany || routeValue(user.payerRouting, 'All payers')}
-                    </td>
-                    <td className="px-4 py-3.5 text-gray-600">
-                      {routeValue(user.providerRouting, 'All clients')}
-                    </td>
-                    <td className="px-4 py-3.5 text-gray-600">
-                      {user.activeCall ? subjectLabel(user.activeCall) : (user.claimTypeRouting || specializations.join(', '))}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <AvailabilityBadge value={user.availability ?? 'offline'} />
-                    </td>
-                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                      {canAccept ? (
-                        <button
-                          onClick={() => handleAccept(user)}
-                          disabled={isAccepting}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-success text-white text-sm font-medium hover:bg-success/90 disabled:opacity-50 transition-colors"
-                        >
-                          {isAccepting ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Check className="w-4 h-4" />
-                          )}
-                          Accept
-                        </button>
-                      ) : user.availability === 'in_call' ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-                          <PhoneCall className="w-3.5 h-3.5" />
-                          Busy
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted/60">--</span>
-                      )}
-                    </td>
-                  </tr>
+                  <Fragment key={user._id}>
+                    <tr className="hover:bg-gray-50/80 transition-colors">
+                      <td className="px-5 py-3.5 text-gray-900 font-medium whitespace-nowrap">
+                        {displayName(user)}
+                      </td>
+                      <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">
+                        {ROLE_LABELS[user.role] ?? user.role ?? '--'}
+                      </td>
+                      <td className="px-4 py-3.5 text-gray-600">
+                        {user.activeCall?.insuranceCompany || routeValue(user.payerRouting, 'All payers')}
+                      </td>
+                      <td className="px-4 py-3.5 text-gray-600">
+                        {user.activeCall?.providerName || routeValue(user.providerRouting, 'All clients')}
+                      </td>
+                      <td className="px-4 py-3.5 text-gray-600">
+                        {hasCallDetails ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(user._id)}
+                            className="inline-flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left font-medium text-accent hover:bg-accent/10"
+                            aria-expanded={isExpanded}
+                            aria-label={`${isExpanded ? 'Hide' : 'Show'} claim details for ${subjectLabel(user.activeCall)}`}
+                          >
+                            <ExpanderIcon className="h-4 w-4 shrink-0" />
+                            <span className="truncate">{subjectLabel(user.activeCall)}</span>
+                          </button>
+                        ) : (
+                          user.claimTypeRouting || specializations.join(', ')
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <AvailabilityBadge value={user.availability ?? 'offline'} />
+                      </td>
+                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                        {canAccept ? (
+                          <button
+                            onClick={() => handleAccept(user)}
+                            disabled={isAccepting}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-success text-white text-sm font-medium hover:bg-success/90 disabled:opacity-50 transition-colors"
+                          >
+                            {isAccepting ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Check className="w-4 h-4" />
+                            )}
+                            Accept
+                          </button>
+                        ) : user.availability === 'in_call' ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                            <PhoneCall className="w-3.5 h-3.5" />
+                            Busy
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted/60">--</span>
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-surface/60">
+                        <td colSpan={7} className="px-5 py-4">
+                          <HandoffContextCard call={user.activeCall} embedded />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })
             )}

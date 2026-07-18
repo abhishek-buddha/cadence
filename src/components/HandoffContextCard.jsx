@@ -59,7 +59,7 @@ function CompactPill({ label, value }) {
   );
 }
 
-export default function HandoffContextCard({ call }) {
+export default function HandoffContextCard({ call, embedded = false }) {
   const subject = call?.claimNumber
     ? `Claim ${call.claimNumber}`
     : call?.dentalCaseNumber
@@ -70,7 +70,7 @@ export default function HandoffContextCard({ call }) {
   const diagnosisCodes = formatList(call?.diagnosisCodes);
 
   return (
-    <div className="mt-4 border-t border-accent/15 pt-4">
+    <div className={embedded ? 'rounded-lg border border-border bg-white p-4 shadow-sm' : 'mt-4 border-t border-accent/15 pt-4'}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted/70">

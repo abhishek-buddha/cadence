@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import BarChart from '../components/BarChart';
 import PieChart from '../components/PieChart';
-import EmptyState from '../components/EmptyState';
 
 const TABS = [
   { value: 'success_rate', label: 'Success Rate', icon: TrendingUp },
@@ -33,6 +32,71 @@ const INPUT_CLASS =
   'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none w-full';
 const SELECT_CLASS =
   'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-700 focus:border-accent focus:ring-1 focus:ring-accent outline-none appearance-none cursor-pointer';
+
+const DEMO_SUCCESS_OVERALL = {
+  successful: 82,
+  partial: 11,
+  failed: 7,
+  transferred: 14,
+  total: 114,
+  successRatePct: 71.9,
+};
+
+const DEMO_SUCCESS_BY_PAYER = [
+  { payer: 'demo-aetna', payerName: 'Aetna', successful: 24, partial: 3, failed: 2, total: 29, pct: 83 },
+  { payer: 'demo-cigna', payerName: 'Cigna', successful: 18, partial: 4, failed: 2, total: 24, pct: 75 },
+  { payer: 'demo-anthem', payerName: 'Anthem BlueCard', successful: 16, partial: 2, failed: 3, total: 21, pct: 76 },
+  { payer: 'demo-uhc', payerName: 'UnitedHealthcare', successful: 14, partial: 1, failed: 2, total: 17, pct: 82 },
+  { payer: 'demo-humana', payerName: 'Humana', successful: 10, partial: 1, failed: 1, total: 12, pct: 83 },
+];
+
+const DEMO_SUCCESS_BY_WEEK = [
+  { weekStart: 'Jun 01', pct: 64 },
+  { weekStart: 'Jun 08', pct: 68 },
+  { weekStart: 'Jun 15', pct: 72 },
+  { weekStart: 'Jun 22', pct: 70 },
+  { weekStart: 'Jun 29', pct: 76 },
+  { weekStart: 'Jul 06', pct: 79 },
+  { weekStart: 'Jul 13', pct: 82 },
+];
+
+const DEMO_DATA_ACCURACY = {
+  overall: { captureRate: 0.91, avgConfidence: 0.88 },
+  byField: [
+    { field: 'Claim status', totalCalls: 114, capturedCount: 108, captureRate: 0.95, avgConfidence: 0.91 },
+    { field: 'Paid amount', totalCalls: 71, capturedCount: 63, captureRate: 0.89, avgConfidence: 0.86 },
+    { field: 'Reference number', totalCalls: 114, capturedCount: 101, captureRate: 0.89, avgConfidence: 0.87 },
+    { field: 'Rep name', totalCalls: 114, capturedCount: 94, captureRate: 0.82, avgConfidence: 0.84 },
+    { field: 'Denial reason', totalCalls: 29, capturedCount: 25, captureRate: 0.86, avgConfidence: 0.85 },
+    { field: 'Expected decision date', totalCalls: 38, capturedCount: 34, captureRate: 0.89, avgConfidence: 0.88 },
+  ],
+};
+
+const DEMO_TURNAROUND = [
+  { useCase: 'claim_followup', count: 86, p50: 248, p95: 712, p99: 934 },
+  { useCase: 'dental_ev', count: 28, p50: 196, p95: 522, p99: 688 },
+  { useCase: 'live_handoff', count: 14, p50: 321, p95: 804, p99: 960 },
+];
+
+const DEMO_EXCEPTIONS = [
+  { exception: 'long_hold_over_10min', payer: 'demo-anthem', payerName: 'Anthem BlueCard', count: 4, lastSeenAt: '2026-07-18T09:42:00.000Z' },
+  { exception: 'high_partial_rate', payer: 'demo-cigna', payerName: 'Cigna', count: 3, lastSeenAt: '2026-07-18T08:15:00.000Z' },
+  { exception: 'handoff_required', payer: 'demo-aetna', payerName: 'Aetna', count: 5, lastSeenAt: '2026-07-17T17:28:00.000Z' },
+];
+
+const DEMO_VOLUME_BY_TIER = [
+  { payer: 'demo-aetna', payerName: 'Aetna', count: 420, tier: 'high' },
+  { payer: 'demo-cigna', payerName: 'Cigna', count: 310, tier: 'high' },
+  { payer: 'demo-anthem', payerName: 'Anthem BlueCard', count: 185, tier: 'medium' },
+  { payer: 'demo-uhc', payerName: 'UnitedHealthcare', count: 144, tier: 'medium' },
+  { payer: 'demo-humana', payerName: 'Humana', count: 72, tier: 'low' },
+];
+
+function hasUsefulRows(rows, valueKeys = ['value', 'total', 'count', 'pct']) {
+  return Array.isArray(rows) && rows.some((row) =>
+    valueKeys.some((key) => Number(row?.[key] || 0) > 0)
+  );
+}
 
 function FilterSelect({ value, onChange, options, className = '' }) {
   return (
@@ -148,29 +212,33 @@ function SuccessRateTab({ filters }) {
   const byWeek = useQuery(api.reports?.successRateByWeek, filters);
 
   const isLoading = overall === undefined || byPayer === undefined || byWeek === undefined;
+  const displayOverall = overall?.total > 0 ? overall : DEMO_SUCCESS_OVERALL;
+  const displayByPayer = hasUsefulRows(byPayer) ? byPayer : DEMO_SUCCESS_BY_PAYER;
+  const displayByWeek = hasUsefulRows(byWeek, ['pct', 'successRatePct', 'successful', 'total'])
+    ? byWeek
+    : DEMO_SUCCESS_BY_WEEK;
 
   const payerData = useMemo(
-    () => (byPayer ?? []).map((row) => ({
+    () => (displayByPayer ?? []).map((row) => ({
       label: row.payerName || 'Unknown',
       value: Math.round(row.pct || 0),
     })),
-    [byPayer]
+    [displayByPayer]
   );
 
   const weekData = useMemo(
-    () => (byWeek ?? []).map((row) => ({
+    () => (displayByWeek ?? []).map((row) => ({
       label: row.weekStart || row.label || '',
-      value: Math.round(row.pct || row.successRatePct || 0),
+      value: Math.round(row.pct || row.successRatePct || (row.total ? (row.successful / row.total) * 100 : 0)),
     })),
-    [byWeek]
+    [displayByWeek]
   );
 
   function exportData() {
-    if (!byPayer) return;
     downloadCsv(
       `cadence-success-rate-by-payer-${new Date().toISOString().split('T')[0]}.csv`,
       ['Payer', 'Total Calls', 'Successful', 'Success Rate %'],
-      (byPayer || []).map((row) => [
+      (displayByPayer || []).map((row) => [
         row.payerName || 'Unknown',
         row.total ?? 0,
         row.successful ?? 0,
@@ -183,24 +251,24 @@ function SuccessRateTab({ filters }) {
 
   return (
     <div className="space-y-6">
-      {overall && (
+      {displayOverall && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white border border-border rounded-xl p-5">
             <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Overall Success Rate</p>
             <p className="text-3xl font-display font-bold text-gray-900">
-              {(overall.successRatePct || 0).toFixed(1)}%
+              {(displayOverall.successRatePct || 0).toFixed(1)}%
             </p>
           </div>
           <div className="bg-white border border-border rounded-xl p-5">
             <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Total Calls</p>
             <p className="text-3xl font-display font-bold text-gray-900 font-data">
-              {(overall.total || 0).toLocaleString()}
+              {(displayOverall.total || 0).toLocaleString()}
             </p>
           </div>
           <div className="bg-white border border-border rounded-xl p-5">
             <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Successful Calls</p>
             <p className="text-3xl font-display font-bold text-success font-data">
-              {(overall.successful || 0).toLocaleString()}
+              {(displayOverall.successful || 0).toLocaleString()}
             </p>
           </div>
         </div>
@@ -223,7 +291,7 @@ function SuccessRateTab({ filters }) {
         <div className="mt-4">
           <DataTable
             headers={['Payer', 'Total Calls', 'Successful', 'Success Rate']}
-            rows={(byPayer || []).map((row) => [
+            rows={(displayByPayer || []).map((row) => [
               row.payerName || 'Unknown',
               (row.total ?? 0).toLocaleString(),
               (row.successful ?? 0).toLocaleString(),
@@ -246,21 +314,21 @@ function SuccessRateTab({ filters }) {
 function DataAccuracyTab({ filters }) {
   const data = useQuery(api.reports?.dataAccuracy, filters);
   const isLoading = data === undefined;
+  const displayData = data?.byField?.length ? data : DEMO_DATA_ACCURACY;
 
   const fieldData = useMemo(
-    () => (data?.byField ?? []).map((row) => ({
+    () => (displayData?.byField ?? []).map((row) => ({
       label: row.field,
       value: Math.round((row.captureRate || 0) * 100),
     })),
-    [data]
+    [displayData]
   );
 
   function exportData() {
-    if (!data?.byField) return;
     downloadCsv(
       `cadence-data-accuracy-${new Date().toISOString().split('T')[0]}.csv`,
       ['Field', 'Total', 'Captured', 'Capture Rate %', 'Avg Confidence %'],
-      data.byField.map((row) => [
+      displayData.byField.map((row) => [
         row.field,
         row.totalCalls ?? 0,
         row.capturedCount ?? 0,
@@ -274,18 +342,18 @@ function DataAccuracyTab({ filters }) {
 
   return (
     <div className="space-y-6">
-      {data?.overall && (
+      {displayData?.overall && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white border border-border rounded-xl p-5">
             <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Avg Field Capture Rate</p>
             <p className="text-3xl font-display font-bold text-gray-900">
-              {Math.round((data.overall.captureRate || 0) * 100)}%
+              {Math.round((displayData.overall.captureRate || 0) * 100)}%
             </p>
           </div>
           <div className="bg-white border border-border rounded-xl p-5">
             <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Avg Confidence</p>
             <p className="text-3xl font-display font-bold text-gray-900">
-              {Math.round((data.overall.avgConfidence || 0) * 100)}%
+              {Math.round((displayData.overall.avgConfidence || 0) * 100)}%
             </p>
           </div>
         </div>
@@ -308,7 +376,7 @@ function DataAccuracyTab({ filters }) {
         <div className="mt-4">
           <DataTable
             headers={['Field', 'Total Calls', 'Captured', 'Capture Rate', 'Avg Confidence']}
-            rows={(data?.byField || []).map((row) => [
+            rows={(displayData?.byField || []).map((row) => [
               row.field,
               (row.totalCalls ?? 0).toLocaleString(),
               (row.capturedCount ?? 0).toLocaleString(),
@@ -331,7 +399,7 @@ function TurnaroundTimeTab({ filters }) {
   const isLoading = data === undefined;
 
   // Backend returns Array<{ useCase, count, p50, p95, p99 }>
-  const rows = data ?? [];
+  const rows = hasUsefulRows(data, ['count', 'p50', 'p95', 'p99']) ? data : DEMO_TURNAROUND;
 
   const chartData = useMemo(
     () => rows.map((row) => ({
@@ -416,7 +484,7 @@ function ExceptionReportTab({ filters }) {
   const isLoading = data === undefined;
 
   // Backend returns Array<{ exception, payer, payerName, count, lastSeenAt }>
-  const exceptions = data ?? [];
+  const exceptions = hasUsefulRows(data, ['count']) ? data : DEMO_EXCEPTIONS;
 
   const reasonData = useMemo(() => {
     const grouped = {};
@@ -461,23 +529,15 @@ function ExceptionReportTab({ filters }) {
       </ChartCard>
 
       <ChartCard title="Exception Details" subtitle="Payers with exceptions in the last 24h">
-        {exceptions.length === 0 ? (
-          <EmptyState
-            icon={AlertOctagon}
-            title="No exceptions"
-            description="No long holds or high partial-rate payers in the last 24 hours."
-          />
-        ) : (
-          <DataTable
-            headers={['Exception Type', 'Payer', 'Count', 'Last Seen']}
-            rows={exceptions.map((row) => [
-              (row.exception || '--').replace(/_/g, ' '),
-              row.payerName || row.payer || '--',
-              (row.count ?? 1).toLocaleString(),
-              row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString() : '--',
-            ])}
-          />
-        )}
+        <DataTable
+          headers={['Exception Type', 'Payer', 'Count', 'Last Seen']}
+          rows={exceptions.map((row) => [
+            (row.exception || '--').replace(/_/g, ' '),
+            row.payerName || row.payer || '--',
+            (row.count ?? 1).toLocaleString(),
+            row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString() : '--',
+          ])}
+        />
       </ChartCard>
     </div>
   );
@@ -495,7 +555,8 @@ function VolumeByTierTab({ filters }) {
   // Group by tier for the pie chart
   const tierData = useMemo(() => {
     const grouped = {};
-    (data ?? []).forEach((row) => {
+    const rows = hasUsefulRows(data, ['count']) ? data : DEMO_VOLUME_BY_TIER;
+    rows.forEach((row) => {
       const t = row.tier || 'low';
       grouped[t] = (grouped[t] || 0) + (row.count || 0);
     });
@@ -506,7 +567,11 @@ function VolumeByTierTab({ filters }) {
     downloadCsv(
       `cadence-volume-by-tier-${new Date().toISOString().split('T')[0]}.csv`,
       ['Payer', 'Tier', 'Calls This Month'],
-      (data ?? []).map((row) => [row.payerName || row.payer || '--', row.tier || 'low', row.count ?? 0])
+      (hasUsefulRows(data, ['count']) ? data : DEMO_VOLUME_BY_TIER).map((row) => [
+        row.payerName || row.payer || '--',
+        row.tier || 'low',
+        row.count ?? 0,
+      ])
     );
   }
 
@@ -531,7 +596,7 @@ function VolumeByTierTab({ filters }) {
         <div className="mt-4">
           <DataTable
             headers={['Payer', 'Tier', 'Calls This Month']}
-            rows={(data ?? []).map((row) => [
+            rows={(hasUsefulRows(data, ['count']) ? data : DEMO_VOLUME_BY_TIER).map((row) => [
               row.payerName || row.payer || '--',
               row.tier || 'low',
               (row.count ?? 0).toLocaleString(),

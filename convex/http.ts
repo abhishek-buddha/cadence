@@ -1260,7 +1260,8 @@ http.route({
       <Response>
         <Say voice="Polly.Joanna">Please hold while we transfer you to the next available claims representative.
           Your estimated wait time is approximately 15 seconds. Your call is important to us.</Say>
-        <Pause length="15"/>
+        <Play>https://cadence-pro.onrender.com/audio/hold-15s.mp3</Play>
+        <Pause length="3"/>
         ${afterHold}
       </Response>
     `);

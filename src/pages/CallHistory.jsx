@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText, Mic } from 'lucide-react';
+import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText, Mic, Search, Download } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import OutcomeBadge from '../components/OutcomeBadge';
 import EmptyState from '../components/EmptyState';
@@ -15,6 +15,44 @@ const OUTCOME_OPTIONS = [
 ];
 
 const HUMAN_HANDOFF_UPDATE = 'Spoke to insurance human rep and clarified details.';
+
+
+function escapeCsv(value) {
+  if (value == null) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function downloadCsv(filename, headers, rows) {
+  const csvText = [headers.join(','), ...rows.map((row) => row.map(escapeCsv).join(','))].join('\n');
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function transcriptHaystack(call) {
+  return [
+    call?.transcript,
+    call?.humanTranscript,
+    call?.outcomeReason,
+    call?.errorMessage,
+    call?.claimNumber,
+    call?.dentalCaseNumber,
+    call?.insuranceCompany,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
 
 function connectedHumanHandoff(call) {
   return (
@@ -467,6 +505,7 @@ export default function CallHistory() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [outcomeFilter, setOutcomeFilter] = useState([]); // empty = all
   const [outcomeMenuOpen, setOutcomeMenuOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const isLoading = allCalls === undefined;
 
@@ -480,11 +519,29 @@ export default function CallHistory() {
     ? (allCalls ?? []).filter((c) => providerClaimIds?.has(c.claimId))
     : allCalls;
 
+  const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredCalls = calls
     ? calls
         .filter((c) => statusFilter === 'all' || c.status === statusFilter)
         .filter((c) => outcomeFilter.length === 0 || outcomeFilter.includes(displayOutcome(c)))
+        .filter((c) => !normalizedSearch || transcriptHaystack(c).includes(normalizedSearch))
     : [];
+
+  function exportFilteredCalls() {
+    downloadCsv(
+      `cadence-call-history-${new Date().toISOString().split('T')[0]}.csv`,
+      ['Date', 'Claim/Case', 'Insurance', 'Outcome', 'Duration', 'Status', 'Transcript Preview'],
+      filteredCalls.map((call) => [
+        formatDate(call.startedAt),
+        call.claimNumber || call.dentalCaseNumber || '--',
+        call.insuranceCompany || '--',
+        displayOutcome(call) || '--',
+        formatDuration(callDuration(call)),
+        call.status || '--',
+        (call.humanTranscript || call.transcript || '').slice(0, 300),
+      ])
+    );
+  }
 
   const toggleOutcome = (value) => {
     setOutcomeFilter((prev) =>
@@ -503,7 +560,25 @@ export default function CallHistory() {
           <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Call History</h1>
           <p className="text-sm text-muted mt-1">All voice agent calls</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search transcripts..."
+              className={`${inputClass} pl-8 w-56`}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={exportFilteredCalls}
+            disabled={filteredCalls.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-gray-600 hover:border-accent hover:text-accent disabled:opacity-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export
+          </button>
           <Clock className="w-4 h-4 text-muted" />
           <div className="relative">
             <select
@@ -566,7 +641,7 @@ export default function CallHistory() {
         <div className="flex items-center gap-4 text-sm">
           <span className="text-muted">
             Showing <span className="text-gray-900 font-medium">{filteredCalls.length}</span>
-            {statusFilter !== 'all' && ` ${statusFilter}`} call{filteredCalls.length !== 1 ? 's' : ''}
+            {statusFilter !== 'all' && ` ${statusFilter}`} call{filteredCalls.length !== 1 ? 's' : ''}{normalizedSearch && ` matching "${searchTerm.trim()}"`}
             {statusFilter !== 'all' && (
               <span className="text-muted"> of {calls.length} total</span>
             )}

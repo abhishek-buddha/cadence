@@ -187,11 +187,13 @@ function ActiveCallRow({ call }) {
             <div className="space-y-1.5 text-xs text-muted">
               <div className="flex items-center gap-2">
                 <Mic className="w-3.5 h-3.5" />
-                <span>Call recorded</span>
+                <span>Call recorded{c.recordingDuration ? ` · ${Math.floor(c.recordingDuration / 60)}:${String(c.recordingDuration % 60).padStart(2, '0')}` : ''}</span>
               </div>
+              {/* Play through our authenticated proxy — the raw Twilio URL needs
+                  Basic auth and won't load in <audio> (shows 0:00). */}
               <audio
                 controls
-                preload="none"
+                preload="metadata"
                 src={recordingPlaybackUrl(c._id)}
                 className="h-9 w-full max-w-md"
               />

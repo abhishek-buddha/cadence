@@ -1230,7 +1230,6 @@ http.route({
     const afterHold = forwardNumber
       ? `<Say voice="Polly.Joanna">Transferring you now.</Say>
          <Dial callerId="+12272573081" timeout="30">${forwardNumber}</Dial>
-         <Say voice="Polly.Joanna">We were unable to reach the representative. Please try again later.</Say>
          <Hangup/>`
       : `<Gather input="speech" timeout="180" speechTimeout="auto" action="${siteUrl}/test-ivr-agent" method="POST">
           <Say voice="Polly.Matthew">Hi there, thanks so much for holding. This is Michael with the Acme Health Insurance claims department. How can I help you today?</Say>

@@ -36,45 +36,48 @@ export default function App() {
     setAuthenticated(true);
   }
 
-  if (!authenticated) {
-    return <AccessCodePage onSuccess={handleAccessGranted} />;
-  }
-
   return (
     <AuthProvider>
       <BrowserRouter>
         <ProviderFilterProvider>
           <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="claims" element={<ClaimsPage />} />
-              <Route path="claims/:id" element={<ClaimDetailPage />} />
+            <Route path="/claim-routing" element={<ClaimUserRoutingPage standalone />} />
 
-              <Route path="patients" element={<PatientsPage />} />
-              <Route path="insurance" element={<InsuranceDirectory />} />
-              <Route path="providers" element={<ProvidersPage />} />
-              <Route path="master-data" element={<MasterDataPage />} />
-              <Route path="claim-routing" element={<ClaimUserRoutingPage />} />
-              <Route path="call-audit" element={<Navigate to="/call-audit/history" replace />} />
-              <Route path="call-audit/history" element={<CallAuditPage />} />
-              <Route path="call-audit/live" element={<CallAuditPage />} />
-              <Route path="calls" element={<CallHistory />} />
-              <Route path="live" element={<LiveCallsPage />} />
-              <Route path="settings" element={<SettingsPage />} />
+            {!authenticated ? (
+              <Route path="*" element={<AccessCodePage onSuccess={handleAccessGranted} />} />
+            ) : (
+              <>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<Dashboard />} />
+                  <Route path="claims" element={<ClaimsPage />} />
+                  <Route path="claims/:id" element={<ClaimDetailPage />} />
 
-              <Route path="eligibility" element={<EligibilityPage />} />
-              <Route path="eligibility/:id" element={<EvCaseDetailPage />} />
-              <Route path="sessions" element={<SessionsPage />} />
-              <Route path="reports" element={<ReportsPage />} />
-              <Route path="audit" element={<AuditPage />} />
-              {/* Admin pages are intentionally hidden for now.
-              <Route path="users" element={<UsersPage />} />
-              <Route path="api-keys" element={<ApiKeysPage />} />
-              <Route path="webhooks" element={<WebhooksPage />} />
-              */}
-              <Route path="transfers" element={<TransferDestinationsPage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
+                  <Route path="patients" element={<PatientsPage />} />
+                  <Route path="insurance" element={<InsuranceDirectory />} />
+                  <Route path="providers" element={<ProvidersPage />} />
+                  <Route path="master-data" element={<MasterDataPage />} />
+                  <Route path="call-audit" element={<Navigate to="/call-audit/history" replace />} />
+                  <Route path="call-audit/history" element={<CallAuditPage />} />
+                  <Route path="call-audit/live" element={<CallAuditPage />} />
+                  <Route path="calls" element={<CallHistory />} />
+                  <Route path="live" element={<LiveCallsPage />} />
+                  <Route path="settings" element={<SettingsPage />} />
+
+                  <Route path="eligibility" element={<EligibilityPage />} />
+                  <Route path="eligibility/:id" element={<EvCaseDetailPage />} />
+                  <Route path="sessions" element={<SessionsPage />} />
+                  <Route path="reports" element={<ReportsPage />} />
+                  <Route path="audit" element={<AuditPage />} />
+                  {/* Admin pages are intentionally hidden for now.
+                  <Route path="users" element={<UsersPage />} />
+                  <Route path="api-keys" element={<ApiKeysPage />} />
+                  <Route path="webhooks" element={<WebhooksPage />} />
+                  */}
+                  <Route path="transfers" element={<TransferDestinationsPage />} />
+                </Route>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </>
+            )}
           </Routes>
         </ProviderFilterProvider>
       </BrowserRouter>

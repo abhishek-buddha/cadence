@@ -544,7 +544,7 @@ export const connectHumanToConference = action({
 // ---------------------------------------------------------------------------
 export const redirectPayerToConference = action({
   args: { callId: v.id('calls') },
-  handler: async (ctx, args): Promise<{ ok: boolean; error?: string }> => {
+  handler: async (ctx, args): Promise<{ ok: boolean; error?: string; terminal?: boolean }> => {
     const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
     const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
     const SITE = process.env.CONVEX_SITE_URL;
@@ -598,6 +598,14 @@ export const redirectPayerToConference = action({
       });
       return { ok: true };
     } catch (error: any) {
+      if (/21220|not in-progress|cannot redirect/i.test(error.message || '')) {
+        await ctx.runMutation(internal.handoff.logHandoffEvent, {
+          callId: args.callId,
+          type: 'handoff_ended',
+          message: `payer leg already ended before redirect: ${error.message}`,
+        });
+        return { ok: false, error: error.message, terminal: true };
+      }
       await ctx.runMutation(internal.handoff.markHandoffFailed, {
         callId: args.callId,
         reason: error.message,

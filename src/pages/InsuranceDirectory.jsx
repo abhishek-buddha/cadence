@@ -43,7 +43,6 @@ const EMPTY_FORM = {
   name: '',
   phone: '',
   humanAgentNumber: '',
-  department: '',
   payerId: '',
   payerKind: 'medical',
   hours: '',
@@ -100,7 +99,6 @@ export default function InsuranceDirectory() {
       name: contact.name,
       phone: contact.phone,
       humanAgentNumber: contact.humanAgentNumber ?? '',
-      department: contact.department ?? '',
       payerId: contact.payerId ?? '',
       payerKind: contact.payerKind ?? 'medical',
       hours: contact.hours ?? '',
@@ -226,7 +224,6 @@ export default function InsuranceDirectory() {
         // impossible to CLEAR a saved number. "" is written and reads as "no
         // number" everywhere (follow-up guard + prompt both treat it as unset).
         humanAgentNumber: form.humanAgentNumber,
-        department: form.department || undefined,
         payerId: form.payerId || undefined,
         payerKind: form.payerKind || undefined,
         hours: form.hours || undefined,
@@ -323,7 +320,6 @@ export default function InsuranceDirectory() {
                 <tr className="border-b border-border">
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Company Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Phone</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Department</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Hours</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Avg Hold Time</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">IVR</th>
@@ -345,7 +341,6 @@ export default function InsuranceDirectory() {
                         {contact.phone}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{contact.department ?? '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{contact.hours ?? '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{formatHoldTime(contact.avgHoldTime)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">
@@ -435,27 +430,15 @@ export default function InsuranceDirectory() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Department</label>
-              <input
-                type="text"
-                value={form.department}
-                onChange={(e) => setField('department', e.target.value)}
-                className={inputClass}
-                placeholder="Claims, Provider Relations, etc."
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Payer ID</label>
-              <input
-                type="text"
-                value={form.payerId}
-                onChange={(e) => setField('payerId', e.target.value)}
-                className={inputClass}
-                placeholder="60054"
-              />
-            </div>
+          <div>
+            <label className={labelClass}>Payer ID</label>
+            <input
+              type="text"
+              value={form.payerId}
+              onChange={(e) => setField('payerId', e.target.value)}
+              className={inputClass}
+              placeholder="60054"
+            />
           </div>
 
           <div>

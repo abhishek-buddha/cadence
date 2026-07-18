@@ -21,9 +21,7 @@ import { SPECIALIZATION_LABELS } from './UsersPage';
 
 const ROLE_LABELS = {
   admin: 'Admin',
-  manager: 'Manager',
   operator: 'Operator',
-  viewer: 'Viewer',
 };
 
 const AVAILABILITY_CONFIG = {

@@ -8,9 +8,7 @@ import { useAuth, hasRole } from '../context/AuthContext';
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin', color: 'bg-danger/10 text-danger' },
-  { value: 'manager', label: 'Manager', color: 'bg-accent/10 text-accent' },
   { value: 'operator', label: 'Operator', color: 'bg-success/10 text-success' },
-  { value: 'viewer', label: 'Viewer', color: 'bg-gray-500/10 text-gray-600' },
 ];
 
 const SPECIALIZATION_OPTIONS = [
@@ -161,7 +159,7 @@ function formatLastLogin(ts) {
 const EMPTY_FORM = {
   email: '',
   name: '',
-  role: 'viewer',
+  role: 'operator',
   insuranceContactIds: [],
   specializations: [],
   teamLeadName: '',
@@ -280,7 +278,7 @@ function UserModal({ open, onClose, editing, insuranceContacts, createUser, upda
 
         <div>
           <label className={LABEL_CLASS}>Role</label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {ROLE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}

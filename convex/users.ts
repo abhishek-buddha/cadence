@@ -1,7 +1,7 @@
 import { mutation, query, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
 
-const VALID_ROLES = ['admin', 'manager', 'operator', 'viewer'];
+const VALID_ROLES = ['admin', 'operator'];
 const VALID_STATUSES = ['active', 'disabled'];
 const VALID_SPECIALIZATIONS = ['claim_status', 'denial_claim', 'claim_eligibility_check'];
 

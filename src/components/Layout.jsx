@@ -60,17 +60,18 @@ function UserMenu({ onLogout }) {
   );
 }
 
-// Persistent tab on the left edge of the screen, independent of the
+// Persistent tab on the right edge of the screen, independent of the
 // scrollable Sidebar nav list — opening Claim User Routing shouldn't depend
 // on where the sidebar happens to be scrolled to. Fixed positioning + a high
-// z-index keeps it reachable and overlapping on top of everything else.
+// z-index keeps it reachable and overlapping on top of everything else. The
+// drawer itself still opens from the left; this is just where the tab lives.
 function ClaimRoutingNotch({ onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title="Claim User Routing"
-      className="fixed left-0 top-24 z-30 flex items-center gap-1.5 bg-accent text-white pl-2 pr-3 py-2.5 rounded-r-lg shadow-lg shadow-accent/20 hover:pl-3 hover:pr-4 transition-all duration-150"
+      className="fixed right-0 top-20 z-10 flex items-center gap-1.5 bg-white border border-accent/20 text-accent pl-3 pr-2 py-2.5 rounded-l-lg shadow-lg shadow-gray-200/50 hover:bg-accent/5 hover:pl-4 hover:pr-3 transition-all duration-150"
     >
       <Route className="w-4 h-4 shrink-0" />
       <span className="text-xs font-medium whitespace-nowrap">Claim User Routing</span>

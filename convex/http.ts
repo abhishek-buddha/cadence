@@ -298,6 +298,18 @@ async function closeHandoffCall(ctx: any, callId: string, duration?: number): Pr
   ) {
     await ctx.runMutation(internal.handoff.markHandoffEnded, { callId: call._id });
   }
+
+  // The AI/IVR transcript for Twilio-dialer calls never gets a conversation id
+  // set on the call record ahead of time (see resolveElevenLabsConversationId
+  // in callActions.ts), so it has to be resolved and fetched right here, the
+  // moment Twilio confirms the call is actually over.
+  if (!call.transcript) {
+    try {
+      await ctx.runAction(internal.callActions.backfillCallTranscript, { callId: call._id });
+    } catch (e: any) {
+      console.error('[closeHandoffCall] transcript backfill failed:', e.message);
+    }
+  }
 }
 
 // Entry point for the AI's Conference transfer landing on our bridge number.
@@ -366,14 +378,17 @@ async function bridgeParkedHandler(ctx: any, request: Request): Promise<Response
   // Park the rep: they start/hold the conference but do NOT end it when the
   // holding side changes (endConferenceOnExit=false). waitUrl loops hold audio.
   //
-  // Recording is call-level now (Record=true set at initiateCallViaTwilio's
-  // call creation), covering this whole CallSid from answer to hangup — no
-  // separate conference-level recording needed here anymore.
+  // Recorded at the conference level — this captures the human↔human portion
+  // only. The AI/IVR portion is recorded separately, on ElevenLabs' side, and
+  // fetched on demand via /elevenlabs-recording-media.
   return twimlResponse(`
     <Response>
       <Dial>
         <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
                     waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
+                    record="record-from-start"
+                    recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${call._id}"
+                    recordingStatusCallbackEvent="completed"
                     statusCallback="${siteUrl}/twilio-conference-status?callId=${call._id}"
                     statusCallbackEvent="start end join leave"
                     statusCallbackMethod="POST">
@@ -458,10 +473,9 @@ http.route({ path: '/twiml-softphone-outgoing', method: 'GET', handler: httpActi
 // ---------------------------------------------------------------------------
 // OPTION 1 — the AI drop lands here. handoff.redirectPayerToConference() POSTs
 // this URL to the live payer call, which abandons its <Connect><Stream> (closing
-// the bridge socket → AI dropped) and parks the payer in the conference. This
-// is the SAME CallSid that's been recording (Record=true) since it was placed
-// in initiateCallViaTwilio, so the human↔human portion lands in that same
-// whole-call recording — no separate conference-level recording needed here.
+// the bridge socket → AI dropped) and parks the payer in the conference.
+// Recorded at the conference level (human↔human portion only) — the AI/IVR
+// portion is recorded separately on ElevenLabs' side.
 // Holds the payer on waitUrl audio until our browser agent joins.
 // endConferenceOnExit=false so the payer holding here never tears the
 // conference down.
@@ -484,6 +498,9 @@ async function payerConferenceHandler(ctx: any, request: Request): Promise<Respo
       <Dial>
         <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
                     waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
+                    record="record-from-start"
+                    recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${callId}"
+                    recordingStatusCallbackEvent="completed"
                     statusCallback="${siteUrl}/twilio-conference-status?callId=${callId}"
                     statusCallbackEvent="start end join leave"
                     statusCallbackMethod="POST">
@@ -700,6 +717,49 @@ http.route({
     }
   }),
 });
+
+// Browser playback proxy for the AI/IVR leg's recording, which lives entirely
+// on ElevenLabs' side (this call never has a Twilio-level recording of its
+// own — only the post-handoff conference does). Requires an xi-api-key header
+// the UI doesn't have, so Convex fetches it server-side.
+http.route({
+  path: '/elevenlabs-recording-media',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const callId = url.searchParams.get('callId') || '';
+      if (!callId) return new Response('Missing callId', { status: 400 });
+
+      const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+      if (!ELEVENLABS_API_KEY) return new Response('ElevenLabs auth not configured', { status: 503 });
+
+      const call = await ctx.runQuery(api.calls.getById, { id: callId as any });
+      if (!call?.elevenLabsConversationId) return new Response('Recording not found', { status: 404 });
+
+      const elRes = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversations/${call.elevenLabsConversationId}/audio`,
+        { headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
+      );
+      if (!elRes.ok) return new Response('Recording fetch failed', { status: elRes.status });
+
+      const responseHeaders: Record<string, string> = {
+        'Content-Type': elRes.headers.get('content-type') || 'audio/mpeg',
+        'Cache-Control': 'private, max-age=300',
+        'Access-Control-Allow-Origin': '*',
+        'Accept-Ranges': elRes.headers.get('accept-ranges') || 'bytes',
+      };
+      const contentLength = elRes.headers.get('content-length');
+      if (contentLength) responseHeaders['Content-Length'] = contentLength;
+
+      return new Response(elRes.body, { status: 200, headers: responseHeaders });
+    } catch (error: any) {
+      console.error('[elevenlabs-recording-media] error:', error.message);
+      return new Response('Recording playback failed', { status: 500 });
+    }
+  }),
+});
+
 // ---- Transcription callback ----
 // Twilio posts the recording transcription here (TranscriptionText).
 http.route({

@@ -232,17 +232,12 @@ export const initiateCallViaTwilio = action({
       params.append('StatusCallback', statusCallbackUrl);
       params.append('StatusCallbackEvent', 'initiated ringing answered completed');
       params.append('Timeout', '60');
-      // Record the WHOLE call on this one CallSid from answer to hangup —
-      // covers the AI/IVR portion (<Connect><Stream>) AND, if this call is
-      // later handed off, the human↔human portion too (redirectPayerToConference
-      // re-points the SAME CallSid into a <Dial><Conference>; call-level
-      // recording keeps running regardless of which TwiML verb is active).
-      // Reuses the same /twilio-recording-status handler the conference-level
-      // recording used to call. The transcript shown in the UI stays IVR-only
-      // (ElevenLabs conversation) — this is audio-only, for playback/QA.
-      params.append('Record', 'true');
-      params.append('RecordingStatusCallback', `${CONVEX_SITE_URL}/twilio-recording-status?callId=${callId}`);
-      params.append('RecordingStatusCallbackEvent', 'completed');
+      // No call-level Record here — the two legs are recorded from separate
+      // sources: the AI/IVR portion lives entirely in ElevenLabs' own
+      // conversation (fetched on demand via /elevenlabs-recording-media), and
+      // the human↔human portion is recorded at the Twilio conference level
+      // once redirectPayerToConference hands the call off (see
+      // /twiml-bridge-parked and /twiml-payer-conference).
 
       const response = await fetch(
         `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls.json`,
@@ -1098,6 +1093,11 @@ export const endCall = action({
     const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
     const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
+    // initiateCallViaTwilio never learns its own conversation id up front (see
+    // resolveElevenLabsConversationId) — resolve it now so the DELETE signal
+    // and transcript fetch below actually have something to work with.
+    const conversationId = await resolveElevenLabsConversationId(ctx, call);
+
     // 2. Terminate via Twilio API if we have a SID
     if (call.twilioCallSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
       try {
@@ -1128,13 +1128,13 @@ export const endCall = action({
     }
 
     // 2b. Signal ElevenLabs to end the conversation explicitly
-    if (call.elevenLabsConversationId && ELEVENLABS_API_KEY) {
+    if (conversationId && ELEVENLABS_API_KEY) {
       try {
         const elRes = await fetch(
-          `https://api.elevenlabs.io/v1/convai/conversations/${call.elevenLabsConversationId}`,
+          `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
           { method: 'DELETE', headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
         );
-        console.log(`[endCall] ElevenLabs conversation end ${call.elevenLabsConversationId} → ${elRes.status}`);
+        console.log(`[endCall] ElevenLabs conversation end ${conversationId} → ${elRes.status}`);
       } catch (e: any) {
         console.error('[endCall] Failed to end ElevenLabs conversation:', e.message);
       }
@@ -1145,33 +1145,18 @@ export const endCall = action({
     let duration: number | undefined;
     let handoffDetected = false;
 
-    if (call.elevenLabsConversationId && ELEVENLABS_API_KEY) {
+    if (conversationId && ELEVENLABS_API_KEY) {
       await new Promise(r => setTimeout(r, 3000));
       try {
         const res = await fetch(
-          `https://api.elevenlabs.io/v1/convai/conversations/${call.elevenLabsConversationId}`,
+          `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
           { headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
         );
         if (res.ok) {
           const data = await res.json();
           duration = data.metadata?.call_duration_secs;
           handoffDetected = extractHandoffDetected(data.transcript || []);
-
-          transcriptStr = (data.transcript || [])
-            .map((t: any) => {
-              const toolCalls = t.tool_calls?.filter((tc: any) => tc.tool_has_been_called) || [];
-              const dtmf = toolCalls.find((tc: any) => tc.tool_name === 'play_keypad_touch_tone');
-              if (dtmf) {
-                try {
-                  const params = JSON.parse(dtmf.params_as_json);
-                  return `agent: [pressed ${params.dtmf_tones}] ${params.reason || ''}`.trim();
-                } catch { return null; }
-              }
-              if (!t.message || t.message === '...') return null;
-              return `${t.role}: ${t.message}`;
-            })
-            .filter(Boolean)
-            .join('\n');
+          transcriptStr = formatElevenLabsTranscript(data.transcript || []);
         }
       } catch (e: any) {
         console.error('Failed to fetch ElevenLabs transcript on endCall:', e.message);
@@ -1189,6 +1174,7 @@ export const endCall = action({
       completedAt: new Date().toISOString(),
       duration: duration || computedDuration,
       transcript: transcriptStr || undefined,
+      elevenLabsConversationId: conversationId || undefined,
     });
 
     // 5. Trigger transcript analysis based on call type
@@ -1224,39 +1210,183 @@ export const endCall = action({
 });
 
 // ---------------------------------------------------------------------------
-// Safety net: transcript-saving today is otherwise driven either by a browser
-// tab actively polling getCallStatus (LiveCallMonitor, only while mounted) or
-// by the /elevenlabs-webhook firing. If a user navigates away mid-call and the
-// call finishes while nobody's tab is open to it, neither path runs and the
-// call is stuck at status="in_progress" forever with no transcript saved.
-// This cron (see convex/crons.ts) periodically re-checks any in-progress call
-// that has an ElevenLabs conversation and finalizes it via the exact same
-// getCallStatus logic — independent of any browser being open.
+// initiateCallViaTwilio (the Cadence-owned dialer) never learns its own
+// ElevenLabs conversation_id — the bridge server establishes that conversation
+// independently and only the terminal /elevenlabs-webhook reports it back,
+// which frequently never fires for handoff calls (the AI stream gets closed
+// from our side at handoff time, before ElevenLabs' own conversation reaches a
+// natural "done" state). Without a conversation_id, every finalize path
+// (endCall, getCallStatus, the stale-call cron) silently skips the transcript
+// fetch. This resolves the id after the fact by matching the call's start
+// time against ElevenLabs' own conversation list for the agent — no bridge
+// cooperation required.
 // ---------------------------------------------------------------------------
-export const listStaleInProgressCalls = internalQuery({
+async function resolveElevenLabsConversationId(ctx: any, call: any): Promise<string | null> {
+  if (call.elevenLabsConversationId) return call.elevenLabsConversationId;
+
+  const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+  const AGENT_ID = call.dentalCaseId
+    ? (process.env.ELEVENLABS_DENTAL_AGENT_ID || process.env.ELEVENLABS_AGENT_ID)
+    : process.env.ELEVENLABS_AGENT_ID;
+  if (!ELEVENLABS_API_KEY || !AGENT_ID || !call.startedAt) return null;
+
+  const startedUnix = Math.floor(new Date(call.startedAt).getTime() / 1000);
+  const WINDOW_SECS = 300; // tolerance either side of our recorded call start
+  const params = new URLSearchParams({
+    agent_id: AGENT_ID,
+    call_start_after_unix: String(startedUnix - WINDOW_SECS),
+    call_start_before_unix: String(startedUnix + WINDOW_SECS),
+    page_size: '100',
+  });
+
+  try {
+    const res = await fetch(`https://api.elevenlabs.io/v1/convai/conversations?${params}`, {
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const candidates: any[] = data.conversations || [];
+
+    let best: any = null;
+    let bestDelta = Infinity;
+    for (const c of candidates) {
+      const delta = Math.abs((c.start_time_unix_secs || 0) - startedUnix);
+      if (delta >= bestDelta) continue;
+      // Skip conversations already linked to a different call record.
+      const claimedBy = await ctx.runQuery(api.calls.getByConversationId, {
+        conversationId: c.conversation_id,
+      });
+      if (claimedBy && claimedBy._id !== call._id) continue;
+      best = c;
+      bestDelta = delta;
+    }
+    return best?.conversation_id || null;
+  } catch (e: any) {
+    console.error('[resolveElevenLabsConversationId] lookup failed:', e.message);
+    return null;
+  }
+}
+
+function formatElevenLabsTranscript(elTranscript: any[]): string {
+  return (elTranscript || [])
+    .map((t: any) => {
+      const toolCalls = t.tool_calls?.filter((tc: any) => tc.tool_has_been_called) || [];
+      const dtmf = toolCalls.find((tc: any) => tc.tool_name === 'play_keypad_touch_tone');
+      if (dtmf) {
+        try {
+          const params = JSON.parse(dtmf.params_as_json);
+          return `agent: [pressed ${params.dtmf_tones}] ${params.reason || ''}`.trim();
+        } catch { return null; }
+      }
+      if (!t.message || t.message === '...') return null;
+      return `${t.role}: ${t.message}`;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+// Backfills the AI/IVR transcript onto a call that's already past status
+// tracking (typically already "completed" with no transcript) — resolves the
+// conversation id if needed, fetches the transcript from ElevenLabs, and
+// patches it in without touching status/duration that other flows already set.
+export const backfillCallTranscript = internalAction({
+  args: { callId: v.id('calls') },
+  handler: async (ctx, args): Promise<{ success: boolean; hasTranscript?: boolean; reason?: string }> => {
+    const call = await ctx.runQuery(api.calls.getById, { id: args.callId });
+    if (!call) return { success: false, reason: 'call_not_found' };
+    if (call.transcript) return { success: true, hasTranscript: true };
+
+    const conversationId = await resolveElevenLabsConversationId(ctx, call);
+    if (!conversationId) return { success: false, reason: 'no_conversation_found' };
+
+    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+    try {
+      const res = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
+        { headers: { 'xi-api-key': ELEVENLABS_API_KEY! } }
+      );
+      if (!res.ok) return { success: false, reason: `elevenlabs_${res.status}` };
+      const data = await res.json();
+
+      const transcriptStr = formatElevenLabsTranscript(data.transcript || []);
+      const handoffDetected = extractHandoffDetected(data.transcript || []);
+
+      await ctx.runMutation(api.calls.updateStatus, {
+        id: args.callId,
+        elevenLabsConversationId: conversationId,
+        transcript: transcriptStr || undefined,
+      });
+
+      if (transcriptStr && call.claimId) {
+        try {
+          await ctx.runAction(api.callActions.analyzeTranscript, {
+            callId: args.callId,
+            claimId: call.claimId,
+            transcript: transcriptStr,
+            userId: call.userId,
+            handoffDetected,
+          });
+        } catch (e: any) {
+          console.error('[backfillCallTranscript] analysis failed:', e.message);
+        }
+      } else if (transcriptStr && call.dentalCaseId) {
+        try {
+          await ctx.runAction(api.dentalCallActions.analyzeEvTranscript, { callId: args.callId });
+        } catch (e: any) {
+          console.error('[backfillCallTranscript] dental analysis failed:', e.message);
+        }
+      }
+
+      return { success: true, hasTranscript: !!transcriptStr };
+    } catch (e: any) {
+      console.error('[backfillCallTranscript] error:', e.message);
+      return { success: false, reason: e.message };
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Safety net: transcript-saving today is otherwise driven either by a browser
+// tab actively polling getCallStatus (LiveCallMonitor, only while mounted), by
+// the /elevenlabs-webhook firing, or by the call-end webhooks in http.ts
+// calling backfillCallTranscript directly. This cron (see convex/crons.ts)
+// periodically re-checks any call — in progress or already completed — that's
+// missing a transcript and finalizes it, independent of any browser being
+// open or any single webhook firing.
+// ---------------------------------------------------------------------------
+export const listCallsNeedingTranscriptBackfill = internalQuery({
   args: {},
   handler: async (ctx) => {
     // Skip calls younger than 60s so we don't race a call that just started.
     const cutoff = new Date(Date.now() - 60 * 1000).toISOString();
-    const calls = await ctx.db
-      .query('calls')
-      .withIndex('by_status', (q) => q.eq('status', 'in_progress'))
-      .collect();
-    return calls.filter((c) => c.elevenLabsConversationId && c.startedAt < cutoff);
+    const [inProgress, completed] = await Promise.all([
+      ctx.db.query('calls').withIndex('by_status', (q) => q.eq('status', 'in_progress')).collect(),
+      ctx.db.query('calls').withIndex('by_status', (q) => q.eq('status', 'completed')).collect(),
+    ]);
+    return [...inProgress, ...completed].filter(
+      (c) => !c.transcript && c.startedAt && c.startedAt < cutoff
+    );
   },
 });
 
 export const finalizeStaleInProgressCalls = internalAction({
   args: {},
   handler: async (ctx) => {
-    const staleCalls = await ctx.runQuery(internal.callActions.listStaleInProgressCalls, {});
+    const staleCalls = await ctx.runQuery(internal.callActions.listCallsNeedingTranscriptBackfill, {});
     for (const call of staleCalls) {
       try {
-        await ctx.runAction(api.callActions.getCallStatus, {
-          conversationId: call.elevenLabsConversationId,
-          callId: call._id,
-          claimId: call.claimId,
-        });
+        if (call.status === 'in_progress') {
+          const conversationId = await resolveElevenLabsConversationId(ctx, call);
+          if (conversationId) {
+            await ctx.runAction(api.callActions.getCallStatus, {
+              conversationId,
+              callId: call._id,
+              claimId: call.claimId,
+            });
+          }
+        } else {
+          await ctx.runAction(internal.callActions.backfillCallTranscript, { callId: call._id });
+        }
       } catch (e: any) {
         console.error(`[finalizeStaleInProgressCalls] failed for call ${call._id}:`, e.message);
       }

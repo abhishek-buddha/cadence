@@ -93,6 +93,10 @@ function recordingPlaybackUrl(callId) {
   return `${convexSiteUrl()}/twilio-recording-media?callId=${encodeURIComponent(callId)}`;
 }
 
+function aiRecordingPlaybackUrl(callId) {
+  return `${convexSiteUrl()}/elevenlabs-recording-media?callId=${encodeURIComponent(callId)}`;
+}
+
 function formatDate(isoString) {
   if (!isoString) return '--';
   const d = new Date(isoString);
@@ -259,7 +263,7 @@ function CallRow({ call }) {
           {formatDuration(persistedDuration)}
         </span>
         <span className="min-w-[90px] flex justify-center">
-          {call.recordingUrl ? (
+          {(call.recordingUrl || call.elevenLabsConversationId) ? (
             <span className="inline-flex items-center gap-1 text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full">
               <Mic className="w-3 h-3" />
               Recording
@@ -325,12 +329,28 @@ function CallRow({ call }) {
               humanHandoffCompleted={humanHandoffCompleted}
             />
 
-            {/* Recording */}
+            {/* AI/IVR Recording — ElevenLabs' own recording of the agent↔IVR leg */}
+            {call.elevenLabsConversationId && (
+              <div>
+                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
+                  <Mic className="w-3 h-3" />
+                  AI/IVR Recording
+                </h4>
+                <audio
+                  controls
+                  preload="metadata"
+                  src={aiRecordingPlaybackUrl(call._id)}
+                  className="h-9 w-full max-w-md"
+                />
+              </div>
+            )}
+
+            {/* Human Agent Recording — Twilio conference recording, post-handoff */}
             {call.recordingUrl && (
               <div>
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
                   <Mic className="w-3 h-3" />
-                  Recording
+                  Human Agent Recording
                   {persistedDuration != null && (
                     <span className="font-data text-muted normal-case tracking-normal">
                       {formatDuration(persistedDuration)}
@@ -346,16 +366,31 @@ function CallRow({ call }) {
               </div>
             )}
 
-            {/* Transcript */}
+            {/* AI/IVR Transcript */}
             {call.transcript && (
               <div>
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
                   <FileText className="w-3 h-3" />
-                  Transcript
+                  AI/IVR Transcript
                 </h4>
                 <div className="bg-white border border-border rounded-lg p-3 max-h-48 overflow-y-auto">
                   <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
                     {call.transcript}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Human Agent Transcript — Twilio's transcription of the conference recording */}
+            {call.humanTranscript && (
+              <div>
+                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
+                  <FileText className="w-3 h-3" />
+                  Human Agent Transcript
+                </h4>
+                <div className="bg-white border border-border rounded-lg p-3 max-h-48 overflow-y-auto">
+                  <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
+                    {call.humanTranscript}
                   </p>
                 </div>
               </div>

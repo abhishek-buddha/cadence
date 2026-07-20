@@ -25,6 +25,19 @@ import TransferDestinationsPage from './pages/TransferDestinationsPage';
 import MasterDataPage from './pages/MasterDataPage';
 import ClaimUserRoutingPage from './pages/ClaimUserRoutingPage';
 import CallAuditPage from './pages/CallAuditPage';
+import AppointmentsPage from './pages/AppointmentsPage';
+import AppointmentSchedulingDetailPage from './pages/AppointmentSchedulingDetailPage';
+import AppointmentReminderDetailPage from './pages/AppointmentReminderDetailPage';
+import BenefitVerificationPage from './pages/BenefitVerificationPage';
+import BenefitVerificationDetailPage from './pages/BenefitVerificationDetailPage';
+import EligibilityVerificationPage from './pages/EligibilityVerificationPage';
+import EligibilityVerificationDetailPage from './pages/EligibilityVerificationDetailPage';
+import PriorAuthorizationPage from './pages/PriorAuthorizationPage';
+import PriorAuthorizationDetailPage from './pages/PriorAuthorizationDetailPage';
+import PatientBalanceReminderPage from './pages/PatientBalanceReminderPage';
+import PatientBalanceReminderDetailPage from './pages/PatientBalanceReminderDetailPage';
+import InboundBillingPage from './pages/InboundBillingPage';
+import InboundBillingDetailPage from './pages/InboundBillingDetailPage';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(
@@ -74,6 +87,21 @@ export default function App() {
                   <Route path="webhooks" element={<WebhooksPage />} />
                   */}
                   <Route path="transfers" element={<TransferDestinationsPage />} />
+
+                  {/* Static placeholder modules — list + case view, not yet wired to Convex */}
+                  <Route path="appointments" element={<AppointmentsPage />} />
+                  <Route path="appointments/scheduling/:id" element={<AppointmentSchedulingDetailPage />} />
+                  <Route path="appointments/reminder/:id" element={<AppointmentReminderDetailPage />} />
+                  <Route path="benefit-verification" element={<BenefitVerificationPage />} />
+                  <Route path="benefit-verification/:id" element={<BenefitVerificationDetailPage />} />
+                  <Route path="eligibility-verification" element={<EligibilityVerificationPage />} />
+                  <Route path="eligibility-verification/:id" element={<EligibilityVerificationDetailPage />} />
+                  <Route path="prior-authorization" element={<PriorAuthorizationPage />} />
+                  <Route path="prior-authorization/:id" element={<PriorAuthorizationDetailPage />} />
+                  <Route path="patient-balance-reminder" element={<PatientBalanceReminderPage />} />
+                  <Route path="patient-balance-reminder/:id" element={<PatientBalanceReminderDetailPage />} />
+                  <Route path="inbound-billing" element={<InboundBillingPage />} />
+                  <Route path="inbound-billing/:id" element={<InboundBillingDetailPage />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
               </>

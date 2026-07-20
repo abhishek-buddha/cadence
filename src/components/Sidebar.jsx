@@ -12,14 +12,12 @@ import {
   Radio,
   Route,
   ChevronDown,
+  CalendarClock,
+  ShieldCheck,
+  ClipboardCheck,
+  Wallet,
+  PhoneIncoming,
 } from 'lucide-react';
-
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/claims', icon: FileText, label: 'Claim Management' },
-  { to: '/claim-routing', icon: Route, label: 'Claim User Routing', newTab: true },
-  { to: '/reports', icon: BarChart3, label: 'Reports' },
-];
 
 const callAuditGroup = {
   icon: PhoneCall,
@@ -30,6 +28,22 @@ const callAuditGroup = {
     { to: '/call-audit/live', icon: Radio, label: 'Live Sessions' },
   ],
 };
+
+// Ordered top-to-bottom exactly as the product nav specifies. The Call Audit
+// entry is a special expandable group handled separately in the render loop.
+const navEntries = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
+  { to: '/appointments', icon: CalendarClock, label: 'Appointments' },
+  { to: '/benefit-verification', icon: ShieldCheck, label: 'Benefit Verification' },
+  { to: '/eligibility-verification', icon: Activity, label: 'Eligibility Verification' },
+  { to: '/prior-authorization', icon: ClipboardCheck, label: 'Prior Authorization' },
+  { to: '/claims', icon: FileText, label: 'Claim Management' },
+  { to: '/patient-balance-reminder', icon: Wallet, label: 'Patient Balance Reminder' },
+  { to: '/inbound-billing', icon: PhoneIncoming, label: 'Inbound Billing' },
+  { to: '/claim-routing', icon: Route, label: 'Claim User Routing', newTab: true },
+  { group: true },
+  { to: '/reports', icon: BarChart3, label: 'Reports' },
+];
 
 export default function Sidebar({ collapsed, onToggle }) {
   const location = useLocation();
@@ -165,9 +179,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           </p>
         )}
         {collapsed && <div className="pt-2" />}
-        {navItems.slice(0, 3).map(renderNavLink)}
-        {renderCallAuditGroup()}
-        {navItems.slice(3).map(renderNavLink)}
+        {navEntries.map((item) => (item.group ? <div key="call-audit-group">{renderCallAuditGroup()}</div> : renderNavLink(item)))}
       </nav>
 
       {/* Bottom section */}

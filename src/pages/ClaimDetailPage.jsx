@@ -118,17 +118,6 @@ function InfoField({ label, value, mono = false }) {
   );
 }
 
-function InfoRow({ label, value, mono = false }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-sm text-muted">{label}</span>
-      <span className={`text-sm text-gray-900 text-right ${mono ? 'font-data' : ''}`}>
-        {value || <span className="text-muted/50 italic">--</span>}
-      </span>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Confidence bar
 // ---------------------------------------------------------------------------
@@ -155,60 +144,79 @@ function ConfidenceBar({ value }) {
 }
 
 // ---------------------------------------------------------------------------
-// Call history table row
+// Call history timeline entry
 // ---------------------------------------------------------------------------
-function CallHistoryRow({ call }) {
+function CallTimelineEntry({ call }) {
   const [expanded, setExpanded] = useState(false);
 
   const startDate = call.startedAt ? new Date(call.startedAt) : null;
-  const callTime = startDate
-    ? startDate.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  const formattedDate = startDate
+    ? startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     : '--';
+  const formattedTime = startDate
+    ? startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : '';
 
   const durationStr = call.duration
     ? `${Math.floor(call.duration / 60)}m ${call.duration % 60}s`
     : '--';
 
-  const hasDetail = !!(call.transcript || call.errorMessage);
-
   return (
-    <>
-      <tr
-        onClick={() => hasDetail && setExpanded((e) => !e)}
-        className={`${hasDetail ? 'cursor-pointer hover:bg-gray-50/80' : ''} transition-colors`}
-      >
-        <td className="px-4 py-2.5 text-sm text-gray-700 whitespace-nowrap">{callTime}</td>
-        <td className="px-4 py-2.5 text-sm font-data text-gray-600 whitespace-nowrap">{durationStr}</td>
-        <td className="px-4 py-2.5">
-          <div className="flex items-center justify-between gap-2">
+    <div className="relative pl-8 pb-6 last:pb-0 group">
+      {/* Vertical line */}
+      <div className="absolute left-[11px] top-6 bottom-0 w-px bg-border group-last:hidden" />
+
+      {/* Dot */}
+      <div className={`absolute left-1 top-1.5 w-[14px] h-[14px] rounded-full border-2 ${
+        call.status === 'completed'
+          ? 'border-success bg-success/20'
+          : call.status === 'failed'
+            ? 'border-danger bg-danger/20'
+            : 'border-accent bg-accent/20'
+      }`} />
+
+      <div className="bg-white border border-border rounded-lg overflow-hidden shadow-sm">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-gray-900 font-medium">{formattedDate}</span>
+            <span className="text-xs text-muted font-data">{formattedTime}</span>
             <StatusBadge status={call.status} />
-            {hasDetail && (
-              expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted shrink-0" />
-            )}
+            <span className="text-xs text-muted font-data">
+              <Clock className="w-3 h-3 inline mr-1" />
+              {durationStr}
+            </span>
           </div>
-        </td>
-      </tr>
-      {expanded && call.transcript && (
-        <tr>
-          <td colSpan={3} className="px-4 pb-3 bg-surface/50">
-            <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 pt-2">Transcript</p>
-            <pre className="text-xs text-gray-600 font-data whitespace-pre-wrap max-h-56 overflow-y-auto leading-relaxed bg-white rounded-lg p-3 border border-border">
+          {call.transcript ? (
+            expanded ? (
+              <ChevronUp className="w-4 h-4 text-muted shrink-0" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-muted shrink-0" />
+            )
+          ) : null}
+        </button>
+
+        {expanded && call.transcript && (
+          <div className="border-t border-border px-4 py-3">
+            <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2">Transcript</p>
+            <pre className="text-xs text-gray-600 font-data whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed bg-surface rounded-lg p-3 border border-border">
               {call.transcript}
             </pre>
-          </td>
-        </tr>
-      )}
-      {expanded && call.errorMessage && (
-        <tr>
-          <td colSpan={3} className="px-4 pb-3 bg-surface/50">
-            <div className="flex items-start gap-2 pt-2">
+          </div>
+        )}
+
+        {call.errorMessage && (
+          <div className="border-t border-border px-4 py-3">
+            <div className="flex items-start gap-2">
               <XCircle className="w-4 h-4 text-danger mt-0.5 shrink-0" />
               <p className="text-xs text-danger font-data">{call.errorMessage}</p>
             </div>
-          </td>
-        </tr>
-      )}
-    </>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -361,104 +369,109 @@ export default function ClaimDetailPage() {
       {/* ------------------------------------------------------------------ */}
       {/* TOP BAR                                                             */}
       {/* ------------------------------------------------------------------ */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="min-w-0">
-          <button
-            onClick={() => navigate('/claims')}
-            className="inline-flex items-center gap-1 text-sm text-muted hover:text-gray-900 transition-colors mb-2"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Back to claims
-          </button>
+      <div className="flex items-center gap-4 flex-wrap">
+        <button
+          onClick={() => navigate('/claims')}
+          className="p-2 rounded-lg bg-white border border-border hover:border-border-light text-muted hover:text-gray-900 transition-all shadow-sm"
+          aria-label="Back to claims"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">
-              Claim {claim.claimNumber}
-            </h1>
-            <StatusBadge status={claim.status} />
-            <PriorityBadge priority={claim.priority} />
-            {claim.agingBucket && (
-              <span className="text-xs font-data text-muted bg-surface px-2.5 py-1 rounded-full border border-border">
-                <Clock className="w-3 h-3 inline mr-1" />
-                {claim.agingBucket}
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-muted mt-1">
-            {patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown patient'}
-            {insurance?.name && <> · {insurance.name}</>}
-            {claim.cptCodes?.length > 0 && <> · <span className="font-data">{claim.cptCodes.join(', ')}</span></>}
-          </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="font-data text-xl text-gray-900 tracking-tight">{claim.claimNumber}</h1>
+          <StatusBadge status={claim.status} size="lg" />
+          <PriorityBadge priority={claim.priority} />
         </div>
 
-        {!activeCall && (
-          <button
-            onClick={handleCallInsurance}
-            disabled={callState === 'calling' || callState === 'in_progress' || hasActiveCall}
-            className={`shrink-0 inline-flex items-center gap-2 px-4 py-2.5 text-white text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-70 ${
-              callState === 'calling'
-                ? 'bg-accent/80 cursor-wait'
-                : callState === 'in_progress' || hasActiveCall
-                  ? 'bg-accent/60 cursor-default'
-                  : 'bg-accent hover:bg-accent-hover'
-            }`}
-          >
-            <Phone className={`w-4 h-4 ${callState === 'calling' ? 'animate-pulse' : ''}`} />
-            {callState === 'calling' ? (
-              <>Calling...</>
-            ) : callState === 'in_progress' || hasActiveCall ? (
-              <>
-                <span className="status-dot-pulse w-1.5 h-1.5 rounded-full bg-white inline-block" />
-                Call in Progress
-              </>
-            ) : (
-              <>
-                Call Insurance
-                {insurance?.phone && <span className="font-data text-white/70">· {insurance.phone}</span>}
-              </>
-            )}
-          </button>
+        {claim.agingBucket && (
+          <span className="ml-auto text-xs font-data text-muted bg-surface px-3 py-1 rounded-full border border-border">
+            <Clock className="w-3 h-3 inline mr-1.5" />
+            {claim.agingBucket}
+          </span>
         )}
       </div>
 
-      {callState === 'error' && (
-        <p className="text-sm text-danger flex items-center gap-1.5">
-          <XCircle className="w-4 h-4" />
-          Call failed.{' '}
-          <button
-            onClick={() => setErrorModalOpen(true)}
-            className="underline underline-offset-2 hover:text-danger/80"
-          >
-            View details
-          </button>
-        </p>
-      )}
-
       {/* ------------------------------------------------------------------ */}
-      {/* LIVE CALL MONITOR                                                   */}
+      {/* HERO: CALL INSURANCE BUTTON / LIVE CALL MONITOR                     */}
       {/* ------------------------------------------------------------------ */}
-      {activeCall && (
+      {activeCall ? (
         <LiveCallMonitor call={activeCall} insurance={insurance} onComplete={handleCallComplete} />
+      ) : (
+        <div className="bg-gradient-to-r from-accent/5 to-cyan/5 border border-accent/15 rounded-xl p-8 text-center glow-border-strong">
+          {/* Subtitle */}
+          {insurance && (
+            <p className="text-sm text-muted mb-4">
+              <Building2 className="w-4 h-4 inline mr-1.5 text-accent/60" />
+              {insurance.name}
+              {insurance.phone && (
+                <span className="font-data ml-2 text-muted/70">{insurance.phone}</span>
+              )}
+            </p>
+          )}
+
+          {/* The Button */}
+          <button
+            onClick={handleCallInsurance}
+            disabled={callState === 'calling' || callState === 'in_progress' || hasActiveCall}
+            className={`
+              relative inline-flex items-center gap-3 px-8 py-4 text-white font-display font-semibold text-lg rounded-xl transition-all duration-200
+              ${callState === 'calling'
+                ? 'bg-accent/80 cursor-wait pulse-ring shadow-lg shadow-accent/20'
+                : callState === 'in_progress' || hasActiveCall
+                  ? 'bg-accent/60 cursor-default'
+                  : 'bg-accent hover:bg-accent-hover shadow-lg shadow-accent/15 hover:shadow-accent/30 hover:scale-[1.02] active:scale-[0.98]'
+              }
+              disabled:opacity-70
+            `}
+          >
+            <Phone className={`w-5 h-5 ${callState === 'calling' ? 'animate-pulse' : ''}`} />
+            {callState === 'calling' ? (
+              <>Calling {insurance?.name || 'Insurance'}...</>
+            ) : callState === 'in_progress' || hasActiveCall ? (
+              <>
+                <span className="status-dot-pulse w-2 h-2 rounded-full bg-success inline-block" />
+                Call in Progress
+              </>
+            ) : (
+              <>Call Insurance</>
+            )}
+          </button>
+
+          {/* Error hint below button */}
+          {callState === 'error' && (
+            <p className="mt-4 text-sm text-danger flex items-center justify-center gap-1.5">
+              <XCircle className="w-4 h-4" />
+              Call failed.{' '}
+              <button
+                onClick={() => setErrorModalOpen(true)}
+                className="underline underline-offset-2 hover:text-danger/80"
+              >
+                View details
+              </button>
+            </p>
+          )}
+        </div>
       )}
 
       {/* ------------------------------------------------------------------ */}
       {/* INFO CARDS GRID (2x2)                                               */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 stagger-children">
         {/* Claim Info */}
         <DetailCard icon={FileText} title="Claim Information">
-          <div className="divide-y divide-border/50">
-            <InfoRow label="Claim #" value={claim.claimNumber} mono />
-            <InfoRow label="Amount" value={formatAmount(claim.amount)} mono />
-            <InfoRow label="Date of service" value={formatDate(claim.dateOfService)} />
-            <InfoRow label="Date submitted" value={formatDate(claim.dateSubmitted)} />
-            <InfoRow label="CPT codes" value={claim.cptCodes?.join(', ')} mono />
-            <InfoRow label="Diagnosis codes" value={claim.diagnosisCodes?.join(', ')} mono />
-            <InfoRow label="Aging bucket" value={claim.agingBucket} />
-            <InfoRow label="Reference" value={claim.referenceNumber} mono />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+            <InfoField label="Claim #" value={claim.claimNumber} mono />
+            <InfoField label="Amount" value={formatAmount(claim.amount)} mono />
+            <InfoField label="Date of Service" value={formatDate(claim.dateOfService)} />
+            <InfoField label="Date Submitted" value={formatDate(claim.dateSubmitted)} />
+            <InfoField label="CPT Codes" value={claim.cptCodes?.join(', ')} mono />
+            <InfoField label="Diagnosis Codes" value={claim.diagnosisCodes?.join(', ')} mono />
+            <InfoField label="Aging Bucket" value={claim.agingBucket} />
+            <InfoField label="Reference #" value={claim.referenceNumber} mono />
           </div>
           {claim.notes && (
-            <div className="mt-3 pt-3 border-t border-border">
+            <div className="mt-4 pt-4 border-t border-border">
               <InfoField label="Notes" value={claim.notes} />
             </div>
           )}
@@ -477,53 +490,57 @@ export default function ClaimDetailPage() {
               {piiVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
             </button>
           </div>
-          <div className="px-5 py-4 divide-y divide-border/50">
-            <InfoRow
-              label="Full name"
-              value={patient ? `${maskValue(patient.firstName)} ${maskValue(patient.lastName)}` : '--'}
-            />
-            <InfoRow label="Date of birth" value={patient ? maskDOB(patient.dateOfBirth) : '--'} />
-            <InfoRow label="Member ID" value={maskValue(patient?.memberId)} mono />
-            <InfoRow label="Group number" value={maskValue(patient?.groupNumber)} mono />
+          <div className="px-5 py-4">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+              <InfoField
+                label="Full Name"
+                value={patient ? `${maskValue(patient.firstName)} ${maskValue(patient.lastName)}` : '--'}
+              />
+              <InfoField label="Date of Birth" value={patient ? maskDOB(patient.dateOfBirth) : '--'} />
+              <InfoField label="Member ID" value={maskValue(patient?.memberId)} mono />
+              <InfoField label="Group Number" value={maskValue(patient?.groupNumber)} mono />
+            </div>
           </div>
         </div>
 
         {/* Insurance Info */}
         <DetailCard icon={Building2} title="Insurance Information">
-          <div className="divide-y divide-border/50">
-            <InfoRow label="Company" value={insurance?.name} />
-            <InfoRow label="Phone" value={insurance?.phone} mono />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+            <InfoField label="Company" value={insurance?.name} />
+            <InfoField label="Phone" value={insurance?.phone} mono />
           </div>
         </DetailCard>
 
         {/* Provider Info */}
         <DetailCard icon={Stethoscope} title="Provider Information">
-          <div className="divide-y divide-border/50">
-            <InfoRow label="Practice" value={provider?.practiceName} />
-            <InfoRow label="NPI" value={provider?.npi} mono />
-            <InfoRow label="Tax ID" value={provider?.taxId} mono />
-            <InfoRow label="Phone" value={provider?.phone} mono />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+            <InfoField label="Practice Name" value={provider?.practiceName} />
+            <InfoField label="NPI" value={provider?.npi} mono />
+            <InfoField label="Tax ID" value={provider?.taxId} mono />
+            <InfoField label="Phone" value={provider?.phone} mono />
           </div>
         </DetailCard>
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* LATEST CALL RESULT + CALL HISTORY                                   */}
+      {/* LATEST CALL RESULT                                                  */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-          <div className="border-b border-border px-5 py-3 flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-accent" />
-            <h3 className="text-sm font-display font-semibold text-gray-900">Latest call result and next steps</h3>
-          </div>
-          {latestResult ? (
-            <div className="px-5 py-4 space-y-4">
-              <p className="text-sm text-gray-700">
-                Claim status: <span className="font-medium text-gray-900">{latestResult.claimStatus || 'Unknown'}</span>
-                {latestResult.referenceNumber && <> · Reference: <span className="font-data">{latestResult.referenceNumber}</span></>}
-              </p>
+      {latestResult ? (
+        <div className="glow-border-strong rounded-xl overflow-hidden">
+          <div className="bg-white border border-accent/15 rounded-xl overflow-hidden">
+            <div className="border-b border-border px-5 py-3 flex items-center gap-2.5 bg-accent/5">
+              <CheckCircle2 className="w-4 h-4 text-accent" />
+              <h3 className="text-sm font-display font-semibold text-gray-900">Latest Call Result</h3>
+            </div>
+            <div className="px-5 py-5 space-y-5">
+              {/* Claim status */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted uppercase tracking-wider font-medium">Claim Status</span>
+                <StatusBadge status={latestResult.claimStatus || 'unknown'} size="lg" />
+              </div>
 
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {/* Details grid - only show fields that have values */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                 {latestResult.paidAmount != null && <InfoField label="Paid Amount" value={formatAmount(latestResult.paidAmount)} mono />}
                 {latestResult.paidDate && <InfoField label="Paid Date" value={formatDate(latestResult.paidDate)} />}
                 {latestResult.checkOrEftNumber && <InfoField label="Check / EFT #" value={latestResult.checkOrEftNumber} mono />}
@@ -532,46 +549,54 @@ export default function ClaimDetailPage() {
                 {latestResult.remarkCode && <InfoField label="RARC Code" value={latestResult.remarkCode} mono />}
                 {latestResult.appealDeadline && <InfoField label="Appeal Deadline" value={formatDate(latestResult.appealDeadline)} />}
                 {latestResult.expectedDecisionDate && <InfoField label="Expected Decision" value={formatDate(latestResult.expectedDecisionDate)} />}
+                {latestResult.referenceNumber && <InfoField label="Reference #" value={latestResult.referenceNumber} mono />}
                 {latestResult.repName && <InfoField label="Rep Name" value={latestResult.repName} />}
                 {latestResult.missingDocuments && <InfoField label="Missing Documents" value={latestResult.missingDocuments} />}
               </div>
 
+              {/* Next steps */}
               {latestResult.nextSteps && (
-                <p className="text-sm text-gray-600 leading-relaxed pt-3 border-t border-border">
-                  {latestResult.nextSteps}
-                </p>
+                <div className="pt-4 border-t border-border">
+                  <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2">Recommended Next Steps</p>
+                  <div className="bg-surface rounded-lg p-3 border border-border">
+                    <p className="text-sm text-gray-600 leading-relaxed">{latestResult.nextSteps}</p>
+                  </div>
+                </div>
               )}
             </div>
-          ) : (
-            <div className="px-5 py-8 text-center">
-              <Info className="w-6 h-6 text-muted/40 mx-auto mb-2" />
-              <p className="text-sm text-muted/60">No call results yet. Initiate a call to get AI-extracted claim data.</p>
-            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white border border-border rounded-xl px-5 py-8 text-center shadow-sm">
+          <Info className="w-6 h-6 text-muted/40 mx-auto mb-2" />
+          <p className="text-sm text-muted/60">No call results yet. Initiate a call to get AI-extracted claim data.</p>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* CALL HISTORY TIMELINE                                               */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+        <div className="border-b border-border px-5 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Phone className="w-4 h-4 text-accent" />
+            <h3 className="text-sm font-display font-semibold text-gray-900">Call History</h3>
+          </div>
+          {calls && calls.length > 0 && (
+            <span className="text-xs font-data text-muted">
+              {calls.length} call{calls.length !== 1 ? 's' : ''}
+            </span>
           )}
         </div>
-
-        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-          <div className="border-b border-border px-5 py-3 flex items-center gap-2.5">
-            <Phone className="w-4 h-4 text-accent" />
-            <h3 className="text-sm font-display font-semibold text-gray-900">Call history</h3>
-          </div>
+        <div className="px-5 py-5">
           {calls && calls.length > 0 ? (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left px-4 py-2 text-xs uppercase tracking-wider text-muted font-semibold">Call time</th>
-                  <th className="text-left px-4 py-2 text-xs uppercase tracking-wider text-muted font-semibold">Duration</th>
-                  <th className="text-left px-4 py-2 text-xs uppercase tracking-wider text-muted font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {calls.map((call) => (
-                  <CallHistoryRow key={call._id} call={call} />
-                ))}
-              </tbody>
-            </table>
+            <div>
+              {calls.map((call) => (
+                <CallTimelineEntry key={call._id} call={call} />
+              ))}
+            </div>
           ) : (
-            <div className="px-5 py-8 text-center">
+            <div className="text-center py-6">
               <Phone className="w-6 h-6 text-muted/30 mx-auto mb-2" />
               <p className="text-sm text-muted/50">No calls have been made for this claim yet.</p>
             </div>

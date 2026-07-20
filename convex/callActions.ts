@@ -910,7 +910,17 @@ SPECIAL STATUSES:
     // must not miss the follow-up in that case. Guarded by parentCallId (a
     // follow-up call can never spawn another) and the atomic handoffFollowUpAt
     // claim (racing completion paths dial the number only once).
-    if (!callRow?.parentCallId) {
+    //
+    // 2026-07-20 incident: a transcript-backfill sweep picked up a multi-day
+    // backlog of old calls and this block dialed real follow-up calls for
+    // every one of them, today, for conversations that actually happened days
+    // earlier. A backfilled transcript is never a signal to call anyone back
+    // right now — only place the follow-up if this call itself started
+    // recently (i.e. this is genuinely the live end of a call in progress).
+    const STALE_FOLLOWUP_CUTOFF_MS = 30 * 60 * 1000; // 30 minutes
+    const callIsRecent = callRow?.startedAt &&
+      Date.now() - new Date(callRow.startedAt).getTime() < STALE_FOLLOWUP_CUTOFF_MS;
+    if (!callRow?.parentCallId && callIsRecent) {
       const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
       if (humanAgentNumber && humanAgentNumber.trim()) {
         // Atomically claim the follow-up so concurrent completion paths can't

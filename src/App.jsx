@@ -54,8 +54,6 @@ export default function App() {
       <BrowserRouter>
         <ProviderFilterProvider>
           <Routes>
-            <Route path="/claim-routing" element={<ClaimUserRoutingPage standalone />} />
-
             {!authenticated ? (
               <Route path="*" element={<AccessCodePage onSuccess={handleAccessGranted} />} />
             ) : (
@@ -64,6 +62,7 @@ export default function App() {
                   <Route index element={<Dashboard />} />
                   <Route path="claims" element={<ClaimsPage />} />
                   <Route path="claims/:id" element={<ClaimDetailPage />} />
+                  <Route path="claim-routing" element={<ClaimUserRoutingPage />} />
 
                   <Route path="patients" element={<PatientsPage />} />
                   <Route path="insurance" element={<InsuranceDirectory />} />

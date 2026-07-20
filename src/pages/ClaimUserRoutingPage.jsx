@@ -1,22 +1,9 @@
-import { Fragment, useEffect, useState } from 'react';
-import { useAction, useMutation, useQuery } from 'convex/react';
+import { Fragment, useState } from 'react';
+import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import EmptyState from '../components/EmptyState';
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  Mic,
-  MicOff,
-  PhoneCall,
-  PhoneOff,
-  Radio,
-  Route as RouteIcon,
-  UserCog,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, Route as RouteIcon, UserCog } from 'lucide-react';
 import HandoffContextCard from '../components/HandoffContextCard';
-import { useSoftphone } from '../hooks/useSoftphone';
 import { SPECIALIZATION_LABELS } from '../constants/specializations';
 
 const ROLE_LABELS = {
@@ -32,7 +19,7 @@ const AVAILABILITY_CONFIG = {
 };
 
 function AvailabilityBadge({ value }) {
-  const cfg = AVAILABILITY_CONFIG[value] ?? AVAILABILITY_CONFIG.disabled;
+  const cfg = AVAILABILITY_CONFIG[value] ?? AVAILABILITY_CONFIG.offline;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full font-medium px-2 py-0.5 text-xs ${cfg.bg} ${cfg.text}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -56,86 +43,11 @@ function subjectLabel(call) {
   return 'Assigned handoff';
 }
 
-function callEnded(call) {
-  return call?.status === 'completed' || call?.handoffState === 'handoff_ended';
-}
-
-function isTerminalBridgeError(error) {
-  return /21220|not in-progress|cannot redirect/i.test(String(error || ''));
-}
-
-function SoftphonePanel({ softphone }) {
-  const { status, error, muted, disconnect, toggleMute } = softphone;
-  const statusText =
-    status === 'on_call'
-      ? 'Connected to insurance rep'
-      : status === 'connecting'
-        ? 'Connecting browser phone'
-        : status === 'ready'
-          ? 'Ready for assigned calls'
-          : status === 'unconfigured'
-            ? 'Browser phone is not configured'
-            : status === 'error'
-              ? `Phone error: ${error || 'unknown'}`
-              : 'Preparing browser phone';
-
-  return (
-    <div className="bg-white border border-border rounded-xl shadow-sm p-4 flex items-center justify-between gap-4">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
-          <Radio className="w-5 h-5 text-accent" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-900">Agent Console</p>
-          <p className="text-xs text-muted">{statusText}</p>
-        </div>
-      </div>
-      {(status === 'on_call' || status === 'connecting') && (
-        <div className="flex items-center gap-2">
-          {status === 'on_call' && (
-            <button
-              type="button"
-              onClick={toggleMute}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                muted
-                  ? 'border-warn/40 bg-warn/10 text-warn hover:bg-warn/15'
-                  : 'border-border text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {muted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              {muted ? 'Unmute' : 'Mute'}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={disconnect}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-danger text-white text-sm font-medium hover:bg-danger/90 transition-colors"
-          >
-            <PhoneOff className="w-4 h-4" />
-            Hang up
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function ClaimUserRoutingPage({ standalone = false }) {
+export default function ClaimUserRoutingPage() {
   const users = useQuery(api.users?.listRoutingAgents);
   const insuranceContacts = useQuery(api.insuranceContacts.list);
   const userGroups = useQuery(api.userGroups.list);
-  const acceptHandoff = useMutation(api.handoff.acceptHandoff);
-  const redirectPayer = useAction(api.handoff.redirectPayerToConference);
-  const markConnected = useMutation(api.handoff.markConnectedFromClient);
-  const softphone = useSoftphone();
-  const [acceptingId, setAcceptingId] = useState(null);
-  const [notice, setNotice] = useState(null);
   const [expandedRows, setExpandedRows] = useState(() => new Set());
-
-  useEffect(() => {
-    softphone.ensureDevice();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const isLoading = users === undefined;
   const activeUsers = users ?? [];
@@ -165,64 +77,16 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
     });
   }
 
-  async function handleAccept(user) {
-    const call = user.activeCall;
-    if (!call || user.availability !== 'assigned') return;
-
-    setAcceptingId(user._id);
-    setNotice(null);
-    try {
-      const res = await acceptHandoff({ callId: call._id, agentUserId: user._id });
-      if (!res?.ok) {
-        setNotice(res?.reason === 'already_taken' ? 'Already taken by another agent' : 'Could not accept call');
-        return;
-      }
-
-      const joined = await softphone.connect(call._id);
-      if (!joined?.ok) {
-        setNotice(`Could not connect browser phone${joined?.error ? `: ${joined.error}` : ''}`);
-        return;
-      }
-
-      const routed = await redirectPayer({ callId: call._id });
-      if (!routed?.ok) {
-        softphone.disconnect();
-        if (isTerminalBridgeError(routed?.error) || callEnded(user.activeCall)) {
-          setNotice(null);
-          return;
-        }
-        setNotice(`Could not bridge the call${routed?.error ? `: ${routed.error}` : ''}`);
-        return;
-      }
-
-      await markConnected({ callId: call._id });
-    } catch (error) {
-      setNotice(error?.message || 'Could not accept call');
-    } finally {
-      setAcceptingId(null);
-    }
-  }
-
-  const content = (
-    <div className={standalone ? 'space-y-5' : 'space-y-6 animate-fade-in'}>
+  return (
+    <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className={`${standalone ? 'text-xl' : 'text-2xl'} font-display font-bold text-gray-900 tracking-tight`}>
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">
           Claim User Routing
         </h1>
         <p className="text-sm text-muted mt-1">
-          {standalone
-            ? 'Accept assigned payer handoffs and speak through this browser tab.'
-            : 'Live assignment view for payer handoffs and agent availability.'}
+          Read-only view of agent availability — who's on a call and who's free.
         </p>
       </div>
-
-      {standalone && <SoftphonePanel softphone={softphone} />}
-
-      {notice && (
-        <div className="bg-warn/10 border border-warn/20 rounded-lg px-4 py-3 text-sm text-warn">
-          {notice}
-        </div>
-      )}
 
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
@@ -233,14 +97,13 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Payer</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Specialization</th>
               <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Availability</th>
-              <th className="text-right px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
             {isLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
+                  {Array.from({ length: 5 }).map((_, j) => (
                     <td key={j} className="px-4 py-3.5">
                       <div className="shimmer rounded h-4 w-full" />
                     </td>
@@ -249,7 +112,7 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
               ))
             ) : activeUsers.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={5}>
                   <EmptyState
                     icon={UserCog}
                     title="No active users"
@@ -261,8 +124,6 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
               activeUsers.map((user) => {
                 const insuranceNames = resolvedInsuranceIds(user).map((id) => insuranceMap[id]).filter(Boolean);
                 const specLabels = resolvedSpecializations(user).map((s) => SPECIALIZATION_LABELS[s] ?? s);
-                const canAccept = user.availability === 'assigned' && user.activeCall;
-                const isAccepting = acceptingId === user._id;
                 const hasCallDetails = Boolean(user.activeCall);
                 const isExpanded = hasCallDetails && expandedRows.has(user._id);
                 const ExpanderIcon = isExpanded ? ChevronDown : ChevronRight;
@@ -298,33 +159,10 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
                       <td className="px-5 py-3.5 whitespace-nowrap">
                         <AvailabilityBadge value={user.availability ?? 'offline'} />
                       </td>
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        {canAccept ? (
-                          <button
-                            onClick={() => handleAccept(user)}
-                            disabled={isAccepting}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-success text-white text-sm font-medium hover:bg-success/90 disabled:opacity-50 transition-colors"
-                          >
-                            {isAccepting ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Check className="w-4 h-4" />
-                            )}
-                            Accept
-                          </button>
-                        ) : user.availability === 'in_call' ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-                            <PhoneCall className="w-3.5 h-3.5" />
-                            Busy
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted/60">--</span>
-                        )}
-                      </td>
                     </tr>
                     {isExpanded && (
                       <tr className="bg-surface/60">
-                        <td colSpan={6} className="px-5 py-4">
+                        <td colSpan={5} className="px-5 py-4">
                           <HandoffContextCard call={user.activeCall} embedded />
                         </td>
                       </tr>
@@ -337,25 +175,14 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
         </table>
       </div>
 
-      {!standalone && (
-        <div className="flex items-start gap-2 text-xs text-muted bg-surface border border-border rounded-lg p-3">
+      <div className="flex items-start gap-2 text-xs text-muted bg-surface border border-border rounded-lg p-3">
         <RouteIcon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
         <p>
           Calls are assigned to the first available agent in order. Assigned and connected calls
-          make that agent unavailable until the handoff ends.
+          make that agent unavailable until the handoff ends. Accepting calls happens from the
+          agent's own login, not from this admin view.
         </p>
-        </div>
-      )}
-    </div>
-  );
-
-  if (!standalone) return content;
-
-  return (
-    <div className="min-h-screen grid-bg bg-surface">
-      <main className="max-w-5xl mx-auto p-5 lg:p-8">
-        {content}
-      </main>
+      </div>
     </div>
   );
 }

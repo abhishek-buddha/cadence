@@ -40,7 +40,7 @@ const navEntries = [
   { to: '/claims', icon: FileText, label: 'Claim Management' },
   { to: '/patient-balance-reminder', icon: Wallet, label: 'Patient Balance Reminder' },
   { to: '/inbound-billing', icon: PhoneIncoming, label: 'Inbound Billing' },
-  { to: '/claim-routing', icon: Route, label: 'Claim User Routing', newTab: true },
+  { to: '/claim-routing', icon: Route, label: 'Claim User Routing' },
   { group: true },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
 ];

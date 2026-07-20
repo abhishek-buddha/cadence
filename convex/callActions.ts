@@ -30,6 +30,16 @@ export function extractHandoffDetected(elTranscript: any[]): boolean {
   return false;
 }
 
+// A human-agent follow-up call is only placed when the payer has a *real*,
+// dialable number configured. Blanks, "N/A", and other placeholder text are
+// treated as "no number". Accepts an optional leading + and 7–15 digits, with
+// spaces / dashes / parens / dots ignored.
+export function isValidPhoneNumber(raw?: string | null): boolean {
+  if (!raw) return false;
+  const cleaned = raw.replace(/[\s\-().]/g, '');
+  return /^\+?[0-9]{7,15}$/.test(cleaned);
+}
+
 export const initiateCall = action({
   args: {
     claimId: v.id('claims'),
@@ -678,32 +688,36 @@ SPECIAL STATUSES:
       console.error('Webhook dispatch failed (non-fatal):', e.message);
     }
 
-    // After any call to this payer ends — regardless of whether our agent ended
-    // it at the handoff or the payer's IVR/rep ended it — place exactly one
-    // follow-up call to the payer's human-agent number if one is configured. If
-    // no number is set, nothing happens (the conversation is simply done).
-    // handoffDetected is no longer required to gate this: our agent doesn't
-    // always succeed in ending at the handoff (a rep can pick up first), and we
-    // must not miss the follow-up in that case. Guarded by parentCallId (a
-    // follow-up call can never spawn another) and the atomic handoffFollowUpAt
-    // claim (racing completion paths dial the number only once).
-    if (!callRow?.parentCallId) {
-      const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
-      if (humanAgentNumber && humanAgentNumber.trim()) {
-        // Atomically claim the follow-up so concurrent completion paths can't
-        // each dial the human number for the same call.
-        const claimed = await ctx.runMutation(internal.callActions.claimHandoffFollowUp, {
-          callId: args.callId,
-        });
-        if (claimed) {
-          try {
-            await ctx.runAction(api.callActions.initiateHumanAgentCall, {
-              claimId: args.claimId,
-              parentCallId: args.callId,
-            });
-          } catch (e: any) {
-            console.error('Human-agent follow-up call failed (non-fatal):', e.message);
-          }
+    // Place the human-agent follow-up call ONLY when ALL of these hold:
+    //   1. The agent ended the call at a GENUINE human handoff — the IVR said it
+    //      was connecting to a live rep (handoffDetected). Any other ending —
+    //      the IVR itself hanging up (closed hours / invalid credentials), the
+    //      rep hanging up, or the user ending the call from the UI — must NOT
+    //      trigger a second call, whether or not a human number exists.
+    //   2. The call was not ended by the user from the UI (endedByUser).
+    //   3. A real, dialable human-agent number is configured for the payer.
+    //   4. This is not itself a follow-up call (parentCallId), so a follow-up
+    //      can never spawn another.
+    // The atomic handoffFollowUpAt claim still ensures at-most-once dialing
+    // across racing completion paths (poll / call-ended / webhook).
+    const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
+    if (
+      args.handoffDetected === true &&
+      !callRow?.endedByUser &&
+      !callRow?.parentCallId &&
+      isValidPhoneNumber(humanAgentNumber)
+    ) {
+      const claimed = await ctx.runMutation(internal.callActions.claimHandoffFollowUp, {
+        callId: args.callId,
+      });
+      if (claimed) {
+        try {
+          await ctx.runAction(api.callActions.initiateHumanAgentCall, {
+            claimId: args.claimId,
+            parentCallId: args.callId,
+          });
+        } catch (e: any) {
+          console.error('Human-agent follow-up call failed (non-fatal):', e.message);
         }
       }
     }
@@ -745,6 +759,16 @@ export const claimHandoffFollowUp = internalMutation({
     if (call.handoffFollowUpAt) return false;
     await ctx.db.patch(args.callId, { handoffFollowUpAt: new Date().toISOString() });
     return true;
+  },
+});
+
+// Flag a call as ended by the user from the UI. Set at the very start of
+// endCall so that any completion path (endCall's own analysis, or the ElevenLabs
+// post-call webhook that may fire afterward) sees it and skips the follow-up.
+export const markEndedByUser = internalMutation({
+  args: { callId: v.id('calls') },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.callId, { endedByUser: true });
   },
 });
 
@@ -865,6 +889,11 @@ export const endCall = action({
     if (call.status === 'completed' || call.status === 'failed') {
       return { success: true, message: 'Call already ended' };
     }
+
+    // Mark this as a user-initiated end up front, so no human-agent follow-up
+    // call is ever placed for it — not by the analysis below, and not by a
+    // post-call webhook that may fire afterward.
+    await ctx.runMutation(internal.callActions.markEndedByUser, { callId: args.callId });
 
     const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
     const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;

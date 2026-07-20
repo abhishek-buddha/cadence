@@ -183,6 +183,10 @@ export default defineSchema({
     // claimed, so concurrent completion paths (poll / call-ended / webhook)
     // can't each place a duplicate call to the human-agent number.
     handoffFollowUpAt: v.optional(v.string()),
+    // Set when a user explicitly ends the call from the UI. A user-ended call
+    // must never spawn the human-agent follow-up call, regardless of what the
+    // transcript looks like.
+    endedByUser: v.optional(v.boolean()),
     userId: v.string(),
     startedAt: v.string(),
     completedAt: v.optional(v.string()),

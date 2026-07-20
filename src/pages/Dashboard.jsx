@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
@@ -9,10 +10,14 @@ import {
   ArrowDownToLine,
   Phone,
   PieChart,
+  X,
 } from 'lucide-react';
 import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
 import { useProviderFilter } from '../context/ProviderFilterContext';
+
+const DATE_INPUT_CLASS =
+  'bg-white border border-border-light rounded-lg px-2.5 py-1.5 text-xs text-gray-900 focus:border-accent focus:ring-1 focus:ring-accent outline-none';
 
 const OUTCOME_SEGMENTS = [
   { key: 'successful', label: 'Successful', color: 'bg-success' },
@@ -68,20 +73,41 @@ function StatCardSkeleton() {
 
 export default function Dashboard() {
   const { selectedProviderId } = useProviderFilter();
-  const statsArgs = selectedProviderId ? { providerId: selectedProviderId } : {};
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const statsArgs = {
+    ...(selectedProviderId ? { providerId: selectedProviderId } : {}),
+    ...(dateFrom ? { fromDate: dateFrom } : {}),
+    ...(dateTo ? { toDate: dateTo } : {}),
+  };
   const stats = useQuery(api.dashboard.getStats, statsArgs);
   const allRecentCalls = useQuery(api.calls.listRecent, { limit: 20 });
   const allClaims = useQuery(api.claims.list);
 
   const isLoading = stats === undefined;
+  const hasDateFilter = Boolean(dateFrom || dateTo);
+
+  function clearDateFilter() {
+    setDateFrom('');
+    setDateTo('');
+  }
 
   // Filter recent calls by provider
   const providerClaimIds = selectedProviderId && allClaims
     ? new Set(allClaims.filter((c) => c.providerId === selectedProviderId).map((c) => c._id))
     : null;
-  const recentCalls = selectedProviderId
-    ? (allRecentCalls ?? []).filter((c) => providerClaimIds?.has(c.claimId)).slice(0, 5)
-    : (allRecentCalls ?? []).slice(0, 5);
+  const recentCalls = (allRecentCalls ?? [])
+    .filter((c) => !selectedProviderId || providerClaimIds?.has(c.claimId))
+    .filter((c) => {
+      if (!hasDateFilter) return true;
+      const callDate = c.startedAt?.split('T')[0];
+      if (!callDate) return false;
+      if (dateFrom && callDate < dateFrom) return false;
+      if (dateTo && callDate > dateTo) return false;
+      return true;
+    })
+    .slice(0, 5);
   const callsLoading = allRecentCalls === undefined;
 
   // Calculate total claims in aging buckets for bar chart proportions
@@ -93,11 +119,43 @@ export default function Dashboard() {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">
-          Dashboard
-        </h1>
-        <p className="text-sm text-muted mt-1">Real-time claims overview</p>
+      <div className="flex items-end justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">
+            Dashboard
+          </h1>
+          <p className="text-sm text-muted mt-1">Real-time claims overview</p>
+        </div>
+
+        <div className="flex items-end gap-3 bg-white border border-border rounded-xl px-4 py-2.5 shadow-sm">
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-muted font-medium mb-1">Date Range</label>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className={`${DATE_INPUT_CLASS} w-32`}
+              />
+              <span className="text-[11px] text-muted">–</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className={`${DATE_INPUT_CLASS} w-32`}
+              />
+            </div>
+          </div>
+          {hasDateFilter && (
+            <button
+              onClick={clearDateFilter}
+              className="p-1.5 text-muted hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Clear date filter"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Stat Cards */}
@@ -168,7 +226,7 @@ export default function Dashboard() {
               </h2>
               <PieChart className="w-4 h-4 text-muted" />
             </div>
-            <p className="text-xs text-muted mb-4">This week</p>
+            <p className="text-xs text-muted mb-4">{stats?.outcomeWindowIsDateFilter ? 'Selected date range' : 'This week'}</p>
 
             {isLoading ? (
               <ShimmerBlock className="h-6 w-full" />

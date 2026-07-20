@@ -208,7 +208,7 @@ export default function BulkImportInsuranceModal({ open, onClose }) {
   const updateCount = payers.length - newCount;
 
   return (
-    <Modal open={open} onClose={handleClose} title="Upload Insurance Workbook" wide>
+    <Modal open={open} onClose={handleClose} title="Upload Payer Workbook" wide>
       <div className="space-y-5">
         {stage === 'idle' && (
           <>
@@ -223,7 +223,7 @@ export default function BulkImportInsuranceModal({ open, onClose }) {
             >
               <FileSpreadsheet className="w-10 h-10 text-accent/50 mx-auto mb-3" />
               <p className="text-sm text-gray-900 font-medium mb-1">
-                Drop your Insurance workbook here or click to browse
+                Drop your Payer workbook here or click to browse
               </p>
               <p className="text-xs text-muted">Supports .xlsx, .xls</p>
               <input

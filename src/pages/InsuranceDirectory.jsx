@@ -273,7 +273,7 @@ export default function InsuranceDirectory() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Delete this insurance contact? This cannot be undone.')) return;
+    if (!window.confirm('Delete this payer? This cannot be undone.')) return;
     await removeContact({ id });
   }
 
@@ -294,9 +294,9 @@ export default function InsuranceDirectory() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Insurance Directory</h1>
+          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Payer Directory</h1>
           <p className="text-sm text-muted mt-1">
-            {contacts ? `${contacts.length} contact${contacts.length !== 1 ? 's' : ''}` : 'Loading...'}
+            {contacts ? `${contacts.length} payer${contacts.length !== 1 ? 's' : ''}` : 'Loading...'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -306,7 +306,7 @@ export default function InsuranceDirectory() {
           </button>
           <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
             <Plus className="w-4 h-4" />
-            Add Insurance
+            Add Payer
           </button>
         </div>
       </div>
@@ -324,12 +324,12 @@ export default function InsuranceDirectory() {
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Building2}
-            title="No insurance contacts yet"
-            description="Build your insurance directory to streamline claims follow-up calls."
+            title="No payers yet"
+            description="Build your payer directory to streamline claims follow-up calls."
             action={
               <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
                 <Plus className="w-4 h-4" />
-                Add Insurance
+                Add Payer
               </button>
             }
           />
@@ -340,7 +340,7 @@ export default function InsuranceDirectory() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Company Name</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Payer Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Phone</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Hours</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Avg Hold Time</th>
@@ -414,11 +414,11 @@ export default function InsuranceDirectory() {
       {/* Add/Edit Modal */}
       <BulkImportInsuranceModal open={importOpen} onClose={() => setImportOpen(false)} />
 
-      <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Insurance Contact' : 'Add Insurance Contact'} wide>
+      <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Payer' : 'Add Payer'} wide>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Company Name</label>
+              <label className={labelClass}>Payer Name</label>
               <input
                 type="text"
                 value={form.name}
@@ -755,7 +755,7 @@ export default function InsuranceDirectory() {
               disabled={saving}
               className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
             >
-              {saving ? 'Saving...' : editing ? 'Update Contact' : 'Add Contact'}
+              {saving ? 'Saving...' : editing ? 'Update Payer' : 'Add Payer'}
             </button>
           </div>
         </form>

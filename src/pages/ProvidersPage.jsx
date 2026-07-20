@@ -81,7 +81,7 @@ export default function ProvidersPage() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Delete this hospital? This cannot be undone.')) return;
+    if (!window.confirm('Delete this provider? This cannot be undone.')) return;
     await removeProvider({ id });
   }
 
@@ -94,14 +94,14 @@ export default function ProvidersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Hospitals</h1>
+          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Providers</h1>
           <p className="text-sm text-muted mt-1">
-            {providers ? `${providers.length} hospital${providers.length !== 1 ? 's' : ''}` : 'Loading...'}
+            {providers ? `${providers.length} provider${providers.length !== 1 ? 's' : ''}` : 'Loading...'}
           </p>
         </div>
         <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
           <Plus className="w-4 h-4" />
-          Add Hospital
+          Add Provider
         </button>
       </div>
 
@@ -118,12 +118,12 @@ export default function ProvidersPage() {
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Stethoscope}
-            title="No hospitals yet"
-            description="Add hospital information for insurance verification calls."
+            title="No providers yet"
+            description="Add provider information for insurance verification calls."
             action={
               <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
                 <Plus className="w-4 h-4" />
-                Add Hospital
+                Add Provider
               </button>
             }
           />
@@ -185,7 +185,7 @@ export default function ProvidersPage() {
       )}
 
       {/* Add/Edit Modal */}
-      <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Hospital' : 'Add Hospital'}>
+      <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Provider' : 'Add Provider'}>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className={labelClass}>Practice Name</label>
@@ -274,7 +274,7 @@ export default function ProvidersPage() {
               disabled={saving}
               className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
             >
-              {saving ? 'Saving...' : editing ? 'Update Hospital' : 'Add Hospital'}
+              {saving ? 'Saving...' : editing ? 'Update Provider' : 'Add Provider'}
             </button>
           </div>
         </form>

@@ -442,7 +442,7 @@ function UserModal({ open, onClose, editing, insuranceContacts, providers, userG
 
                   {selectTab === 'provider' && (
                     (providers ?? []).length === 0 ? (
-                      <p className="text-xs text-muted italic">No providers in Master Data (Hospitals) yet.</p>
+                      <p className="text-xs text-muted italic">No providers in Master Data yet.</p>
                     ) : (
                       <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                         {(providers ?? []).map((p) => (

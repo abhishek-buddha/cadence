@@ -299,16 +299,17 @@ async function closeHandoffCall(ctx: any, callId: string, duration?: number): Pr
     await ctx.runMutation(internal.handoff.markHandoffEnded, { callId: call._id });
   }
 
-  // The AI/IVR transcript for Twilio-dialer calls never gets a conversation id
-  // set on the call record ahead of time (see resolveElevenLabsConversationId
-  // in callActions.ts), so it has to be resolved and fetched right here, the
-  // moment Twilio confirms the call is actually over.
-  if (!call.transcript) {
-    try {
-      await ctx.runAction(internal.callActions.backfillCallTranscript, { callId: call._id });
-    } catch (e: any) {
-      console.error('[closeHandoffCall] transcript backfill failed:', e.message);
-    }
+  // The AI/IVR transcript + recording for Twilio-dialer calls never get a
+  // conversation id set on the call record ahead of time (see
+  // resolveElevenLabsConversationId in callActions.ts), so they're resolved,
+  // fetched, and stored right here — the moment Twilio confirms the call is
+  // actually over. This is PURE STORAGE: it never runs analysis and never
+  // places a call. The human↔human leg's recording/transcript are captured
+  // separately by /twilio-recording-status and /twilio-transcription.
+  try {
+    await ctx.runAction(internal.callActions.fetchAndStoreCallArtifacts, { callId: call._id });
+  } catch (e: any) {
+    console.error('[closeHandoffCall] artifact storage failed:', e.message);
   }
 }
 
@@ -622,12 +623,37 @@ http.route({
           duration: Number.isFinite(duration) ? duration : undefined,
         });
 
-        // Request transcription of the recording (easiest path — Twilio does it
-        // and posts the text to /twilio-transcription). Best-effort; recording
-        // is already saved regardless.
         const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
         const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
         const SITE = process.env.CONVEX_SITE_URL;
+
+        // Download the human↔human conference recording bytes and store them in
+        // Convex file storage, so playback never depends on Twilio retaining
+        // the file. Best-effort — the recordingUrl is already saved as a
+        // fallback if this download fails.
+        if (ACCOUNT_SID && AUTH_TOKEN) {
+          try {
+            const mediaRes = await fetch(`${recordingUrl}.mp3`, {
+              headers: { Authorization: `Basic ${btoa(`${ACCOUNT_SID}:${AUTH_TOKEN}`)}` },
+            });
+            if (mediaRes.ok) {
+              const blob = await mediaRes.blob();
+              if (blob.size > 0) {
+                const storageId = await ctx.storage.store(blob);
+                await ctx.runMutation(api.calls.updateStatus, {
+                  id: callId as any,
+                  humanRecordingStorageId: storageId as any,
+                });
+              }
+            }
+          } catch (e: any) {
+            console.error('[recording-status] audio download/store failed (non-fatal):', e.message);
+          }
+        }
+
+        // Request transcription of the recording (easiest path — Twilio does it
+        // and posts the text to /twilio-transcription). Best-effort; recording
+        // is already saved regardless.
         if (ACCOUNT_SID && AUTH_TOKEN && recordingSid) {
           try {
             await fetch(

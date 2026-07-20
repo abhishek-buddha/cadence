@@ -231,6 +231,8 @@ function CallRow({ call }) {
   );
   const callResult = useQuery(api.callResults.getByCall, (expanded && !isDentalCall) ? { callId: call._id } : 'skip');
   const evResult = useQuery(api.evResults?.getByCall, (expanded && isDentalCall) ? { callId: call._id } : 'skip');
+  // Stored-audio playback URLs (Convex file storage) for both recording legs.
+  const recordingUrls = useQuery(api.calls.getRecordingUrls, expanded ? { callId: call._id } : 'skip');
 
   // For the table row — safe guards so undefined IDs never reach Convex
   const claimPreview = useQuery(api.claims.getById, call.claimId ? { id: call.claimId } : 'skip');
@@ -329,8 +331,10 @@ function CallRow({ call }) {
               humanHandoffCompleted={humanHandoffCompleted}
             />
 
-            {/* AI/IVR Recording — ElevenLabs' own recording of the agent↔IVR leg */}
-            {call.elevenLabsConversationId && (
+            {/* AI/IVR Recording — the ElevenLabs agent↔IVR leg, stored in our
+                own file storage (falls back to the on-demand proxy if the
+                bytes aren't stored yet). */}
+            {(recordingUrls?.aiUrl || call.elevenLabsConversationId) && (
               <div>
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
                   <Mic className="w-3 h-3" />
@@ -339,14 +343,15 @@ function CallRow({ call }) {
                 <audio
                   controls
                   preload="metadata"
-                  src={aiRecordingPlaybackUrl(call._id)}
+                  src={recordingUrls?.aiUrl || aiRecordingPlaybackUrl(call._id)}
                   className="h-9 w-full max-w-md"
                 />
               </div>
             )}
 
-            {/* Human Agent Recording — Twilio conference recording, post-handoff */}
-            {call.recordingUrl && (
+            {/* Human Agent Recording — the Twilio human↔human conference leg,
+                stored in our own file storage (falls back to the proxy). */}
+            {(recordingUrls?.humanUrl || call.recordingUrl) && (
               <div>
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
                   <Mic className="w-3 h-3" />
@@ -360,7 +365,7 @@ function CallRow({ call }) {
                 <audio
                   controls
                   preload="metadata"
-                  src={recordingPlaybackUrl(call._id)}
+                  src={recordingUrls?.humanUrl || recordingPlaybackUrl(call._id)}
                   className="h-9 w-full max-w-md"
                 />
               </div>

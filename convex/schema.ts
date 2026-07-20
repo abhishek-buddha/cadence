@@ -224,6 +224,12 @@ export default defineSchema({
     // of the conference recording). Separate from `transcript` (the AI/IVR
     // portion) so the two don't collide.
     humanTranscript: v.optional(v.string()),
+    // Downloaded audio bytes, stored in Convex file storage so playback never
+    // depends on ElevenLabs/Twilio retaining the file. Two separate legs:
+    //   aiRecordingStorageId    — the ElevenLabs agent↔IVR recording
+    //   humanRecordingStorageId — the Twilio human↔human conference recording
+    aiRecordingStorageId: v.optional(v.id('_storage')),
+    humanRecordingStorageId: v.optional(v.id('_storage')),
     userId: v.string(),
     startedAt: v.string(),
     completedAt: v.optional(v.string()),

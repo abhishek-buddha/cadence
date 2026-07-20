@@ -911,16 +911,7 @@ SPECIAL STATUSES:
     // follow-up call can never spawn another) and the atomic handoffFollowUpAt
     // claim (racing completion paths dial the number only once).
     //
-    // 2026-07-20 incident: a transcript-backfill sweep picked up a multi-day
-    // backlog of old calls and this block dialed real follow-up calls for
-    // every one of them, today, for conversations that actually happened days
-    // earlier. A backfilled transcript is never a signal to call anyone back
-    // right now — only place the follow-up if this call itself started
-    // recently (i.e. this is genuinely the live end of a call in progress).
-    const STALE_FOLLOWUP_CUTOFF_MS = 30 * 60 * 1000; // 30 minutes
-    const callIsRecent = callRow?.startedAt &&
-      Date.now() - new Date(callRow.startedAt).getTime() < STALE_FOLLOWUP_CUTOFF_MS;
-    if (!callRow?.parentCallId && callIsRecent) {
+    if (!callRow?.parentCallId) {
       const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
       if (humanAgentNumber && humanAgentNumber.trim()) {
         // Atomically claim the follow-up so concurrent completion paths can't
@@ -1040,6 +1031,13 @@ export const getCallStatus = action({
               ? Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000)
               : undefined;
 
+            // Download + store the AI/IVR recording audio bytes (pure storage —
+            // never places a call). Skip if already stored.
+            let aiRecordingStorageId: string | undefined = call.aiRecordingStorageId;
+            if (!aiRecordingStorageId) {
+              aiRecordingStorageId = (await storeElevenLabsAudio(ctx, args.conversationId)) || undefined;
+            }
+
             // Mark call completed WITH transcript and duration
             await ctx.runMutation(api.calls.updateStatus, {
               id: args.callId,
@@ -1047,6 +1045,7 @@ export const getCallStatus = action({
               completedAt: new Date().toISOString(),
               duration: elDuration || computedDuration || undefined,
               transcript: transcriptStr || undefined,
+              aiRecordingStorageId: aiRecordingStorageId as any,
             });
 
             // Trigger transcript analysis if we have transcript + claimId
@@ -1173,6 +1172,13 @@ export const endCall = action({
       }
     }
 
+    // 3b. Download + store the AI/IVR recording audio bytes (pure storage —
+    // never places a call). Skip if already stored.
+    let aiRecordingStorageId: string | undefined = call.aiRecordingStorageId;
+    if (conversationId && !aiRecordingStorageId) {
+      aiRecordingStorageId = (await storeElevenLabsAudio(ctx, conversationId)) || undefined;
+    }
+
     // 4. Mark call completed — with transcript if we got it
     const computedDuration = call.startedAt
       ? Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000)
@@ -1185,6 +1191,7 @@ export const endCall = action({
       duration: duration || computedDuration,
       transcript: transcriptStr || undefined,
       elevenLabsConversationId: conversationId || undefined,
+      aiRecordingStorageId: aiRecordingStorageId as any,
     });
 
     // 5. Trigger transcript analysis based on call type
@@ -1295,111 +1302,106 @@ function formatElevenLabsTranscript(elTranscript: any[]): string {
     .join('\n');
 }
 
-// Backfills the AI/IVR transcript onto a call that's already past status
-// tracking (typically already "completed" with no transcript) — resolves the
-// conversation id if needed, fetches the transcript from ElevenLabs, and
-// patches it in without touching status/duration that other flows already set.
-export const backfillCallTranscript = internalAction({
-  args: { callId: v.id('calls') },
-  handler: async (ctx, args): Promise<{ success: boolean; hasTranscript?: boolean; reason?: string }> => {
-    const call = await ctx.runQuery(api.calls.getById, { id: args.callId });
-    if (!call) return { success: false, reason: 'call_not_found' };
-    if (call.transcript) return { success: true, hasTranscript: true };
-
-    const conversationId = await resolveElevenLabsConversationId(ctx, call);
-    if (!conversationId) return { success: false, reason: 'no_conversation_found' };
-
-    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+// Downloads the ElevenLabs agent+IVR recording for a conversation and stores
+// the raw audio bytes in Convex file storage, returning the storage id. The
+// audio can lag a couple seconds behind the conversation ending, so retry
+// briefly. Pure storage — never places a call.
+export async function storeElevenLabsAudio(ctx: any, conversationId: string): Promise<string | null> {
+  const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+  if (!ELEVENLABS_API_KEY) return null;
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await fetch(
-        `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
-        { headers: { 'xi-api-key': ELEVENLABS_API_KEY! } }
+        `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`,
+        { headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
       );
-      if (!res.ok) return { success: false, reason: `elevenlabs_${res.status}` };
-      const data = await res.json();
-
-      const transcriptStr = formatElevenLabsTranscript(data.transcript || []);
-      const handoffDetected = extractHandoffDetected(data.transcript || []);
-
-      await ctx.runMutation(api.calls.updateStatus, {
-        id: args.callId,
-        elevenLabsConversationId: conversationId,
-        transcript: transcriptStr || undefined,
-      });
-
-      if (transcriptStr && call.claimId) {
-        try {
-          await ctx.runAction(api.callActions.analyzeTranscript, {
-            callId: args.callId,
-            claimId: call.claimId,
-            transcript: transcriptStr,
-            userId: call.userId,
-            handoffDetected,
-          });
-        } catch (e: any) {
-          console.error('[backfillCallTranscript] analysis failed:', e.message);
-        }
-      } else if (transcriptStr && call.dentalCaseId) {
-        try {
-          await ctx.runAction(api.dentalCallActions.analyzeEvTranscript, { callId: args.callId });
-        } catch (e: any) {
-          console.error('[backfillCallTranscript] dental analysis failed:', e.message);
+      if (res.ok) {
+        const blob = await res.blob();
+        if (blob.size > 0) {
+          return await ctx.storage.store(blob);
         }
       }
-
-      return { success: true, hasTranscript: !!transcriptStr };
     } catch (e: any) {
-      console.error('[backfillCallTranscript] error:', e.message);
-      return { success: false, reason: e.message };
+      console.error('[storeElevenLabsAudio] attempt failed:', e.message);
     }
-  },
-});
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
-// Safety net: transcript-saving today is otherwise driven either by a browser
-// tab actively polling getCallStatus (LiveCallMonitor, only while mounted), by
-// the /elevenlabs-webhook firing, or by the call-end webhooks in http.ts
-// calling backfillCallTranscript directly. This cron (see convex/crons.ts)
-// periodically re-checks any call — in progress or already completed — that's
-// missing a transcript and finalizes it, independent of any browser being
-// open or any single webhook firing.
+// Fetch + store the AI/IVR call artifacts (ElevenLabs agent↔IVR transcript AND
+// its recording) for a single call, right after it ends. Resolves the
+// conversation id (the Twilio dialer never captures it up front — see
+// resolveElevenLabsConversationId), fetches the transcript, downloads the
+// audio bytes into Convex storage, and patches both onto the call.
+//
+// IMPORTANT: this is PURE STORAGE. It deliberately does NOT run
+// analyzeTranscript or anything else that can place a phone call — fetching a
+// transcript must never trigger a call. The human↔human leg's transcript and
+// recording are captured separately by the Twilio callbacks in http.ts
+// (/twilio-recording-status, /twilio-transcription). No history sweeping and
+// no time gating: it runs once, for the one call that just ended.
 // ---------------------------------------------------------------------------
-export const listCallsNeedingTranscriptBackfill = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    // Skip calls younger than 60s so we don't race a call that just started.
-    const cutoff = new Date(Date.now() - 60 * 1000).toISOString();
-    const [inProgress, completed] = await Promise.all([
-      ctx.db.query('calls').withIndex('by_status', (q) => q.eq('status', 'in_progress')).collect(),
-      ctx.db.query('calls').withIndex('by_status', (q) => q.eq('status', 'completed')).collect(),
-    ]);
-    return [...inProgress, ...completed].filter(
-      (c) => !c.transcript && c.startedAt && c.startedAt < cutoff
-    );
-  },
-});
+export const fetchAndStoreCallArtifacts = internalAction({
+  args: { callId: v.id('calls'), attempt: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ success: boolean; hasTranscript?: boolean; hasAudio?: boolean; reason?: string }> => {
+    const call = await ctx.runQuery(api.calls.getById, { id: args.callId });
+    if (!call) return { success: false, reason: 'call_not_found' };
 
-export const finalizeStaleInProgressCalls = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    const staleCalls = await ctx.runQuery(internal.callActions.listCallsNeedingTranscriptBackfill, {});
-    for (const call of staleCalls) {
+    // Already fully stored — nothing to do (keeps repeated calls cheap).
+    if (call.transcript && call.aiRecordingStorageId) {
+      return { success: true, hasTranscript: true, hasAudio: true };
+    }
+
+    const conversationId = await resolveElevenLabsConversationId(ctx, call);
+    if (!conversationId) {
+      // For the Twilio dialer, ElevenLabs may not have finalized/listed its
+      // conversation yet at the instant the call ends. Retry a few times for
+      // THIS call only — never a history sweep. Bounded so it always stops.
+      const attempt = args.attempt ?? 0;
+      const MAX_ATTEMPTS = 3;
+      if (attempt < MAX_ATTEMPTS) {
+        await ctx.scheduler.runAfter(15000, internal.callActions.fetchAndStoreCallArtifacts, {
+          callId: args.callId,
+          attempt: attempt + 1,
+        });
+      }
+      return { success: false, reason: 'no_conversation_found_yet' };
+    }
+
+    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+
+    // Fetch the transcript if we don't already have it.
+    let transcriptStr = call.transcript || '';
+    if (!call.transcript && ELEVENLABS_API_KEY) {
       try {
-        if (call.status === 'in_progress') {
-          const conversationId = await resolveElevenLabsConversationId(ctx, call);
-          if (conversationId) {
-            await ctx.runAction(api.callActions.getCallStatus, {
-              conversationId,
-              callId: call._id,
-              claimId: call.claimId,
-            });
-          }
-        } else {
-          await ctx.runAction(internal.callActions.backfillCallTranscript, { callId: call._id });
+        const res = await fetch(
+          `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
+          { headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          transcriptStr = formatElevenLabsTranscript(data.transcript || []);
         }
       } catch (e: any) {
-        console.error(`[finalizeStaleInProgressCalls] failed for call ${call._id}:`, e.message);
+        console.error('[fetchAndStoreCallArtifacts] transcript fetch failed:', e.message);
       }
     }
+
+    // Download + store the AI/IVR audio bytes (skip if already stored).
+    let aiRecordingStorageId: string | undefined = call.aiRecordingStorageId;
+    if (!aiRecordingStorageId) {
+      aiRecordingStorageId = (await storeElevenLabsAudio(ctx, conversationId)) || undefined;
+    }
+
+    await ctx.runMutation(api.calls.updateStatus, {
+      id: args.callId,
+      elevenLabsConversationId: conversationId,
+      transcript: transcriptStr || undefined,
+      aiRecordingStorageId: aiRecordingStorageId as any,
+    });
+
+    return { success: true, hasTranscript: !!transcriptStr, hasAudio: !!aiRecordingStorageId };
   },
 });

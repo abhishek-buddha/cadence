@@ -70,7 +70,7 @@ function ClaimRoutingNotch({ onClick }) {
       type="button"
       onClick={onClick}
       title="Claim User Routing"
-      className="fixed right-0 top-20 z-10 flex items-center justify-center w-9 h-9 bg-white border border-accent/20 text-accent rounded-l-lg shadow-lg shadow-gray-200/50 hover:bg-accent/5 transition-colors duration-150"
+      className="fixed right-0 top-20 z-10 flex items-center justify-center w-9 h-9 bg-accent/10 border border-accent/20 text-accent rounded-l-lg shadow-lg shadow-gray-200/50 hover:bg-white transition-colors duration-150"
     >
       <Route className="w-4 h-4" />
     </button>
@@ -105,7 +105,7 @@ export default function Layout({ onLogout }) {
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto grid-bg">
-          <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+          <div className="p-6 lg:p-8">
             <Outlet />
           </div>
         </main>

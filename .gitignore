@@ -27,10 +27,10 @@ tests/test-results/
 playwright-report/
 test-results/
 
-# Local data artifacts (generated Excel sheets, not source)
-Claims_Upload_IVR_Test.xlsx
-Claims_Upload_Test_Payers.xlsx
-Insurance_Payer_Directory.xlsx
+# Local data artifacts (generated Excel sheets / snapshots, not source)
+*.xlsx
+*.xls
+dev-snapshot.zip
 
 # Editor directories and files
 .vscode/*

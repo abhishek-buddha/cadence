@@ -4,9 +4,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ['Outfit', 'sans-serif'],
-        body: ['Outfit', 'sans-serif'],
-        data: ['JetBrains Mono', 'monospace'],
+        display: ['Roboto', 'sans-serif'],
+        body: ['Roboto', 'sans-serif'],
+        data: ['Roboto Mono', 'monospace'],
       },
       colors: {
         surface: '#f0f4f8',
@@ -14,10 +14,10 @@ export default {
         'panel-light': '#f1f5f9',
         border: '#e2e8f0',
         'border-light': '#cbd5e1',
-        accent: '#2563eb',
-        'accent-hover': '#1d4ed8',
-        'accent-dim': '#dbeafe',
-        cyan: '#0891b2',
+        accent: '#6366f1',
+        'accent-hover': '#4f46e5',
+        'accent-dim': '#e0e7ff',
+        cyan: '#7c3aed',
         success: '#059669',
         'success-dim': '#d1fae5',
         warn: '#d97706',

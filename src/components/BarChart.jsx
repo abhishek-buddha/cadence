@@ -94,7 +94,7 @@ export default function BarChart({
           const barHeight = (d.value / niceMax) * chartHeight;
           const x = padding.left + i * (barWidth + barGap);
           const y = padding.top + chartHeight - barHeight;
-          const fill = d.color || '#2563eb';
+          const fill = d.color || '#6366f1';
           const isHover = hoverIdx === i;
           return (
             <g

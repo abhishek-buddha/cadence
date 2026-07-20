@@ -80,7 +80,7 @@ export default function ClaimUserRoutingDrawer({ open, onClose }) {
         className="fixed inset-0 bg-black/20 z-40 animate-fade-in"
         onClick={onClose}
       />
-      <div className="fixed inset-y-0 left-0 w-1/2 min-w-[420px] bg-white shadow-2xl z-50 flex flex-col animate-fade-in">
+      <div className="fixed inset-y-0 left-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col animate-fade-in">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div>
             <h2 className="font-display font-bold text-lg text-gray-900">Claim User Routing</h2>

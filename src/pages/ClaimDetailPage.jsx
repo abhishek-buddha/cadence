@@ -23,6 +23,7 @@ import {
   Info,
   Eye,
   EyeOff,
+  Mic,
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
@@ -144,10 +145,36 @@ function ConfidenceBar({ value }) {
 }
 
 // ---------------------------------------------------------------------------
+// Recording playback URL helpers (proxy fallback when audio bytes aren't
+// stored in Convex file storage yet — e.g. older calls).
+// ---------------------------------------------------------------------------
+function convexSiteUrl() {
+  const explicit = import.meta.env.VITE_CONVEX_SITE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const cloud = import.meta.env.VITE_CONVEX_URL || '';
+  return cloud.replace('.convex.cloud', '.convex.site').replace(/\/$/, '');
+}
+function aiRecordingProxyUrl(callId) {
+  return `${convexSiteUrl()}/elevenlabs-recording-media?callId=${encodeURIComponent(callId)}`;
+}
+function humanRecordingProxyUrl(callId) {
+  return `${convexSiteUrl()}/twilio-recording-media?callId=${encodeURIComponent(callId)}`;
+}
+
+// ---------------------------------------------------------------------------
 // Call history timeline entry
 // ---------------------------------------------------------------------------
 function CallTimelineEntry({ call }) {
   const [expanded, setExpanded] = useState(false);
+  // Stored-audio playback URLs (Convex file storage) for both recording legs.
+  const recordingUrls = useQuery(api.calls.getRecordingUrls, expanded ? { callId: call._id } : 'skip');
+  // Any artifact worth expanding for.
+  const hasArtifacts = !!(
+    call.transcript ||
+    call.humanTranscript ||
+    call.recordingUrl ||
+    call.elevenLabsConversationId
+  );
 
   const startDate = call.startedAt ? new Date(call.startedAt) : null;
   const formattedDate = startDate
@@ -189,7 +216,7 @@ function CallTimelineEntry({ call }) {
               {durationStr}
             </span>
           </div>
-          {call.transcript ? (
+          {hasArtifacts ? (
             expanded ? (
               <ChevronUp className="w-4 h-4 text-muted shrink-0" />
             ) : (
@@ -198,12 +225,61 @@ function CallTimelineEntry({ call }) {
           ) : null}
         </button>
 
-        {expanded && call.transcript && (
-          <div className="border-t border-border px-4 py-3">
-            <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2">Transcript</p>
-            <pre className="text-xs text-gray-600 font-data whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed bg-surface rounded-lg p-3 border border-border">
-              {call.transcript}
-            </pre>
+        {expanded && hasArtifacts && (
+          <div className="border-t border-border px-4 py-3 space-y-4">
+            {/* AI/IVR Recording — the ElevenLabs agent↔IVR leg */}
+            {(recordingUrls?.aiUrl || call.elevenLabsConversationId) && (
+              <div>
+                <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5">
+                  <Mic className="w-3 h-3" /> AI/IVR Recording
+                </p>
+                <audio
+                  controls
+                  preload="metadata"
+                  src={recordingUrls?.aiUrl || aiRecordingProxyUrl(call._id)}
+                  className="h-9 w-full max-w-md"
+                />
+              </div>
+            )}
+
+            {/* Human Agent Recording — the Twilio human↔human conference leg */}
+            {(recordingUrls?.humanUrl || call.recordingUrl) && (
+              <div>
+                <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5">
+                  <Mic className="w-3 h-3" /> Human Agent Recording
+                </p>
+                <audio
+                  controls
+                  preload="metadata"
+                  src={recordingUrls?.humanUrl || humanRecordingProxyUrl(call._id)}
+                  className="h-9 w-full max-w-md"
+                />
+              </div>
+            )}
+
+            {/* AI/IVR Transcript */}
+            {call.transcript && (
+              <div>
+                <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5">
+                  <FileText className="w-3 h-3" /> AI/IVR Transcript
+                </p>
+                <pre className="text-xs text-gray-600 font-data whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed bg-surface rounded-lg p-3 border border-border">
+                  {call.transcript}
+                </pre>
+              </div>
+            )}
+
+            {/* Human Agent Transcript — Twilio transcription of the conference */}
+            {call.humanTranscript && (
+              <div>
+                <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5">
+                  <FileText className="w-3 h-3" /> Human Agent Transcript
+                </p>
+                <pre className="text-xs text-gray-600 font-data whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed bg-surface rounded-lg p-3 border border-border">
+                  {call.humanTranscript}
+                </pre>
+              </div>
+            )}
           </div>
         )}
 

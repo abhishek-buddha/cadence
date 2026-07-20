@@ -14,6 +14,9 @@ import LiveCallsPage from './pages/LiveCallsPage';
 import SettingsPage from './pages/SettingsPage';
 import AccessCodePage from './pages/AccessCodePage';
 import LoginSelectPage from './pages/LoginSelectPage';
+import OperatorLayout from './components/OperatorLayout';
+import OperatorQueuePage from './pages/OperatorQueuePage';
+import OperatorDashboardPage from './pages/OperatorDashboardPage';
 import EligibilityPage from './pages/EligibilityPage';
 import EvCaseDetailPage from './pages/EvCaseDetailPage';
 import SessionsPage from './pages/SessionsPage';
@@ -81,6 +84,30 @@ export default function App() {
               <Route path="*" element={<AccessCodePage onSuccess={handleAccessGranted} />} />
             ) : !currentUser ? (
               <Route path="*" element={<LoginSelectPage onSuccess={handleLogin} />} />
+            ) : currentUser.role === 'operator' ? (
+              <>
+                <Route path="/" element={<OperatorLayout onLogout={handleLogout} />}>
+                  <Route index element={<OperatorQueuePage />} />
+                  <Route path="dashboard" element={<OperatorDashboardPage />} />
+                  <Route path="appointments" element={<AppointmentsPage />} />
+                  <Route path="appointments/scheduling/:id" element={<AppointmentSchedulingDetailPage />} />
+                  <Route path="appointments/reminder/:id" element={<AppointmentReminderDetailPage />} />
+                  <Route path="benefit-verification" element={<BenefitVerificationPage />} />
+                  <Route path="benefit-verification/:id" element={<BenefitVerificationDetailPage />} />
+                  <Route path="eligibility-verification" element={<EligibilityVerificationPage />} />
+                  <Route path="eligibility-verification/:id" element={<EligibilityVerificationDetailPage />} />
+                  <Route path="prior-authorization" element={<PriorAuthorizationPage />} />
+                  <Route path="prior-authorization/:id" element={<PriorAuthorizationDetailPage />} />
+                  <Route path="claims" element={<ClaimsPage />} />
+                  <Route path="claims/:id" element={<ClaimDetailPage />} />
+                  <Route path="patient-balance-reminder" element={<PatientBalanceReminderPage />} />
+                  <Route path="patient-balance-reminder/:id" element={<PatientBalanceReminderDetailPage />} />
+                  <Route path="inbound-billing" element={<InboundBillingPage />} />
+                  <Route path="inbound-billing/:id" element={<InboundBillingDetailPage />} />
+                  <Route path="claim-routing" element={<ClaimUserRoutingPage />} />
+                </Route>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </>
             ) : (
               <>
                 <Route path="/" element={<Layout onLogout={handleLogout} />}>

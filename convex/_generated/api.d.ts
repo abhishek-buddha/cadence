@@ -29,6 +29,7 @@ import type * as handoff from "../handoff.js";
 import type * as http from "../http.js";
 import type * as insuranceContacts from "../insuranceContacts.js";
 import type * as lib_specializations from "../lib/specializations.js";
+import type * as operatorStats from "../operatorStats.js";
 import type * as outcomeClassifier from "../outcomeClassifier.js";
 import type * as patients from "../patients.js";
 import type * as prompts_dentalEv from "../prompts/dentalEv.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   insuranceContacts: typeof insuranceContacts;
   "lib/specializations": typeof lib_specializations;
+  operatorStats: typeof operatorStats;
   outcomeClassifier: typeof outcomeClassifier;
   patients: typeof patients;
   "prompts/dentalEv": typeof prompts_dentalEv;

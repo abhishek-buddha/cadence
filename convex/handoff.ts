@@ -235,6 +235,41 @@ export const getHandoff = query({
   },
 });
 
+// One operator's own routing status — mirrors the per-user body of
+// users.ts's listRoutingAgents (same by_assignedAgentUserId + isRoutingCallActive
+// pattern) but for a single user, so the operator's own queue screen doesn't
+// need to pull every agent's data to render one person's status. No real
+// backend auth exists in this app (ctx.auth.getUserIdentity() is always
+// null), so the caller passes their own userId explicitly.
+export const getMyRoutingStatus = query({
+  args: { userId: v.id('users') },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return null;
+
+    const assignedCalls = await ctx.db
+      .query('calls')
+      .withIndex('by_assignedAgentUserId', (q) => q.eq('assignedAgentUserId', args.userId))
+      .order('desc')
+      .collect();
+
+    const activeCall = assignedCalls.find(isRoutingCallActive) || null;
+    const enrichedActiveCall = activeCall ? await enrichCall(ctx, activeCall) : null;
+    const availability =
+      activeCall?.handoffState === 'awaiting_human'
+        ? 'assigned'
+        : activeCall
+          ? 'in_call'
+          : 'available';
+
+    return {
+      user,
+      availability,
+      activeCall: enrichedActiveCall,
+    };
+  },
+});
+
 // Resolve a parked call from the numeric handoff token carried in the
 // transfer's post-dial digits. Falls back to the most-recent awaiting call when
 // no token is supplied (single-active-handoff demo fallback — see spec).

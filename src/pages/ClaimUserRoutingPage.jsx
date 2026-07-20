@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import HandoffContextCard from '../components/HandoffContextCard';
 import { useSoftphone } from '../hooks/useSoftphone';
-import { SPECIALIZATION_LABELS } from './UsersPage';
+import { SPECIALIZATION_LABELS } from '../constants/specializations';
 
 const ROLE_LABELS = {
   admin: 'Admin',
@@ -123,6 +123,7 @@ function SoftphonePanel({ softphone }) {
 export default function ClaimUserRoutingPage({ standalone = false }) {
   const users = useQuery(api.users?.listRoutingAgents);
   const insuranceContacts = useQuery(api.insuranceContacts.list);
+  const userGroups = useQuery(api.userGroups.list);
   const acceptHandoff = useMutation(api.handoff.acceptHandoff);
   const redirectPayer = useAction(api.handoff.redirectPayerToConference);
   const markConnected = useMutation(api.handoff.markConnectedFromClient);
@@ -140,6 +141,17 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
   const activeUsers = users ?? [];
   const insuranceMap = {};
   (insuranceContacts ?? []).forEach((c) => { insuranceMap[c._id] = c.name; });
+  const groupMap = {};
+  (userGroups ?? []).forEach((g) => { groupMap[g._id] = g; });
+
+  // A user assigned to a group has their Payer/Specialization scope resolved
+  // from the group instead of their own (mutually exclusive) fields.
+  function resolvedInsuranceIds(user) {
+    return user.userGroupId ? (groupMap[user.userGroupId]?.insuranceContactIds ?? []) : (user.insuranceContactIds ?? []);
+  }
+  function resolvedSpecializations(user) {
+    return user.userGroupId ? (groupMap[user.userGroupId]?.specializations ?? []) : (user.specializations ?? []);
+  }
 
   function toggleExpanded(userId) {
     setExpandedRows((prev) => {
@@ -247,8 +259,8 @@ export default function ClaimUserRoutingPage({ standalone = false }) {
               </tr>
             ) : (
               activeUsers.map((user) => {
-                const insuranceNames = (user.insuranceContactIds ?? []).map((id) => insuranceMap[id]).filter(Boolean);
-                const specLabels = (user.specializations ?? []).map((s) => SPECIALIZATION_LABELS[s] ?? s);
+                const insuranceNames = resolvedInsuranceIds(user).map((id) => insuranceMap[id]).filter(Boolean);
+                const specLabels = resolvedSpecializations(user).map((s) => SPECIALIZATION_LABELS[s] ?? s);
                 const canAccept = user.availability === 'assigned' && user.activeCall;
                 const isAccepting = acceptingId === user._id;
                 const hasCallDetails = Boolean(user.activeCall);

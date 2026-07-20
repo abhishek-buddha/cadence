@@ -1,9 +1,9 @@
 import { mutation, query, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
+import { VALID_SPECIALIZATIONS } from './lib/specializations';
 
 const VALID_ROLES = ['admin', 'operator'];
 const VALID_STATUSES = ['active', 'disabled'];
-const VALID_SPECIALIZATIONS = ['claim_status', 'denial_claim', 'claim_eligibility_check'];
 
 function validateSpecializations(specializations?: string[]) {
   for (const s of specializations ?? []) {
@@ -197,6 +197,7 @@ export const create = mutation({
     providerIds: v.optional(v.array(v.id('providers'))),
     specializations: v.optional(v.array(v.string())),
     teamLeadName: v.optional(v.string()),
+    userGroupId: v.optional(v.union(v.id('userGroups'), v.null())),
   },
   handler: async (ctx, args) => {
     if (!VALID_ROLES.includes(args.role)) {
@@ -224,6 +225,7 @@ export const create = mutation({
       providerIds: args.providerIds,
       specializations: args.specializations,
       teamLeadName: args.teamLeadName,
+      userGroupId: args.userGroupId ?? undefined,
       createdAt: new Date().toISOString(),
     });
   },
@@ -265,16 +267,22 @@ export const updateRoutingProfile = mutation({
     providerIds: v.optional(v.array(v.id('providers'))),
     specializations: v.optional(v.array(v.string())),
     teamLeadName: v.optional(v.string()),
+    // v.null() lets the client explicitly clear an assigned group (switching
+    // back to "Custom" mode) — omitting the field entirely leaves it untouched.
+    userGroupId: v.optional(v.union(v.id('userGroups'), v.null())),
   },
   handler: async (ctx, args) => {
-    const { id, ...patch } = args;
-    if (patch.role !== undefined && !VALID_ROLES.includes(patch.role)) {
-      throw new Error(`Invalid role: ${patch.role}`);
+    const { id, userGroupId, ...rest } = args;
+    if (rest.role !== undefined && !VALID_ROLES.includes(rest.role)) {
+      throw new Error(`Invalid role: ${rest.role}`);
     }
-    validateSpecializations(patch.specializations);
+    validateSpecializations(rest.specializations);
     const filtered = Object.fromEntries(
-      Object.entries(patch).filter(([, value]) => value !== undefined)
+      Object.entries(rest).filter(([, value]) => value !== undefined)
     );
+    if (userGroupId !== undefined) {
+      filtered.userGroupId = userGroupId === null ? undefined : userGroupId;
+    }
     await ctx.db.patch(id, filtered);
   },
 });

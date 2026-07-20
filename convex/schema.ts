@@ -339,10 +339,28 @@ export default defineSchema({
     providerIds: v.optional(v.array(v.id('providers'))),
     specializations: v.optional(v.array(v.string())), // "claim_status" | "denial_claim" | "claim_eligibility_check"
     teamLeadName: v.optional(v.string()),
+    // When set, this user's payer/provider/specialization routing scope comes
+    // from the referenced userGroups row instead of the fields above (mutually
+    // exclusive "assign via group" vs "custom" — enforced in the UI, not here).
+    userGroupId: v.optional(v.id('userGroups')),
     createdAt: v.string(),
   })
     .index('by_email', ['email'])
-    .index('by_role', ['role']),
+    .index('by_role', ['role'])
+    .index('by_userGroupId', ['userGroupId']),
+
+  // Reusable Payer/Provider/Specialization bundles for User Management. A
+  // group's members are derived by reverse-querying `users.by_userGroupId`
+  // rather than storing a member array here, to avoid a dual-source-of-truth.
+  userGroups: defineTable({
+    name: v.string(),
+    insuranceContactIds: v.optional(v.array(v.id('insuranceContacts'))),
+    providerIds: v.optional(v.array(v.id('providers'))),
+    specializations: v.optional(v.array(v.string())),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index('by_name', ['name']),
 
   // Audit log (RFP HIPAA-aligned requirement)
   auditEvents: defineTable({

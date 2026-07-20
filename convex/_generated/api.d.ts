@@ -28,6 +28,7 @@ import type * as evResults from "../evResults.js";
 import type * as handoff from "../handoff.js";
 import type * as http from "../http.js";
 import type * as insuranceContacts from "../insuranceContacts.js";
+import type * as lib_specializations from "../lib/specializations.js";
 import type * as outcomeClassifier from "../outcomeClassifier.js";
 import type * as patients from "../patients.js";
 import type * as prompts_dentalEv from "../prompts/dentalEv.js";
@@ -42,6 +43,7 @@ import type * as providers from "../providers.js";
 import type * as reports from "../reports.js";
 import type * as seedProdMirror from "../seedProdMirror.js";
 import type * as transferDestinations from "../transferDestinations.js";
+import type * as userGroups from "../userGroups.js";
 import type * as users from "../users.js";
 import type * as webhooks from "../webhooks.js";
 
@@ -72,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   handoff: typeof handoff;
   http: typeof http;
   insuranceContacts: typeof insuranceContacts;
+  "lib/specializations": typeof lib_specializations;
   outcomeClassifier: typeof outcomeClassifier;
   patients: typeof patients;
   "prompts/dentalEv": typeof prompts_dentalEv;
@@ -86,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   reports: typeof reports;
   seedProdMirror: typeof seedProdMirror;
   transferDestinations: typeof transferDestinations;
+  userGroups: typeof userGroups;
   users: typeof users;
   webhooks: typeof webhooks;
 }>;

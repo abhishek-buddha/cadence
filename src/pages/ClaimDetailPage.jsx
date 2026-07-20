@@ -493,7 +493,6 @@ export default function ClaimDetailPage() {
           <div className="divide-y divide-border/50">
             <InfoRow label="Company" value={insurance?.name} />
             <InfoRow label="Phone" value={insurance?.phone} mono />
-            <InfoRow label="Department" value={insurance?.department} />
           </div>
         </DetailCard>
 

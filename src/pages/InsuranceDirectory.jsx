@@ -39,6 +39,22 @@ const PAYER_KIND_OPTIONS = [
 
 const WAIT_SECONDS_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
+// Voice AI agent config — not wired to any call behavior yet, just stored for
+// now until the agent-side functionality is built.
+const VOICE_TONE_OPTIONS = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+];
+
+const VOICE_MODULATION_OPTIONS = [
+  { value: 'us_neutral', label: 'US English - Neutral' },
+  { value: 'us_east_coast', label: 'US English - East Coast' },
+  { value: 'us_west_coast', label: 'US English - West Coast' },
+  { value: 'us_southern', label: 'US English - Southern' },
+  { value: 'canadian_english', label: 'Canadian English' },
+  { value: 'vietnamese_english', label: 'Vietnamese English' },
+];
+
 const EMPTY_FORM = {
   name: '',
   phone: '',
@@ -55,6 +71,8 @@ const EMPTY_FORM = {
   voiceIvrEnabled: false,
   voiceIvrPhrases: [],
   ivrVerifiedAt: null,
+  voiceTone: '',
+  voiceModulation: '',
 };
 
 function stepsToSequence(steps) {
@@ -111,6 +129,8 @@ export default function InsuranceDirectory() {
       voiceIvrEnabled: contact.voiceIvrEnabled ?? false,
       voiceIvrPhrases: contact.voiceIvrPhrases ?? [],
       ivrVerifiedAt: contact.ivrVerifiedAt ?? null,
+      voiceTone: contact.voiceTone ?? '',
+      voiceModulation: contact.voiceModulation ?? '',
     });
     originalIvrKeyRef.current = ivrConfigKey(contact.ivrInstructions, contact.ivrSteps, contact.voiceIvrPhrases);
     // Start the transcript box empty — the playbook may already be filled (e.g.
@@ -237,6 +257,8 @@ export default function InsuranceDirectory() {
         voiceIvrEnabled: form.voiceIvrEnabled,
         voiceIvrPhrases: cleanPhrases.length ? cleanPhrases : undefined,
         ivrSourceTranscript: transcriptInput.trim() || undefined,
+        voiceTone: form.voiceTone || undefined,
+        voiceModulation: form.voiceModulation || undefined,
       };
 
       if (editing) {
@@ -458,6 +480,35 @@ export default function InsuranceDirectory() {
                   {opt.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Voice Tone</label>
+              <select
+                value={form.voiceTone}
+                onChange={(e) => setField('voiceTone', e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Select...</option>
+                {VOICE_TONE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Voice Modulation</label>
+              <select
+                value={form.voiceModulation}
+                onChange={(e) => setField('voiceModulation', e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Select...</option>
+                {VOICE_MODULATION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 

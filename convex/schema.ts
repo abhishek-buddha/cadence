@@ -51,6 +51,10 @@ export default defineSchema({
     // when any of those fields are edited, since an edit invalidates the prior
     // confirmation until it's re-checked against the real call.
     ivrVerifiedAt: v.optional(v.string()),
+    // Voice AI agent config — not yet wired to any call behavior, just stored
+    // for now until the agent-side functionality is built.
+    voiceTone: v.optional(v.string()), // "male" | "female"
+    voiceModulation: v.optional(v.string()), // e.g. "us_neutral" | "us_east_coast" | ...
     userId: v.string(),
     createdAt: v.string(),
     updatedAt: v.string(),

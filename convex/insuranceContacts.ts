@@ -83,6 +83,8 @@ export const create = mutation({
     payerKind: v.optional(v.string()),
     ivrVerifiedAt: v.optional(v.string()),
     ivrSourceTranscript: v.optional(v.string()),
+    voiceTone: v.optional(v.string()),
+    voiceModulation: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -242,6 +244,8 @@ export const update = mutation({
     payerKind: v.optional(v.string()),
     ivrVerifiedAt: v.optional(v.string()),
     ivrSourceTranscript: v.optional(v.string()),
+    voiceTone: v.optional(v.string()),
+    voiceModulation: v.optional(v.string()),
     // When true, clears ivrVerifiedAt even though the field itself is
     // otherwise omitted (omitted = "leave alone" for every other field here).
     // Set by the frontend when ivrInstructions/ivrSteps/voiceIvrPhrases changed,

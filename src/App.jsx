@@ -13,6 +13,7 @@ import CallHistory from './pages/CallHistory';
 import LiveCallsPage from './pages/LiveCallsPage';
 import SettingsPage from './pages/SettingsPage';
 import AccessCodePage from './pages/AccessCodePage';
+import LoginSelectPage from './pages/LoginSelectPage';
 import EligibilityPage from './pages/EligibilityPage';
 import EvCaseDetailPage from './pages/EvCaseDetailPage';
 import SessionsPage from './pages/SessionsPage';
@@ -39,26 +40,50 @@ import PatientBalanceReminderDetailPage from './pages/PatientBalanceReminderDeta
 import InboundBillingPage from './pages/InboundBillingPage';
 import InboundBillingDetailPage from './pages/InboundBillingDetailPage';
 
+function loadStoredUser() {
+  try {
+    const raw = sessionStorage.getItem('cadence_current_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [authenticated, setAuthenticated] = useState(
     () => sessionStorage.getItem('cadence_auth') === '1'
   );
+  const [currentUser, setCurrentUser] = useState(loadStoredUser);
 
   function handleAccessGranted() {
     sessionStorage.setItem('cadence_auth', '1');
     setAuthenticated(true);
   }
 
+  function handleLogin(user) {
+    sessionStorage.setItem('cadence_current_user', JSON.stringify(user));
+    setCurrentUser(user);
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem('cadence_auth');
+    sessionStorage.removeItem('cadence_current_user');
+    setCurrentUser(null);
+    setAuthenticated(false);
+  }
+
   return (
-    <AuthProvider>
+    <AuthProvider value={currentUser ?? undefined}>
       <BrowserRouter>
         <ProviderFilterProvider>
           <Routes>
             {!authenticated ? (
               <Route path="*" element={<AccessCodePage onSuccess={handleAccessGranted} />} />
+            ) : !currentUser ? (
+              <Route path="*" element={<LoginSelectPage onSuccess={handleLogin} />} />
             ) : (
               <>
-                <Route path="/" element={<Layout />}>
+                <Route path="/" element={<Layout onLogout={handleLogout} />}>
                   <Route index element={<Dashboard />} />
                   <Route path="claims" element={<ClaimsPage />} />
                   <Route path="claims/:id" element={<ClaimDetailPage />} />

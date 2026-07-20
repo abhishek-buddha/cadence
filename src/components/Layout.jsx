@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import HandoffNotifier from './HandoffNotifier';
-import { Database, UserCog } from 'lucide-react';
+import { Database, UserCog, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 function HeaderIconLink({ to, icon: Icon, label }) {
   return (
@@ -22,7 +23,43 @@ function HeaderIconLink({ to, icon: Icon, label }) {
   );
 }
 
-export default function Layout() {
+const ROLE_LABELS = { admin: 'Admin', operator: 'Operator' };
+
+function getInitials(emailOrName) {
+  if (!emailOrName) return '?';
+  const trimmed = emailOrName.trim();
+  if (trimmed.includes(' ')) {
+    const parts = trimmed.split(' ').filter(Boolean);
+    return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+  }
+  return trimmed.slice(0, 2).toUpperCase();
+}
+
+function UserMenu({ onLogout }) {
+  const auth = useAuth();
+  const label = auth?.name || auth?.email || 'Signed in';
+
+  return (
+    <div className="flex items-center gap-2.5 pl-3 ml-1 border-l border-border">
+      <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-xs font-display font-semibold text-accent shrink-0">
+        {getInitials(label)}
+      </div>
+      <div className="hidden sm:block leading-tight">
+        <p className="text-sm font-medium text-gray-900">{label}</p>
+        <p className="text-[11px] uppercase tracking-wider text-muted">{ROLE_LABELS[auth?.role] ?? auth?.role ?? '--'}</p>
+      </div>
+      <button
+        onClick={onLogout}
+        title="Log out"
+        className="p-2 rounded-lg text-muted hover:text-danger hover:bg-danger/5 transition-colors"
+      >
+        <LogOut className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+export default function Layout({ onLogout }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebarCollapsed') === 'true'; } catch { return false; }
   });
@@ -43,6 +80,7 @@ export default function Layout() {
         <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-3 relative z-20">
           <HeaderIconLink to="/users" icon={UserCog} label="User Management" />
           <HeaderIconLink to="/master-data" icon={Database} label="Master Data" />
+          <UserMenu onLogout={onLogout} />
         </header>
 
         {/* Main content */}

@@ -25,8 +25,13 @@ export function useAuth() {
 
 /**
  * Role hierarchy check. admin ⊇ manager ⊇ viewer
+ *
+ * Temporarily always true: now that logins pick a real user + role, every
+ * role sees every screen until per-role screen restrictions are actually
+ * designed and built. Restore the real comparison below when that happens.
  */
-export function hasRole(role, minimum) {
-  const order = { viewer: 0, manager: 1, admin: 2 };
-  return (order[role] ?? -1) >= (order[minimum] ?? 0);
+export function hasRole(_role, _minimum) {
+  return true;
+  // const order = { viewer: 0, manager: 1, admin: 2 };
+  // return (order[role] ?? -1) >= (order[minimum] ?? 0);
 }

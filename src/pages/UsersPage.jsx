@@ -161,18 +161,26 @@ const EMPTY_FORM = {
   name: '',
   role: 'operator',
   insuranceContactIds: [],
+  providerIds: [],
   specializations: [],
   teamLeadName: '',
 };
 
-function UserModal({ open, onClose, editing, insuranceContacts, createUser, updateUser }) {
+const SELECT_TABS = [
+  { key: 'payer', label: 'Payer' },
+  { key: 'provider', label: 'Provider' },
+];
+
+function UserModal({ open, onClose, editing, insuranceContacts, providers, createUser, updateUser }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [selectTab, setSelectTab] = useState('payer');
 
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setSelectTab('payer');
     setForm(
       editing
         ? {
@@ -180,6 +188,7 @@ function UserModal({ open, onClose, editing, insuranceContacts, createUser, upda
             name: editing.name ?? '',
             role: editing.role,
             insuranceContactIds: editing.insuranceContactIds ?? [],
+            providerIds: editing.providerIds ?? [],
             specializations: editing.specializations ?? [],
             teamLeadName: editing.teamLeadName ?? '',
           }
@@ -197,6 +206,15 @@ function UserModal({ open, onClose, editing, insuranceContacts, createUser, upda
       insuranceContactIds: prev.insuranceContactIds.includes(id)
         ? prev.insuranceContactIds.filter((i) => i !== id)
         : [...prev.insuranceContactIds, id],
+    }));
+  }
+
+  function toggleProvider(id) {
+    setForm((prev) => ({
+      ...prev,
+      providerIds: prev.providerIds.includes(id)
+        ? prev.providerIds.filter((i) => i !== id)
+        : [...prev.providerIds, id],
     }));
   }
 
@@ -222,6 +240,7 @@ function UserModal({ open, onClose, editing, insuranceContacts, createUser, upda
         name: form.name.trim() || undefined,
         role: form.role,
         insuranceContactIds: form.insuranceContactIds,
+        providerIds: form.providerIds,
         specializations: form.specializations,
         teamLeadName: form.teamLeadName.trim() || undefined,
       };
@@ -321,31 +340,88 @@ function UserModal({ open, onClose, editing, insuranceContacts, createUser, upda
         </div>
 
         <div>
-          <label className={LABEL_CLASS}>Insurance companies this user can handle</label>
-          {(insuranceContacts ?? []).length === 0 ? (
-            <p className="text-xs text-muted italic">No insurance companies in Master Data yet.</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-              {(insuranceContacts ?? []).map((c) => (
-                <label
-                  key={c._id}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                    form.insuranceContactIds.includes(c._id)
-                      ? 'border-accent bg-accent/5'
-                      : 'border-border hover:border-accent/40 bg-white'
+          <label className={LABEL_CLASS}>Payer / Provider this user can handle</label>
+          <div className="border border-border rounded-lg overflow-hidden">
+            <div className="flex items-center gap-1 border-b border-border bg-surface px-2">
+              {SELECT_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setSelectTab(tab.key)}
+                  className={`relative px-3 py-2 text-xs font-medium transition-colors ${
+                    selectTab === tab.key ? 'text-accent' : 'text-gray-500 hover:text-gray-800'
                   }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={form.insuranceContactIds.includes(c._id)}
-                    onChange={() => toggleInsurance(c._id)}
-                    className="rounded border-border-light text-accent focus:ring-accent"
-                  />
-                  <span className="text-sm text-gray-700 truncate">{c.name}</span>
-                </label>
+                  {tab.label}
+                  {tab.key === 'payer' && form.insuranceContactIds.length > 0 && (
+                    <span className="ml-1.5 text-[10px] text-muted">({form.insuranceContactIds.length})</span>
+                  )}
+                  {tab.key === 'provider' && form.providerIds.length > 0 && (
+                    <span className="ml-1.5 text-[10px] text-muted">({form.providerIds.length})</span>
+                  )}
+                  {selectTab === tab.key && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
+                  )}
+                </button>
               ))}
             </div>
-          )}
+
+            <div className="p-3">
+              {selectTab === 'payer' && (
+                (insuranceContacts ?? []).length === 0 ? (
+                  <p className="text-xs text-muted italic">No payers in Master Data yet.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {(insuranceContacts ?? []).map((c) => (
+                      <label
+                        key={c._id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                          form.insuranceContactIds.includes(c._id)
+                            ? 'border-accent bg-accent/5'
+                            : 'border-border hover:border-accent/40 bg-white'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.insuranceContactIds.includes(c._id)}
+                          onChange={() => toggleInsurance(c._id)}
+                          className="rounded border-border-light text-accent focus:ring-accent"
+                        />
+                        <span className="text-sm text-gray-700 truncate">{c.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )
+              )}
+
+              {selectTab === 'provider' && (
+                (providers ?? []).length === 0 ? (
+                  <p className="text-xs text-muted italic">No providers in Master Data (Hospitals) yet.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {(providers ?? []).map((p) => (
+                      <label
+                        key={p._id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                          form.providerIds.includes(p._id)
+                            ? 'border-accent bg-accent/5'
+                            : 'border-border hover:border-accent/40 bg-white'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.providerIds.includes(p._id)}
+                          onChange={() => toggleProvider(p._id)}
+                          className="rounded border-border-light text-accent focus:ring-accent"
+                        />
+                        <span className="text-sm text-gray-700 truncate">{p.practiceName}</span>
+                      </label>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
         </div>
 
         <div>
@@ -417,6 +493,7 @@ export default function UsersPage() {
 function UsersPageContent({ currentEmail }) {
   const users = useQuery(api.users?.list);
   const insuranceContacts = useQuery(api.insuranceContacts.list);
+  const providers = useQuery(api.providers.list);
   const updateRole = useMutation(api.users?.updateRole);
   const setStatus = useMutation(api.users?.setStatus);
   const createUser = useMutation(api.users?.create);
@@ -427,6 +504,8 @@ function UsersPageContent({ currentEmail }) {
   const isLoading = users === undefined;
   const insuranceMap = {};
   (insuranceContacts ?? []).forEach((c) => { insuranceMap[c._id] = c.name; });
+  const providerMap = {};
+  (providers ?? []).forEach((p) => { providerMap[p._id] = p.practiceName; });
 
   function openCreate() {
     setEditing(null);
@@ -472,7 +551,8 @@ function UsersPageContent({ currentEmail }) {
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Email</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Name</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Role</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Insurance</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Payer</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Provider</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Specialization</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Team Lead</th>
               <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Active</th>
@@ -484,7 +564,7 @@ function UsersPageContent({ currentEmail }) {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 10 }).map((_, j) => (
+                  {Array.from({ length: 11 }).map((_, j) => (
                     <td key={j} className="px-4 py-3.5">
                       <div className="shimmer rounded h-4 w-full" />
                     </td>
@@ -493,7 +573,7 @@ function UsersPageContent({ currentEmail }) {
               ))
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={10}>
+                <td colSpan={11}>
                   <EmptyState
                     icon={UserCog}
                     title="No users yet"
@@ -515,6 +595,7 @@ function UsersPageContent({ currentEmail }) {
                 const seed = user.name || user.email;
                 const isSelf = user.email === currentEmail;
                 const insuranceNames = (user.insuranceContactIds ?? []).map((id) => insuranceMap[id]).filter(Boolean);
+                const providerNames = (user.providerIds ?? []).map((id) => providerMap[id]).filter(Boolean);
                 const specLabels = (user.specializations ?? []).map((s) => SPECIALIZATION_LABELS[s] ?? s);
                 return (
                   <tr key={user._id} className="hover:bg-gray-50/80 transition-colors">
@@ -546,6 +627,9 @@ function UsersPageContent({ currentEmail }) {
                     </td>
                     <td className="px-4 py-3.5 text-sm text-gray-600">
                       {insuranceNames.length > 0 ? insuranceNames.join(', ') : (user.role === 'operator' ? 'All payers' : '--')}
+                    </td>
+                    <td className="px-4 py-3.5 text-sm text-gray-600">
+                      {providerNames.length > 0 ? providerNames.join(', ') : (user.role === 'operator' ? 'All providers' : '--')}
                     </td>
                     <td className="px-4 py-3.5 text-sm text-gray-600">
                       {specLabels.length > 0 ? specLabels.join(', ') : '--'}
@@ -583,6 +667,7 @@ function UsersPageContent({ currentEmail }) {
         onClose={() => setModalOpen(false)}
         editing={editing}
         insuranceContacts={insuranceContacts}
+        providers={providers}
         createUser={createUser}
         updateUser={updateUser}
       />

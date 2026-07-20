@@ -336,6 +336,7 @@ export default defineSchema({
     ssoSubject: v.optional(v.string()),
     lastLoginAt: v.optional(v.string()),
     insuranceContactIds: v.optional(v.array(v.id('insuranceContacts'))),
+    providerIds: v.optional(v.array(v.id('providers'))),
     specializations: v.optional(v.array(v.string())), // "claim_status" | "denial_claim" | "claim_eligibility_check"
     teamLeadName: v.optional(v.string()),
     createdAt: v.string(),

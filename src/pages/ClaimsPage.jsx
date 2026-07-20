@@ -60,7 +60,7 @@ function ShimmerRow() {
   return (
     <tr>
       <td className="pl-5 pr-2 py-3.5"><div className="shimmer rounded h-4 w-4" /></td>
-      {Array.from({ length: 6 }).map((_, i) => (
+      {Array.from({ length: 8 }).map((_, i) => (
         <td key={i} className="px-4 py-3.5">
           <div className="shimmer rounded h-4 w-full" />
         </td>
@@ -783,6 +783,8 @@ export default function ClaimsPage() {
               <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Amount</th>
               <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Status</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Claim Type</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Retry Date</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Follow Up Date</th>
               <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold" style={{ minWidth: '250px', width: '99%' }}>Latest Update</th>
             </tr>
           </thead>
@@ -791,7 +793,7 @@ export default function ClaimsPage() {
               Array.from({ length: 8 }).map((_, i) => <ShimmerRow key={i} />)
             ) : filteredClaims.length === 0 ? (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={10}>
                   <EmptyState
                     icon={FileText}
                     title="No claims found"
@@ -837,6 +839,8 @@ export default function ClaimsPage() {
                     <td className="px-4 py-3.5 font-data text-gray-900 text-right whitespace-nowrap">{formatCurrency(claim.amount)}</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap"><StatusDropdown claimId={claim._id} currentStatus={claim.status} /></td>
                     <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{getClaimType(claim)}</td>
+                    <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{claim.lastCalledAt ? formatDate(claim.lastCalledAt) : '---'}</td>
+                    <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{claim.nextFollowUpDate ? formatDate(claim.nextFollowUpDate) : '---'}</td>
                     <td className="px-5 py-3.5 text-[13px] leading-snug text-gray-500 max-w-[300px]">
                       {latestUpdate ? (
                         <span className="text-gray-700 line-clamp-2" title={latestUpdate}>{latestUpdate}</span>

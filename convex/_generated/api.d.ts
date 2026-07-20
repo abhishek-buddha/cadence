@@ -17,6 +17,7 @@ import type * as callSessions from "../callSessions.js";
 import type * as calls from "../calls.js";
 import type * as claimImport from "../claimImport.js";
 import type * as claims from "../claims.js";
+import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as demoMetrics from "../demoMetrics.js";
 import type * as dentalCallActions from "../dentalCallActions.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   calls: typeof calls;
   claimImport: typeof claimImport;
   claims: typeof claims;
+  crons: typeof crons;
   dashboard: typeof dashboard;
   demoMetrics: typeof demoMetrics;
   dentalCallActions: typeof dentalCallActions;

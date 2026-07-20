@@ -536,6 +536,22 @@ export const markConnectedFromClient = mutation({
   },
 });
 
+// Public wrapper for the operator's "End Call" button during an active
+// (accepting/connected) handoff. Callers should also invoke
+// callActions.endCall to actually hang up the Twilio leg and finalize the AI
+// transcript/analysis — this mutation only flips the handoff's own state so
+// the UI reflects "ended" rather than leaving it stuck on "connected".
+export const endHandoffFromClient = mutation({
+  args: { callId: v.id('calls') },
+  handler: async (ctx, args) => {
+    const call = await ctx.db.get(args.callId);
+    if (!call) return { ok: false, reason: 'not_found' };
+    await ctx.db.patch(args.callId, { handoffState: 'handoff_ended' });
+    await logEvent(ctx, args.callId, 'handoff_ended', 'ended_by_operator');
+    return { ok: true };
+  },
+});
+
 // Broadcast model: a decline does NOT release/cancel the call — it just records
 // that this agent passed, and the call stays available to everyone else.
 export const declineHandoff = mutation({

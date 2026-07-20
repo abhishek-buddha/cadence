@@ -40,12 +40,12 @@ const navEntries = [
   { to: '/claims', icon: FileText, label: 'Claim Management' },
   { to: '/patient-balance-reminder', icon: Wallet, label: 'Patient Balance Reminder' },
   { to: '/inbound-billing', icon: PhoneIncoming, label: 'Inbound Billing' },
-  { to: '/claim-routing', icon: Route, label: 'Claim User Routing' },
+  { claimRoutingTrigger: true },
   { group: true },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
 ];
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed, onToggle, onOpenClaimRouting }) {
   const location = useLocation();
   const [callAuditOpen, setCallAuditOpen] = useState(() =>
     callAuditGroup.paths.some((path) => location.pathname.startsWith(path))
@@ -84,6 +84,20 @@ export default function Sidebar({ collapsed, onToggle }) {
       </NavLink>
     );
   };
+
+  const renderClaimRoutingTrigger = () => (
+    <button
+      type="button"
+      onClick={onOpenClaimRouting}
+      title={collapsed ? 'Claim User Routing' : undefined}
+      className={`w-full flex items-center ${
+        collapsed ? 'justify-center' : 'gap-3'
+      } px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-gray-500 hover:text-gray-800 hover:bg-gray-50`}
+    >
+      <Route className="w-4 h-4 shrink-0" />
+      {!collapsed && <span>Claim User Routing</span>}
+    </button>
+  );
 
   const renderCallAuditGroup = () => {
     const GroupIcon = callAuditGroup.icon;
@@ -179,7 +193,11 @@ export default function Sidebar({ collapsed, onToggle }) {
           </p>
         )}
         {collapsed && <div className="pt-2" />}
-        {navEntries.map((item) => (item.group ? <div key="call-audit-group">{renderCallAuditGroup()}</div> : renderNavLink(item)))}
+        {navEntries.map((item) => {
+          if (item.group) return <div key="call-audit-group">{renderCallAuditGroup()}</div>;
+          if (item.claimRoutingTrigger) return <div key="claim-routing-trigger">{renderClaimRoutingTrigger()}</div>;
+          return renderNavLink(item);
+        })}
       </nav>
 
       {/* Bottom section */}

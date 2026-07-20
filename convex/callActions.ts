@@ -1,4 +1,4 @@
-import { action, internalMutation } from './_generated/server';
+import { action, internalMutation, internalAction, internalQuery } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { classifyMedicalCallOutcome } from './outcomeClassifier';
@@ -232,6 +232,17 @@ export const initiateCallViaTwilio = action({
       params.append('StatusCallback', statusCallbackUrl);
       params.append('StatusCallbackEvent', 'initiated ringing answered completed');
       params.append('Timeout', '60');
+      // Record the WHOLE call on this one CallSid from answer to hangup —
+      // covers the AI/IVR portion (<Connect><Stream>) AND, if this call is
+      // later handed off, the human↔human portion too (redirectPayerToConference
+      // re-points the SAME CallSid into a <Dial><Conference>; call-level
+      // recording keeps running regardless of which TwiML verb is active).
+      // Reuses the same /twilio-recording-status handler the conference-level
+      // recording used to call. The transcript shown in the UI stays IVR-only
+      // (ElevenLabs conversation) — this is audio-only, for playback/QA.
+      params.append('Record', 'true');
+      params.append('RecordingStatusCallback', `${CONVEX_SITE_URL}/twilio-recording-status?callId=${callId}`);
+      params.append('RecordingStatusCallbackEvent', 'completed');
 
       const response = await fetch(
         `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls.json`,
@@ -1209,5 +1220,46 @@ export const endCall = action({
     }
 
     return { success: true, hasTranscript: !!transcriptStr };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Safety net: transcript-saving today is otherwise driven either by a browser
+// tab actively polling getCallStatus (LiveCallMonitor, only while mounted) or
+// by the /elevenlabs-webhook firing. If a user navigates away mid-call and the
+// call finishes while nobody's tab is open to it, neither path runs and the
+// call is stuck at status="in_progress" forever with no transcript saved.
+// This cron (see convex/crons.ts) periodically re-checks any in-progress call
+// that has an ElevenLabs conversation and finalizes it via the exact same
+// getCallStatus logic — independent of any browser being open.
+// ---------------------------------------------------------------------------
+export const listStaleInProgressCalls = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    // Skip calls younger than 60s so we don't race a call that just started.
+    const cutoff = new Date(Date.now() - 60 * 1000).toISOString();
+    const calls = await ctx.db
+      .query('calls')
+      .withIndex('by_status', (q) => q.eq('status', 'in_progress'))
+      .collect();
+    return calls.filter((c) => c.elevenLabsConversationId && c.startedAt < cutoff);
+  },
+});
+
+export const finalizeStaleInProgressCalls = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const staleCalls = await ctx.runQuery(internal.callActions.listStaleInProgressCalls, {});
+    for (const call of staleCalls) {
+      try {
+        await ctx.runAction(api.callActions.getCallStatus, {
+          conversationId: call.elevenLabsConversationId,
+          callId: call._id,
+          claimId: call.claimId,
+        });
+      } catch (e: any) {
+        console.error(`[finalizeStaleInProgressCalls] failed for call ${call._id}:`, e.message);
+      }
+    }
   },
 });

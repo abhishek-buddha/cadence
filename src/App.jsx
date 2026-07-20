@@ -27,7 +27,6 @@ import UsersPage from './pages/UsersPage';
 // import WebhooksPage from './pages/WebhooksPage';
 import TransferDestinationsPage from './pages/TransferDestinationsPage';
 import MasterDataPage from './pages/MasterDataPage';
-import ClaimUserRoutingPage from './pages/ClaimUserRoutingPage';
 import CallAuditPage from './pages/CallAuditPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import AppointmentSchedulingDetailPage from './pages/AppointmentSchedulingDetailPage';
@@ -104,7 +103,6 @@ export default function App() {
                   <Route path="patient-balance-reminder/:id" element={<PatientBalanceReminderDetailPage />} />
                   <Route path="inbound-billing" element={<InboundBillingPage />} />
                   <Route path="inbound-billing/:id" element={<InboundBillingDetailPage />} />
-                  <Route path="claim-routing" element={<ClaimUserRoutingPage />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
               </>
@@ -114,7 +112,6 @@ export default function App() {
                   <Route index element={<Dashboard />} />
                   <Route path="claims" element={<ClaimsPage />} />
                   <Route path="claims/:id" element={<ClaimDetailPage />} />
-                  <Route path="claim-routing" element={<ClaimUserRoutingPage />} />
 
                   <Route path="patients" element={<PatientsPage />} />
                   <Route path="insurance" element={<InsuranceDirectory />} />

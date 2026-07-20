@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import HandoffNotifier from './HandoffNotifier';
+import ClaimUserRoutingDrawer from './ClaimUserRoutingDrawer';
 import { Database, UserCog, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -63,6 +64,7 @@ export default function Layout({ onLogout }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebarCollapsed') === 'true'; } catch { return false; }
   });
+  const [routingDrawerOpen, setRoutingDrawerOpen] = useState(false);
 
   function handleToggleSidebar() {
     setSidebarCollapsed((prev) => {
@@ -74,7 +76,11 @@ export default function Layout({ onLogout }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} />
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={handleToggleSidebar}
+        onOpenClaimRouting={() => setRoutingDrawerOpen(true)}
+      />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-3 relative z-20">
@@ -93,6 +99,8 @@ export default function Layout({ onLogout }) {
 
       {/* App-wide broadcast toast for incoming AI→human handoffs */}
       <HandoffNotifier />
+
+      <ClaimUserRoutingDrawer open={routingDrawerOpen} onClose={() => setRoutingDrawerOpen(false)} />
     </div>
   );
 }

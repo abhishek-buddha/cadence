@@ -9,16 +9,17 @@ import {
   FileText,
   Wallet,
   PhoneIncoming,
-  Route,
   LogOut,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import HandoffNotifier from './HandoffNotifier';
 
 // Same module set as the admin Sidebar, minus Call Audit / Reports / Master
-// Data / User Management — those stay admin-only. "My Queue" (call handling)
-// and "My Dashboard" (personal stats) replace the admin Dashboard entry,
-// since those are operator-specific per the personal-dashboard requirement.
+// Data / User Management / Claim User Routing — those stay admin-only (Claim
+// User Routing is now an admin-only drawer, not a routed page at all — see
+// ClaimUserRoutingDrawer). "My Queue" (call handling) and "My Dashboard"
+// (personal stats) replace the admin Dashboard entry, since those are
+// operator-specific per the personal-dashboard requirement.
 const NAV_ENTRIES = [
   { to: '/', icon: PhoneCall, label: 'My Queue', end: true },
   { to: '/dashboard', icon: LayoutDashboard, label: 'My Dashboard' },
@@ -29,7 +30,6 @@ const NAV_ENTRIES = [
   { to: '/claims', icon: FileText, label: 'Claim Management' },
   { to: '/patient-balance-reminder', icon: Wallet, label: 'Patient Balance Reminder' },
   { to: '/inbound-billing', icon: PhoneIncoming, label: 'Inbound Billing' },
-  { to: '/claim-routing', icon: Route, label: 'Claim User Routing' },
 ];
 
 const ROLE_LABELS = { admin: 'Admin', operator: 'Operator' };

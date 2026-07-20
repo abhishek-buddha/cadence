@@ -366,12 +366,9 @@ async function bridgeParkedHandler(ctx: any, request: Request): Promise<Response
   // Park the rep: they start/hold the conference but do NOT end it when the
   // holding side changes (endConferenceOnExit=false). waitUrl loops hold audio.
   //
-  // Recording: record the whole conference automatically from the start
-  // (record-from-start) — captures the human↔human portion for QA/audit. Set on
-  // this (the first, longest-lived) leg only; Twilio records the conference
-  // once regardless of how many participants set it. recordingStatusCallback
-  // fires once when the conference recording is ready. The callId is threaded
-  // through the callback URL so we can attach the recording to the right call.
+  // Recording is call-level now (Record=true set at initiateCallViaTwilio's
+  // call creation), covering this whole CallSid from answer to hangup — no
+  // separate conference-level recording needed here anymore.
   return twimlResponse(`
     <Response>
       <Dial>
@@ -379,10 +376,7 @@ async function bridgeParkedHandler(ctx: any, request: Request): Promise<Response
                     waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
                     statusCallback="${siteUrl}/twilio-conference-status?callId=${call._id}"
                     statusCallbackEvent="start end join leave"
-                    statusCallbackMethod="POST"
-                    record="record-from-start"
-                    recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${call._id}"
-                    recordingStatusCallbackEvent="completed">
+                    statusCallbackMethod="POST">
           ${confName}
         </Conference>
       </Dial>
@@ -464,10 +458,13 @@ http.route({ path: '/twiml-softphone-outgoing', method: 'GET', handler: httpActi
 // ---------------------------------------------------------------------------
 // OPTION 1 — the AI drop lands here. handoff.redirectPayerToConference() POSTs
 // this URL to the live payer call, which abandons its <Connect><Stream> (closing
-// the bridge socket → AI dropped) and parks the payer in the conference. The
-// conference records from the start (human↔human portion) and holds the payer on
-// waitUrl audio until our browser agent joins. endConferenceOnExit=false so the
-// payer holding here never tears the conference down.
+// the bridge socket → AI dropped) and parks the payer in the conference. This
+// is the SAME CallSid that's been recording (Record=true) since it was placed
+// in initiateCallViaTwilio, so the human↔human portion lands in that same
+// whole-call recording — no separate conference-level recording needed here.
+// Holds the payer on waitUrl audio until our browser agent joins.
+// endConferenceOnExit=false so the payer holding here never tears the
+// conference down.
 // ---------------------------------------------------------------------------
 async function payerConferenceHandler(ctx: any, request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -489,10 +486,7 @@ async function payerConferenceHandler(ctx: any, request: Request): Promise<Respo
                     waitUrl="${siteUrl}/twiml-conference-hold" beep="false"
                     statusCallback="${siteUrl}/twilio-conference-status?callId=${callId}"
                     statusCallbackEvent="start end join leave"
-                    statusCallbackMethod="POST"
-                    record="record-from-start"
-                    recordingStatusCallback="${siteUrl}/twilio-recording-status?callId=${callId}"
-                    recordingStatusCallbackEvent="completed">
+                    statusCallbackMethod="POST">
           ${confName}
         </Conference>
       </Dial>

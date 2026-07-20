@@ -228,6 +228,26 @@ function OnCallPanel({ call, softphone }) {
   const events = detail?.events ?? [];
   const c = detail?.call || call;
   const { status, muted, disconnect, toggleMute } = softphone;
+  const endCallAction = useAction(api.callActions.endCall);
+  const endHandoff = useMutation(api.handoff.endHandoffFromClient);
+  const [ending, setEnding] = useState(false);
+
+  async function handleEndCall() {
+    if (ending) return;
+    setEnding(true);
+    try {
+      // Actually terminate the Twilio call (not just this browser's own leg)
+      // and finalize the AI transcript/analysis, then flip handoffState so
+      // the UI reflects "ended" instead of staying on "connected".
+      await endCallAction({ callId: call._id });
+      await endHandoff({ callId: call._id });
+    } catch (e) {
+      console.error('Failed to end call:', e);
+    } finally {
+      disconnect();
+      setEnding(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -236,30 +256,29 @@ function OnCallPanel({ call, softphone }) {
           <PhoneCall className="w-4 h-4" />
           {status === 'on_call' ? 'On call' : status === 'connecting' ? 'Connecting…' : 'Bridging call'}
         </div>
-        {(status === 'on_call' || status === 'connecting') && (
-          <div className="flex items-center gap-2">
-            {status === 'on_call' && (
-              <button
-                onClick={toggleMute}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                  muted
-                    ? 'border-warn/40 bg-warn/10 text-warn hover:bg-warn/15'
-                    : 'border-border text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {muted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                {muted ? 'Unmute' : 'Mute'}
-              </button>
-            )}
+        <div className="flex items-center gap-2">
+          {status === 'on_call' && (
             <button
-              onClick={disconnect}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-danger text-white text-sm font-medium hover:bg-danger/90 transition-colors"
+              onClick={toggleMute}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                muted
+                  ? 'border-warn/40 bg-warn/10 text-warn hover:bg-warn/15'
+                  : 'border-border text-gray-600 hover:bg-gray-50'
+              }`}
             >
-              <PhoneOff className="w-4 h-4" />
-              Hang up
+              {muted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              {muted ? 'Unmute' : 'Mute'}
             </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={handleEndCall}
+            disabled={ending}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-danger text-white text-sm font-medium hover:bg-danger/90 disabled:opacity-50 transition-colors"
+          >
+            {ending ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneOff className="w-4 h-4" />}
+            {ending ? 'Ending…' : 'End Call'}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white border border-border rounded-xl p-5 shadow-sm">

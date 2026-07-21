@@ -244,6 +244,11 @@ export default defineSchema({
     // this is set, an ended handoff call stays "active" — visible in the
     // operator's queue and blocking new routing — see convex/lib/routingStatus.ts.
     wrapUpCompletedAt: v.optional(v.string()),
+    // OTHER claims (besides `claimId`) the operator also processed during this
+    // SAME live call — set when they save a disposition for a same-payer
+    // sibling claim from the post-call workspace (convex/claimFollowups.ts),
+    // so that claim's own Call History timeline picks up this call too.
+    linkedClaimIds: v.optional(v.array(v.id('claims'))),
     userId: v.string(),
     startedAt: v.string(),
     completedAt: v.optional(v.string()),

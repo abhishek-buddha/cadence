@@ -1,6 +1,11 @@
 // Per-claim disposition + comment control used in the operator's post-call
 // workspace. Lets a human pick the next action for a claim after (or during) a
 // payer call and leave a note. Writes to api.claimFollowups.setDisposition.
+//
+// `callId` (the live handoff call this workspace is attached to) is passed
+// through so that saving a disposition for a same-payer SIBLING claim also
+// links this call onto it (calls.linkedClaimIds) — see claimFollowups.ts —
+// so that claim's own Call History timeline picks up this call too.
 
 import { useEffect, useState } from 'react';
 import { useMutation } from 'convex/react';
@@ -27,7 +32,7 @@ const OPTIONS = [
     active: 'border-danger bg-danger/10 text-danger', idle: 'hover:border-danger/50 hover:text-danger' },
 ];
 
-export default function ClaimDispositionControls({ claim, operatorName, onSaved }) {
+export default function ClaimDispositionControls({ claim, operatorName, callId, onSaved }) {
   const setDisposition = useMutation(api.claimFollowups.setDisposition);
   const [selected, setSelected] = useState(claim?.followUpDisposition ?? null);
   const [comment, setComment] = useState(claim?.followUpComment ?? '');
@@ -57,6 +62,7 @@ export default function ClaimDispositionControls({ claim, operatorName, onSaved 
         comment: comment.trim() || undefined,
         nextFollowUpDate: showDate && followUpDate ? followUpDate : undefined,
         operatorName: operatorName || undefined,
+        callId: callId || undefined,
       });
       if (res?.ok) {
         setSavedAt(Date.now());

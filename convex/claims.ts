@@ -86,6 +86,23 @@ export const getById = query({
   },
 });
 
+// A call is not always ABOUT one claim only — an operator can process a
+// same-payer sibling claim during the same live call (see
+// claimFollowups.setDisposition), which stamps that sibling's id onto
+// calls.linkedClaimIds. Resolve the OTHER claim number(s) a call touched,
+// excluding whichever claim we're currently viewing, so the UI can show
+// "also discussed: Claim X" on a call that isn't primarily this claim's own.
+async function resolveOtherClaimNumbers(ctx: any, call: any, viewingClaimId: any): Promise<string[]> {
+  const ids = new Set<string>();
+  if (call.claimId && String(call.claimId) !== String(viewingClaimId)) ids.add(call.claimId);
+  for (const cid of call.linkedClaimIds ?? []) {
+    if (String(cid) !== String(viewingClaimId)) ids.add(cid);
+  }
+  if (ids.size === 0) return [];
+  const linkedClaims = await Promise.all([...ids].map((cid) => ctx.db.get(cid as any)));
+  return linkedClaims.filter(Boolean).map((c: any) => c.claimNumber);
+}
+
 export const getWithDetails = query({
   args: { id: v.id('claims') },
   handler: async (ctx, args) => {
@@ -96,11 +113,33 @@ export const getWithDetails = query({
     const insurance = await ctx.db.get(claim.insuranceContactId);
     const provider = await ctx.db.get(claim.providerId);
 
-    const calls = await ctx.db
+    const ownCalls = await ctx.db
       .query('calls')
       .withIndex('by_claimId', (q) => q.eq('claimId', args.id))
       .order('desc')
       .collect();
+
+    // Calls this claim was linked onto as a SIBLING (processed during someone
+    // else's handoff call) — not indexed (linkedClaimIds is an array), so scan
+    // this tenant's calls only, which stays cheap at this app's scale.
+    const tenantCalls = await ctx.db
+      .query('calls')
+      .withIndex('by_userId', (q) => q.eq('userId', claim.userId))
+      .collect();
+    const ownCallIds = new Set(ownCalls.map((c) => c._id));
+    const linkedCalls = tenantCalls.filter(
+      (c) => !ownCallIds.has(c._id) && c.linkedClaimIds?.includes(args.id)
+    );
+
+    const calls = [...ownCalls, ...linkedCalls]
+      .sort((a, b) => {
+        const at = new Date(a.startedAt || a._creationTime).getTime();
+        const bt = new Date(b.startedAt || b._creationTime).getTime();
+        return bt - at;
+      });
+    const enrichedCalls = await Promise.all(
+      calls.map(async (c) => ({ ...c, otherClaimNumbers: await resolveOtherClaimNumbers(ctx, c, args.id) }))
+    );
 
     // Get the most recent result for this claim. A completed/connected human
     // bridge is a valid user-facing outcome even if no AI extraction row exists.
@@ -109,7 +148,9 @@ export const getWithDetails = query({
       .withIndex('by_claimId', (q) => q.eq('claimId', args.id))
       .order('desc')
       .first();
-    const latestHumanHandoffCall = calls.find(connectedHumanHandoff);
+    // Scoped to this claim's OWN calls only — a linked (sibling-claim) call's
+    // canned "human follow-up completed" text isn't this claim's own result.
+    const latestHumanHandoffCall = ownCalls.find(connectedHumanHandoff);
     let latestResult: any = latestExtractedResult;
     if (latestHumanHandoffCall) {
       const handoffResult = humanHandoffResult(latestHumanHandoffCall);
@@ -122,7 +163,7 @@ export const getWithDetails = query({
       }
     }
 
-    return { claim, patient, insurance, provider, calls, latestResult };
+    return { claim, patient, insurance, provider, calls: enrichedCalls, latestResult };
   },
 });
 

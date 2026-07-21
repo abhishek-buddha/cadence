@@ -123,6 +123,12 @@ export const listRelatedForCall = query({
 
 // Record a human operator's disposition for a single claim. Idempotent — the
 // operator can revise it (e.g. retry → complete) any number of times.
+//
+// `callId` is the live handoff call the operator is working from. When the
+// claim being dispositioned is a same-payer SIBLING of that call's own claim
+// (not the claim the call was originally handed off for), this also links the
+// call onto the sibling claim (calls.linkedClaimIds) so the sibling's own Call
+// History timeline picks up this call too — see claims.getWithDetails.
 export const setDisposition = mutation({
   args: {
     claimId: v.id('claims'),
@@ -130,6 +136,7 @@ export const setDisposition = mutation({
     comment: v.optional(v.string()),
     nextFollowUpDate: v.optional(v.string()),
     operatorName: v.optional(v.string()),
+    callId: v.optional(v.id('calls')),
   },
   handler: async (ctx, args) => {
     if (!DISPOSITIONS.includes(args.disposition as any)) {
@@ -152,6 +159,17 @@ export const setDisposition = mutation({
     // claim's existing nextFollowUpDate field so admin views stay in sync.
     if (args.nextFollowUpDate !== undefined) patch.nextFollowUpDate = args.nextFollowUpDate;
     await ctx.db.patch(args.claimId, patch);
+
+    if (args.callId) {
+      const call = await ctx.db.get(args.callId);
+      if (call && call.claimId !== args.claimId) {
+        const existing: any[] = call.linkedClaimIds ?? [];
+        if (!existing.includes(args.claimId)) {
+          await ctx.db.patch(args.callId, { linkedClaimIds: [...existing, args.claimId] });
+        }
+      }
+    }
+
     return { ok: true, disposition: args.disposition };
   },
 });

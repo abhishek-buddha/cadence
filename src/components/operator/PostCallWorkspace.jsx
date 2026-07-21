@@ -54,7 +54,7 @@ function money(cents) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n / 100);
 }
 
-function RelatedClaimRow({ claim, operatorName }) {
+function RelatedClaimRow({ claim, operatorName, callId }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -93,7 +93,7 @@ function RelatedClaimRow({ claim, operatorName }) {
       {open && (
         <div className="border-t border-border p-4 space-y-4 bg-panel-light/30">
           <ClaimDetailBlock claim={claim} />
-          <ClaimDispositionControls claim={claim} operatorName={operatorName} />
+          <ClaimDispositionControls claim={claim} operatorName={operatorName} callId={callId} />
         </div>
       )}
     </div>
@@ -134,7 +134,7 @@ export default function PostCallWorkspace({ call }) {
             </Badge>
           )}
         </div>
-        <ClaimDispositionControls claim={currentClaim} operatorName={operatorName} />
+        <ClaimDispositionControls claim={currentClaim} operatorName={operatorName} callId={call._id} />
       </div>
 
       {/* Same-payer sibling claims */}
@@ -166,7 +166,7 @@ export default function PostCallWorkspace({ call }) {
               review its details and set an outcome — verified claims drop off automatically.
             </p>
             {relatedClaims.map((claim) => (
-              <RelatedClaimRow key={claim._id} claim={claim} operatorName={operatorName} />
+              <RelatedClaimRow key={claim._id} claim={claim} operatorName={operatorName} callId={call._id} />
             ))}
           </div>
         )}

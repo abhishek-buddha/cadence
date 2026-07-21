@@ -140,11 +140,20 @@ export const listRecent = query({
           const insurance = await ctx.db.get(call.insuranceContactId);
           insuranceCompany = insurance?.name ?? null;
         }
+        // Other same-payer claims the operator also processed during this
+        // SAME call (see claimFollowups.setDisposition) — so a call that
+        // touched two claims shows both claim numbers, not just the primary.
+        let linkedClaimNumbers: string[] = [];
+        if (call.linkedClaimIds?.length) {
+          const linked = await Promise.all(call.linkedClaimIds.map((cid) => ctx.db.get(cid)));
+          linkedClaimNumbers = linked.filter(Boolean).map((c: any) => c.claimNumber);
+        }
         return {
           ...call,
           claimNumber,
           dentalCaseNumber,
           insuranceCompany,
+          linkedClaimNumbers,
         };
       })
     );

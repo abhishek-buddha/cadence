@@ -253,8 +253,18 @@ function CallRow({ call, isLatestHandoffCall }) {
         <span className="px-4 py-3 text-sm text-gray-600 min-w-[160px]">
           {formatDate(call.startedAt)}
         </span>
-        <span className="px-4 py-3 text-sm font-data text-accent min-w-[120px]">
-          {claimPreview?.claimNumber ?? dentalCasePreview?.caseNumber ?? (call.claimId || call.dentalCaseId ? '...' : '--')}
+        <span className="px-4 py-3 text-sm font-data text-accent min-w-[120px] flex items-center gap-1">
+          <span className="truncate">
+            {claimPreview?.claimNumber ?? dentalCasePreview?.caseNumber ?? (call.claimId || call.dentalCaseId ? '...' : '--')}
+          </span>
+          {call.linkedClaimNumbers?.length > 0 && (
+            <span
+              className="shrink-0 text-[10px] font-medium text-accent bg-accent/10 rounded-full px-1.5 py-0.5"
+              title={`Also discussed: ${call.linkedClaimNumbers.join(', ')}`}
+            >
+              +{call.linkedClaimNumbers.length}
+            </span>
+          )}
         </span>
         <span className="px-4 py-3 text-sm text-gray-600 flex-1 truncate">
           {insurancePreview?.name ?? '...'}
@@ -301,6 +311,11 @@ function CallRow({ call, isLatestHandoffCall }) {
                 {isDentalCall && dentalCase && (
                   <p className="text-xs text-muted mt-0.5">
                     DOS: {dentalCase.proposedDateOfService} | Status: {dentalCase.status}
+                  </p>
+                )}
+                {call.linkedClaimNumbers?.length > 0 && (
+                  <p className="text-xs text-accent mt-1">
+                    Also discussed: {call.linkedClaimNumbers.join(', ')}
                   </p>
                 )}
               </div>

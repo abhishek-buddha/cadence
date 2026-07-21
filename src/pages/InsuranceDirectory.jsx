@@ -5,6 +5,7 @@ import { Building2, Plus, Pencil, Trash2, Phone, X, Grid3x3, ShieldCheck, Shield
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 import BulkImportInsuranceModal from '../components/BulkImportInsuranceModal';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 
 const STALE_AFTER_DAYS = 90;
 const WARN_AFTER_DAYS = 30;
@@ -100,8 +101,16 @@ export default function InsuranceDirectory() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
   const originalIvrKeyRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isLoading = contacts === undefined;
+
+  const filteredContacts = (contacts ?? []).filter((contact) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return [contact.name, contact.phone, contact.payerId]
+      .some((v) => v && String(v).toLowerCase().includes(q));
+  });
 
   function openCreate() {
     setEditing(null);
@@ -296,20 +305,16 @@ export default function InsuranceDirectory() {
         <div>
           <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Payer Directory</h1>
           <p className="text-sm text-muted mt-1">
-            {contacts ? `${contacts.length} payer${contacts.length !== 1 ? 's' : ''}` : 'Loading...'}
+            {contacts ? `${filteredContacts.length} payer${filteredContacts.length !== 1 ? 's' : ''}` : 'Loading...'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setImportOpen(true)} className="px-4 py-2.5 bg-white border border-border text-gray-700 hover:bg-gray-50 rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
-            <Upload className="w-4 h-4" />
-            Upload Workbook
-          </button>
-          <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
-            <Plus className="w-4 h-4" />
-            Add Payer
-          </button>
-        </div>
       </div>
+
+      {/* Action toolbar */}
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton icon={Upload} label="Upload Workbook" onClick={() => setImportOpen(true)} variant="white" />
+        <ListToolbarButton icon={Plus} label="Add Payer" onClick={openCreate} />
+      </ListToolbar>
 
       {/* Table */}
       {isLoading ? (
@@ -320,17 +325,23 @@ export default function InsuranceDirectory() {
             ))}
           </div>
         </div>
-      ) : contacts.length === 0 ? (
+      ) : filteredContacts.length === 0 ? (
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Building2}
-            title="No payers yet"
-            description="Build your payer directory to streamline claims follow-up calls."
+            title={searchQuery ? 'No matching payers' : 'No payers yet'}
+            description={
+              searchQuery
+                ? 'Try adjusting your search to find what you are looking for.'
+                : 'Build your payer directory to streamline claims follow-up calls.'
+            }
             action={
-              <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                Add Payer
-              </button>
+              !searchQuery ? (
+                <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Payer
+                </button>
+              ) : undefined
             }
           />
         </div>
@@ -339,17 +350,17 @@ export default function InsuranceDirectory() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Payer Name</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Phone</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Hours</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Avg Hold Time</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">IVR</th>
-                  <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted font-semibold">Actions</th>
+                <tr className="bg-table-header">
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Payer Name</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Phone</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Hours</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Avg Hold Time</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">IVR</th>
+                  <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-table-header-text font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {contacts.map((contact) => (
+                {filteredContacts.map((contact) => (
                   <tr key={contact._id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="px-4 py-3 text-sm text-gray-600">
                       <span className="font-medium text-gray-900">{contact.name}</span>

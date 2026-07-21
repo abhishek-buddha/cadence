@@ -7,6 +7,7 @@ import EmptyState from '../components/EmptyState';
 import { useAuth, hasRole } from '../context/AuthContext';
 import { SPECIALIZATION_OPTIONS, SPECIALIZATION_LABELS } from '../constants/specializations';
 import UserGroupsTab from '../components/UserGroupsTab';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin', color: 'bg-danger/10 text-danger' },
@@ -555,6 +556,7 @@ function UsersPageContent({ currentEmail }) {
   const updateUser = useMutation(api.users?.updateRoutingProfile);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isLoading = users === undefined;
   const insuranceMap = {};
@@ -576,6 +578,29 @@ function UsersPageContent({ currentEmail }) {
     return user.userGroupId ? (groupMap[user.userGroupId]?.specializations ?? []) : (user.specializations ?? []);
   }
 
+  const filteredUsers = (users ?? []).filter((user) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    const groupName = user.userGroupId ? (groupMap[user.userGroupId]?.name ?? '') : '';
+    const insuranceNames = resolvedInsuranceIds(user).map((id) => insuranceMap[id]).filter(Boolean).join(', ');
+    const providerNames = resolvedProviderIds(user).map((id) => providerMap[id]).filter(Boolean).join(', ');
+    const specLabels = resolvedSpecializations(user).map((s) => SPECIALIZATION_LABELS[s] ?? s).join(', ');
+    const haystack = [
+      user.email,
+      user.name,
+      user.role,
+      groupName,
+      insuranceNames,
+      providerNames,
+      specLabels,
+      user.teamLeadName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(q);
+  });
+
   function openCreate() {
     setEditing(null);
     setModalOpen(true);
@@ -596,22 +621,11 @@ function UsersPageContent({ currentEmail }) {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Users</h1>
-          <p className="text-sm text-muted mt-1">
-            {topTab === 'users' && !isLoading && `${users.length} user${users.length !== 1 ? 's' : ''}`}
-          </p>
-        </div>
-        {topTab === 'users' && (
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            Add User
-          </button>
-        )}
+      <div>
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Users</h1>
+        <p className="text-sm text-muted mt-1">
+          {topTab === 'users' && !isLoading && `${filteredUsers.length} user${filteredUsers.length !== 1 ? 's' : ''}`}
+        </p>
       </div>
 
       <div className="flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
@@ -638,22 +652,29 @@ function UsersPageContent({ currentEmail }) {
       {topTab === 'groups' ? (
         <UserGroupsTab />
       ) : (
+      <>
+      <ListToolbar
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+      >
+        <ListToolbarButton icon={UserPlus} label="Add User" onClick={openCreate} />
+      </ListToolbar>
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-white">
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold w-12"></th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Email</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Name</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Role</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">User Group</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Payer</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Provider</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Specialization</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Team Lead</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Active</th>
-              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Last Login</th>
-              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Edit</th>
+            <tr className="bg-table-header">
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold w-12"></th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Email</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Name</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Role</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">User Group</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Payer</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Provider</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Specialization</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Team Lead</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Active</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Last Login</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Edit</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -667,27 +688,33 @@ function UsersPageContent({ currentEmail }) {
                   ))}
                 </tr>
               ))
-            ) : users.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <tr>
                 <td colSpan={12}>
                   <EmptyState
                     icon={UserCog}
-                    title="No users yet"
-                    description="Add your first team member to get started."
+                    title={searchQuery ? 'No matching users' : 'No users yet'}
+                    description={
+                      searchQuery
+                        ? 'Try adjusting your search to find what you are looking for.'
+                        : 'Add your first team member to get started.'
+                    }
                     action={
-                      <button
-                        onClick={openCreate}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                        Add User
-                      </button>
+                      !searchQuery ? (
+                        <button
+                          onClick={openCreate}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                          Add User
+                        </button>
+                      ) : undefined
                     }
                   />
                 </td>
               </tr>
             ) : (
-              users.map((user) => {
+              filteredUsers.map((user) => {
                 const seed = user.name || user.email;
                 const isSelf = user.email === currentEmail;
                 const insuranceNames = resolvedInsuranceIds(user).map((id) => insuranceMap[id]).filter(Boolean);
@@ -762,6 +789,7 @@ function UsersPageContent({ currentEmail }) {
           </tbody>
         </table>
       </div>
+      </>
       )}
 
       <UserModal

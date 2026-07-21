@@ -7,6 +7,7 @@ import OutcomeBadge from '../components/OutcomeBadge';
 import EmptyState from '../components/EmptyState';
 import CreateSessionModal from '../components/CreateSessionModal';
 import SessionDetailPanel from '../components/SessionDetailPanel';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 
 const STATUS_ORDER = ['queued', 'in_progress', 'paused', 'completed', 'failed'];
 
@@ -39,6 +40,7 @@ export default function SessionsPage() {
   const insuranceContacts = useQuery(api.insuranceContacts.list);
   const [createOpen, setCreateOpen] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const deleteSession = useMutation(api.callSessions.remove);
   const updateStatus = useMutation(api.callSessions.updateStatus);
@@ -65,6 +67,17 @@ export default function SessionsPage() {
 
   const expandedSession = (sessions ?? []).find((s) => s._id === expandedId) || null;
 
+  const filteredSessions = (sessions ?? []).filter((session) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return [
+      insuranceMap[session.insuranceContactId],
+      session.useCase,
+      session.status,
+      session._id,
+    ].some((v) => v && String(v).toLowerCase().includes(q));
+  });
+
   function toggleExpand(id) {
     setExpandedId((prev) => (prev === id ? null : id));
   }
@@ -77,57 +90,61 @@ export default function SessionsPage() {
           <p className="text-sm text-muted mt-1">
             {isLoading
               ? 'Loading...'
-              : `${sessions.length} session${sessions.length !== 1 ? 's' : ''} - multi-patient calls grouped by payer`}
+              : `${filteredSessions.length} session${filteredSessions.length !== 1 ? 's' : ''} - multi-patient calls grouped by payer`}
           </p>
         </div>
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          New Session
-        </button>
       </div>
+
+      {/* Action toolbar */}
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton icon={Plus} label="New Session" onClick={() => setCreateOpen(true)} />
+      </ListToolbar>
 
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-white">
+            <tr className="bg-table-header">
               <th className="pl-4 pr-2 py-3.5 w-8"></th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Session #</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Payer</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Use Case</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Items</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Status</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Aggregate Outcome</th>
-              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Created</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Session #</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Payer</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Use Case</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Items</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Status</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Aggregate Outcome</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Created</th>
               <th className="px-4 py-3.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => <ShimmerRow key={i} />)
-            ) : sessions.length === 0 ? (
+            ) : filteredSessions.length === 0 ? (
               <tr>
                 <td colSpan={9}>
                   <EmptyState
                     icon={Users}
-                    title="No sessions yet"
-                    description="Group multiple patients into a single call to save time on hold."
+                    title={searchQuery ? 'No matching sessions' : 'No sessions yet'}
+                    description={
+                      searchQuery
+                        ? 'Try adjusting your search to find what you are looking for.'
+                        : 'Group multiple patients into a single call to save time on hold.'
+                    }
                     action={
-                      <button
-                        onClick={() => setCreateOpen(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                        New Session
-                      </button>
+                      !searchQuery ? (
+                        <button
+                          onClick={() => setCreateOpen(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          New Session
+                        </button>
+                      ) : undefined
                     }
                   />
                 </td>
               </tr>
             ) : (
-              sessions.map((session) => {
+              filteredSessions.map((session) => {
                 const isExpanded = expandedId === session._id;
                 return (
                   <Fragment key={session._id}>

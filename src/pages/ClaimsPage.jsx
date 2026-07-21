@@ -4,7 +4,6 @@ import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
   Upload,
-  Search,
   FileText,
   FileSpreadsheet,
   AlertTriangle,
@@ -22,6 +21,7 @@ import DispositionBadge from '../components/DispositionBadge';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 import AddClaimModal from '../components/AddClaimModal';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 import { useProviderFilter } from '../context/ProviderFilterContext';
 
 const STATUS_TABS = [
@@ -688,47 +688,11 @@ export default function ClaimsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Claims</h1>
-          <p className="text-sm text-muted mt-1">
-            {!isLoading && `${filteredClaims.length} claim${filteredClaims.length !== 1 ? 's' : ''}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {selected.size > 0 && (
-            <button
-              onClick={handleBulkDelete}
-              disabled={deleting}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-danger hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50"
-            >
-              <Trash2 className="w-4 h-4" />
-              {deleting ? 'Deleting...' : `Delete ${selected.size}`}
-            </button>
-          )}
-          <button
-            onClick={handleDownloadExcel}
-            disabled={isLoading || filteredClaims.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-border-light hover:border-accent hover:text-accent text-gray-700 text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Download className="w-4 h-4" />
-            Download
-          </button>
-          <button
-            onClick={() => setAddClaimModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-accent text-accent hover:bg-accent hover:text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-          >
-            <Sparkles className="w-4 h-4" />
-            Add Claim
-          </button>
-          <button
-            onClick={() => setUploadModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-          >
-            <Upload className="w-4 h-4" />
-            Upload Claims
-          </button>
-        </div>
+      <div>
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Claims</h1>
+        <p className="text-sm text-muted mt-1">
+          {!isLoading && `${filteredClaims.length} claim${filteredClaims.length !== 1 ? 's' : ''}`}
+        </p>
       </div>
 
       {/* Status Tabs */}
@@ -753,23 +717,36 @@ export default function ClaimsPage() {
         })}
       </div>
 
-      {/* Search */}
-      <div className="relative bg-white border border-border rounded-xl p-4 shadow-sm">
-        <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-        <input
-          type="text"
-          placeholder="Search claims, patients, insurance..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className={`${INPUT_CLASS} pl-9`}
+      {/* Action toolbar */}
+      <ListToolbar
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+      >
+        {selected.size > 0 && (
+          <ListToolbarButton
+            icon={Trash2}
+            label={deleting ? 'Deleting...' : `Delete ${selected.size}`}
+            onClick={handleBulkDelete}
+            disabled={deleting}
+            variant="danger"
+          />
+        )}
+        <ListToolbarButton
+          icon={Download}
+          label="Download"
+          onClick={handleDownloadExcel}
+          disabled={isLoading || filteredClaims.length === 0}
+          variant="white"
         />
-      </div>
+        <ListToolbarButton icon={Sparkles} label="Add Claim" onClick={() => setAddClaimModalOpen(true)} />
+        <ListToolbarButton icon={Upload} label="Upload Claims" onClick={() => setUploadModalOpen(true)} />
+      </ListToolbar>
 
       {/* Table */}
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
           <thead>
-            <tr className="border-b border-border bg-white sticky top-0 z-10">
+            <tr className="sticky top-0 z-10 bg-table-header">
               <th className="pl-5 pr-2 py-3.5 w-10">
                 <input
                   type="checkbox"
@@ -778,15 +755,15 @@ export default function ClaimsPage() {
                   className="w-4 h-4 rounded border-border-light text-accent focus:ring-accent cursor-pointer"
                 />
               </th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Claim #</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">CPT Code</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Insurance</th>
-              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Amount</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Status</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Claim Type</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Retry Date</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Follow Up Date</th>
-              <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold" style={{ minWidth: '250px', width: '99%' }}>Latest Update</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Claim #</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">CPT Code</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Insurance</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Amount</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Status</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Claim Type</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Retry Date</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Follow Up Date</th>
+              <th className="text-left px-5 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold" style={{ minWidth: '250px', width: '99%' }}>Latest Update</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">

@@ -3,7 +3,6 @@ import { useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
   ShieldCheck,
-  Search,
   Download,
   ChevronDown,
   ChevronLeft,
@@ -14,6 +13,7 @@ import {
   Check,
 } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 import { useAuth, hasRole } from '../context/AuthContext';
 
 const ACTION_OPTIONS = [
@@ -296,21 +296,11 @@ function AuditPageContent() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Audit Log</h1>
-          <p className="text-sm text-muted mt-1">
-            {!isLoading && `${filteredEvents.length} event${filteredEvents.length !== 1 ? 's' : ''} on this page`}
-          </p>
-        </div>
-        <button
-          onClick={handleExport}
-          disabled={exporting || isLoading}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-border-light hover:border-accent hover:text-accent text-gray-700 text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50"
-        >
-          <Download className="w-4 h-4" />
-          {exporting ? 'Exporting...' : 'Export CSV'}
-        </button>
+      <div>
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Audit Log</h1>
+        <p className="text-sm text-muted mt-1">
+          {!isLoading && `${filteredEvents.length} event${filteredEvents.length !== 1 ? 's' : ''} on this page`}
+        </p>
       </div>
 
       {/* Filter bar */}
@@ -379,29 +369,33 @@ function AuditPageContent() {
             </div>
           )}
         </div>
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-          <input
-            type="text"
-            placeholder="Search loaded events..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={`${INPUT_CLASS} pl-9`}
-          />
-        </div>
       </div>
+
+      {/* Action toolbar */}
+      <ListToolbar
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+      >
+        <ListToolbarButton
+          icon={Download}
+          label={exporting ? 'Exporting...' : 'Export CSV'}
+          onClick={handleExport}
+          disabled={exporting || isLoading}
+          variant="white"
+        />
+      </ListToolbar>
 
       {/* Table */}
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-white">
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Timestamp</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">User</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Action</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Resource Type</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Resource ID</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">PHI</th>
+            <tr className="bg-table-header">
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Timestamp</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">User</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Action</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Resource Type</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Resource ID</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">PHI</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">

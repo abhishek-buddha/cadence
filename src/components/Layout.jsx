@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import HandoffNotifier from './HandoffNotifier';
 import ClaimUserRoutingDrawer from './ClaimUserRoutingDrawer';
 import { Database, UserCog, LogOut, Route } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getPageTitle } from '../utils/pageTitles';
 
 function HeaderIconLink({ to, icon: Icon, label }) {
   return (
@@ -78,6 +79,8 @@ function ClaimRoutingNotch({ onClick }) {
 }
 
 export default function Layout({ onLogout }) {
+  const location = useLocation();
+  const pageTitle = getPageTitle(location.pathname, 'Dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebarCollapsed') === 'true'; } catch { return false; }
   });
@@ -97,10 +100,13 @@ export default function Layout({ onLogout }) {
       <ClaimRoutingNotch onClick={() => setRoutingDrawerOpen(true)} />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-3 relative z-20">
-          <HeaderIconLink to="/users" icon={UserCog} label="User Management" />
-          <HeaderIconLink to="/master-data" icon={Database} label="Master Data" />
-          <UserMenu onLogout={onLogout} />
+        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-between px-6 lg:px-8 gap-3 relative z-20">
+          <h1 className="font-display font-bold text-[16px] text-gray-900 truncate">{pageTitle}</h1>
+          <div className="flex items-center gap-3 shrink-0">
+            <HeaderIconLink to="/users" icon={UserCog} label="User Management" />
+            <HeaderIconLink to="/master-data" icon={Database} label="Master Data" />
+            <UserMenu onLogout={onLogout} />
+          </div>
         </header>
 
         {/* Main content */}

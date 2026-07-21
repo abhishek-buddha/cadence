@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 import { useAuth, hasRole } from '../context/AuthContext';
 
 const KIND_OPTIONS = [
@@ -350,10 +351,24 @@ function TransferDestinationsPageContent() {
   const remove = useMutation(api.transferDestinations?.remove);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isLoading = destinations === undefined;
   const insuranceMap = {};
   (insuranceContacts ?? []).forEach((c) => { insuranceMap[c._id] = c.name; });
+
+  const filteredDestinations = (destinations ?? []).filter((dest) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    const matchesName = dest.name?.toLowerCase().includes(q);
+    const matchesPhone = dest.phone?.toLowerCase().includes(q);
+    const matchesKind = dest.kind?.toLowerCase().includes(q);
+    const matchesHours = dest.businessHours?.toLowerCase().includes(q);
+    const matchesPayers = (dest.applicableInsuranceContactIds || []).some((id) =>
+      (insuranceMap[id] || '').toLowerCase().includes(q)
+    );
+    return matchesName || matchesPhone || matchesKind || matchesHours || matchesPayers;
+  });
 
   function openCreate() {
     setEditing(null);
@@ -398,33 +413,28 @@ function TransferDestinationsPageContent() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Transfer Destinations</h1>
-          <p className="text-sm text-muted mt-1">
-            {!isLoading && `${destinations.length} destination${destinations.length !== 1 ? 's' : ''}`}
-          </p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Add Destination
-        </button>
+      <div>
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Transfer Destinations</h1>
+        <p className="text-sm text-muted mt-1">
+          {!isLoading && `${filteredDestinations.length} destination${filteredDestinations.length !== 1 ? 's' : ''}`}
+        </p>
       </div>
+
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton icon={Plus} label="Add Destination" onClick={openCreate} />
+      </ListToolbar>
 
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-white">
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Name</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Phone</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Kind</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Hours</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Applicable Payers</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Enabled</th>
-              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Actions</th>
+            <tr className="bg-table-header">
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Name</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Phone</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Kind</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Hours</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold">Applicable Payers</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Enabled</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -438,27 +448,33 @@ function TransferDestinationsPageContent() {
                   ))}
                 </tr>
               ))
-            ) : destinations.length === 0 ? (
+            ) : filteredDestinations.length === 0 ? (
               <tr>
                 <td colSpan={7}>
                   <EmptyState
                     icon={PhoneForwarded}
                     title="No transfer destinations yet"
-                    description="Add destinations so the AI agent can warm-transfer calls to a human when needed."
+                    description={
+                      searchQuery
+                        ? 'Try adjusting your search to find what you are looking for.'
+                        : 'Add destinations so the AI agent can warm-transfer calls to a human when needed.'
+                    }
                     action={
-                      <button
-                        onClick={openCreate}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Add Destination
-                      </button>
+                      !searchQuery ? (
+                        <button
+                          onClick={openCreate}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add Destination
+                        </button>
+                      ) : undefined
                     }
                   />
                 </td>
               </tr>
             ) : (
-              destinations.map((dest) => (
+              filteredDestinations.map((dest) => (
                 <tr key={dest._id} className="hover:bg-gray-50/80 transition-colors">
                   <td className="px-4 py-3.5 text-sm text-gray-900 whitespace-nowrap font-medium">{dest.name}</td>
                   <td className="px-4 py-3.5 text-sm text-gray-700 font-data whitespace-nowrap">{formatPhone(dest.phone)}</td>

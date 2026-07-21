@@ -22,7 +22,10 @@ export default {
         'accent-grad': '#63b8e8', // --accent-grad-start (gradient partner)
         cyan: '#0891b2', // secondary status color — kept a true teal so it stays
         // visually distinct from the new blue accent (mock has no equivalent role)
-        toolbar: '#1c4f73', // --toolbar-bg (dark navy bars) — not yet used in any real UI
+        toolbar: '#1c4f73', // --toolbar-bg (dark navy action-toolbar bars)
+        'table-header': '#c3e3f6', // --table-header (colored table head band)
+        'table-header-hover': '#a5d5f0', // --table-header-hover
+        'table-header-text': '#10141d', // header cell text (dark navy, not accent)
         sidebar: '#10141d', // dark sidebar surface — unused placeholder
         success: '#10b981',
         'success-dim': '#ecfdf5',

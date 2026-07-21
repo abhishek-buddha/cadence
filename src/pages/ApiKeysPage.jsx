@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 import { useAuth, hasRole } from '../context/AuthContext';
 
 const ALL_SCOPES = [
@@ -316,8 +317,19 @@ function ApiKeysPageContent() {
   const revokeKey = useMutation(api.apiKeys?.revoke);
   const [issueOpen, setIssueOpen] = useState(false);
   const [revoking, setRevoking] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isLoading = keys === undefined;
+
+  const filteredKeys = (keys ?? []).filter((key) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    const matchesName = key.name?.toLowerCase().includes(q);
+    const matchesPrefix = key.prefix?.toLowerCase().includes(q);
+    const matchesScopes = (key.scopes || []).some((s) => s.toLowerCase().includes(q));
+    const matchesStatus = key.status?.toLowerCase().includes(q);
+    return matchesName || matchesPrefix || matchesScopes || matchesStatus;
+  });
 
   async function handleRevoke(key) {
     if (!window.confirm(`Revoke "${key.name}"? Any service using this key will immediately lose access. This cannot be undone.`)) {
@@ -333,32 +345,27 @@ function ApiKeysPageContent() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">API Keys</h1>
-          <p className="text-sm text-muted mt-1">
-            {!isLoading && `${keys.length} key${keys.length !== 1 ? 's' : ''}`}
-          </p>
-        </div>
-        <button
-          onClick={() => setIssueOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Issue New Key
-        </button>
+      <div>
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">API Keys</h1>
+        <p className="text-sm text-muted mt-1">
+          {!isLoading && `${filteredKeys.length} key${filteredKeys.length !== 1 ? 's' : ''}`}
+        </p>
       </div>
+
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton icon={Plus} label="Issue New Key" onClick={() => setIssueOpen(true)} />
+      </ListToolbar>
 
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-white">
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Name</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Prefix</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Scopes</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Last Used</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Status</th>
-              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Actions</th>
+            <tr className="bg-table-header">
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Name</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Prefix</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold">Scopes</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Last Used</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Status</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -372,27 +379,33 @@ function ApiKeysPageContent() {
                   ))}
                 </tr>
               ))
-            ) : keys.length === 0 ? (
+            ) : filteredKeys.length === 0 ? (
               <tr>
                 <td colSpan={6}>
                   <EmptyState
                     icon={KeyRound}
                     title="No API keys yet"
-                    description="Issue an API key to enable external integrations."
+                    description={
+                      searchQuery
+                        ? 'Try adjusting your search to find what you are looking for.'
+                        : 'Issue an API key to enable external integrations.'
+                    }
                     action={
-                      <button
-                        onClick={() => setIssueOpen(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Issue New Key
-                      </button>
+                      !searchQuery ? (
+                        <button
+                          onClick={() => setIssueOpen(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Issue New Key
+                        </button>
+                      ) : undefined
                     }
                   />
                 </td>
               </tr>
             ) : (
-              keys.map((key) => (
+              filteredKeys.map((key) => (
                 <tr key={key._id} className="hover:bg-gray-50/80 transition-colors">
                   <td className="px-4 py-3.5 text-sm text-gray-900 whitespace-nowrap font-medium">
                     {key.name}

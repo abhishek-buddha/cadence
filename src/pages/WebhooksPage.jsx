@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 import { useAuth, hasRole } from '../context/AuthContext';
 
 const ALL_EVENTS = [
@@ -529,37 +530,42 @@ function WebhooksPageContent() {
   const revoke = useMutation(api.webhooks?.revoke);
   const testFire = useAction(api.webhooks?.testFire);
   const [addOpen, setAddOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isLoading = subscriptions === undefined;
 
+  const filteredSubscriptions = (subscriptions ?? []).filter((sub) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    const matchesUrl = sub.url?.toLowerCase().includes(q);
+    const matchesEvents = (sub.events || []).some((e) => e.toLowerCase().includes(q));
+    const matchesStatus = sub.status?.toLowerCase().includes(q);
+    return matchesUrl || matchesEvents || matchesStatus;
+  });
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Webhooks</h1>
-          <p className="text-sm text-muted mt-1">
-            {!isLoading && `${subscriptions.length} subscription${subscriptions.length !== 1 ? 's' : ''}`}
-          </p>
-        </div>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Add Subscription
-        </button>
+      <div>
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Webhooks</h1>
+        <p className="text-sm text-muted mt-1">
+          {!isLoading && `${filteredSubscriptions.length} subscription${filteredSubscriptions.length !== 1 ? 's' : ''}`}
+        </p>
       </div>
+
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton icon={Plus} label="Add Subscription" onClick={() => setAddOpen(true)} />
+      </ListToolbar>
 
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-white">
+            <tr className="bg-table-header">
               <th className="pl-4 pr-2 py-3.5 w-8"></th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">URL</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold">Events</th>
-              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Status</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Last Delivery</th>
-              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Actions</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">URL</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold">Events</th>
+              <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Status</th>
+              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Last Delivery</th>
+              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -573,27 +579,33 @@ function WebhooksPageContent() {
                   ))}
                 </tr>
               ))
-            ) : subscriptions.length === 0 ? (
+            ) : filteredSubscriptions.length === 0 ? (
               <tr>
                 <td colSpan={6}>
                   <EmptyState
                     icon={Webhook}
                     title="No webhook subscriptions yet"
-                    description="Subscribe to events to integrate Cadence with your downstream systems."
+                    description={
+                      searchQuery
+                        ? 'Try adjusting your search to find what you are looking for.'
+                        : 'Subscribe to events to integrate Cadence with your downstream systems.'
+                    }
                     action={
-                      <button
-                        onClick={() => setAddOpen(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Add Subscription
-                      </button>
+                      !searchQuery ? (
+                        <button
+                          onClick={() => setAddOpen(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add Subscription
+                        </button>
+                      ) : undefined
                     }
                   />
                 </td>
               </tr>
             ) : (
-              subscriptions.map((sub) => (
+              filteredSubscriptions.map((sub) => (
                 <SubscriptionRow
                   key={sub._id}
                   subscription={sub}

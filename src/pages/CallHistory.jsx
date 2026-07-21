@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText, Mic, Search, Download, MessageSquare } from 'lucide-react';
+import { PhoneCall, ChevronDown, ChevronRight, FileText, Mic, Download, MessageSquare } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import OutcomeBadge from '../components/OutcomeBadge';
 import EmptyState from '../components/EmptyState';
 import DispositionBadge from '../components/DispositionBadge';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 import { useProviderFilter } from '../context/ProviderFilterContext';
 
 const OUTCOME_OPTIONS = [
@@ -658,86 +659,68 @@ export default function CallHistory() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Call History</h1>
-          <p className="text-sm text-muted mt-1">All voice agent calls</p>
+      <div>
+        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Call History</h1>
+        <p className="text-sm text-muted mt-1">All voice agent calls</p>
+      </div>
+
+      {/* Action toolbar */}
+      <ListToolbar searchValue={searchTerm} onSearchChange={setSearchTerm}>
+        <div className="relative">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="custom-select appearance-none pr-8 pl-3 py-2 bg-white border border-border-light rounded-full text-xs text-gray-700 outline-none focus:ring-1 focus:ring-accent cursor-pointer w-40"
+          >
+            <option value="all">All Statuses</option>
+            <option value="initiating">Initiating</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+          </select>
+          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search transcripts..."
-              className={`${inputClass} pl-8 w-56`}
-            />
-          </div>
+        <div className="relative">
           <button
             type="button"
-            onClick={exportFilteredCalls}
-            disabled={filteredCalls.length === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-gray-600 hover:border-accent hover:text-accent disabled:opacity-50 transition-colors"
+            onClick={() => setOutcomeMenuOpen((o) => !o)}
+            className="appearance-none pr-8 pl-3 py-2 bg-white border border-border-light rounded-full text-xs text-gray-700 outline-none focus:ring-1 focus:ring-accent cursor-pointer text-left w-40"
           >
-            <Download className="w-3.5 h-3.5" />
-            Export
+            {outcomeFilter.length === 0
+              ? 'All Outcomes'
+              : `${outcomeFilter.length} selected`}
           </button>
-          <Clock className="w-4 h-4 text-muted" />
-          <div className="relative">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className={`${inputClass} custom-select appearance-none pr-8 w-44 cursor-pointer`}
-            >
-              <option value="all">All Statuses</option>
-              <option value="initiating">Initiating</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="failed">Failed</option>
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-          </div>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setOutcomeMenuOpen((o) => !o)}
-              className={`${inputClass} appearance-none pr-8 w-48 cursor-pointer text-left`}
-            >
-              {outcomeFilter.length === 0
-                ? 'All Outcomes'
-                : `${outcomeFilter.length} selected`}
-            </button>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-            {outcomeMenuOpen && (
-              <div className="absolute right-0 mt-1 w-56 bg-white border border-border rounded-lg shadow-lg z-10 p-2">
-                {OUTCOME_OPTIONS.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm text-gray-700"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={outcomeFilter.includes(opt.value)}
-                      onChange={() => toggleOutcome(opt.value)}
-                      className="rounded border-border-light text-accent focus:ring-accent"
-                    />
-                    <span>{opt.label}</span>
-                  </label>
-                ))}
-                {outcomeFilter.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setOutcomeFilter([])}
-                    className="w-full text-left px-2 py-1.5 mt-1 text-xs text-muted hover:text-gray-700 border-t border-border"
-                  >
-                    Clear all
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
+          {outcomeMenuOpen && (
+            <div className="absolute right-0 mt-1 w-56 bg-white border border-border rounded-lg shadow-lg z-10 p-2">
+              {OUTCOME_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm text-gray-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={outcomeFilter.includes(opt.value)}
+                    onChange={() => toggleOutcome(opt.value)}
+                    className="rounded border-border-light text-accent focus:ring-accent"
+                  />
+                  <span>{opt.label}</span>
+                </label>
+              ))}
+              {outcomeFilter.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOutcomeFilter([])}
+                  className="w-full text-left px-2 py-1.5 mt-1 text-xs text-muted hover:text-gray-700 border-t border-border"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      </div>
+        <ListToolbarButton icon={Download} label="Export" onClick={exportFilteredCalls} disabled={filteredCalls.length === 0} variant="white" />
+      </ListToolbar>
 
       {/* Call count summary */}
       {!isLoading && calls.length > 0 && (
@@ -788,15 +771,15 @@ export default function CallHistory() {
       ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
           {/* Table header */}
-          <div className="flex items-center gap-4 px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-4 px-4 py-3 bg-table-header">
             <span className="w-4" /> {/* Chevron spacer */}
-            <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold min-w-[160px]">Date</span>
-            <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold min-w-[120px]">Claim #</span>
-            <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold flex-1">Insurance</span>
-            <span className="min-w-[140px] text-left text-xs uppercase tracking-wider text-muted font-semibold">Outcome</span>
-            <span className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted font-semibold min-w-[70px]">Duration</span>
-            <span className="min-w-[90px] text-center text-xs uppercase tracking-wider text-muted font-semibold">Recording</span>
-            <span className="min-w-[110px] text-right text-xs uppercase tracking-wider text-muted font-semibold pr-4">Status</span>
+            <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[160px]">Date</span>
+            <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[120px]">Claim #</span>
+            <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold flex-1">Insurance</span>
+            <span className="min-w-[140px] text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Outcome</span>
+            <span className="px-4 py-3 text-right text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[70px]">Duration</span>
+            <span className="min-w-[90px] text-center text-xs uppercase tracking-wider text-table-header-text font-semibold">Recording</span>
+            <span className="min-w-[110px] text-right text-xs uppercase tracking-wider text-table-header-text font-semibold pr-4">Status</span>
           </div>
 
           {/* Call rows */}

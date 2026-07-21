@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   Activity,
   PhoneCall,
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import HandoffNotifier from './HandoffNotifier';
+import { getPageTitle } from '../utils/pageTitles';
 
 // Same module set as the admin Sidebar, minus Call Audit / Reports / Master
 // Data / User Management / Claim User Routing — those stay admin-only (Claim
@@ -71,8 +72,8 @@ function OperatorSidebar() {
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 relative ${
-                isActive ? 'bg-accent/8 text-accent' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 relative ${
+                isActive ? 'bg-accent-dim text-accent font-semibold' : 'font-medium text-gray-500 hover:text-gray-800 hover:bg-panel-light'
               }`
             }
           >
@@ -100,6 +101,8 @@ function OperatorSidebar() {
 
 export default function OperatorLayout({ onLogout }) {
   const auth = useAuth();
+  const location = useLocation();
+  const pageTitle = getPageTitle(location.pathname, 'My Queue');
   const label = auth?.name || auth?.email || 'Signed in';
 
   return (
@@ -107,8 +110,9 @@ export default function OperatorLayout({ onLogout }) {
       <OperatorSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-3 relative z-20">
-          <div className="flex items-center gap-2.5">
+        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-between px-6 lg:px-8 gap-3 relative z-20">
+          <h1 className="font-display font-bold text-[16px] text-gray-900 truncate">{pageTitle}</h1>
+          <div className="flex items-center gap-2.5 shrink-0">
             <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-xs font-display font-semibold text-accent shrink-0">
               {getInitials(label)}
             </div>

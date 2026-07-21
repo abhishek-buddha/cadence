@@ -63,10 +63,10 @@ export default function Sidebar({ collapsed, onToggle }) {
         rel={newTab ? 'noreferrer' : undefined}
         title={collapsed ? label : undefined}
         className={({ isActive }) =>
-          `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
+          `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group relative ${
             isActive
-              ? 'bg-accent/8 text-accent'
-              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+              ? 'bg-accent-dim text-accent font-semibold'
+              : 'font-medium text-gray-500 hover:text-gray-800 hover:bg-panel-light'
           }`
         }
       >
@@ -95,10 +95,10 @@ export default function Sidebar({ collapsed, onToggle }) {
           title={collapsed ? callAuditGroup.label : undefined}
           className={`w-full flex items-center ${
             collapsed ? 'justify-center' : 'gap-3'
-          } px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
+          } px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group relative ${
             isCallAuditActive
-              ? 'bg-accent/8 text-accent'
-              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+              ? 'bg-accent-dim text-accent font-semibold'
+              : 'font-medium text-gray-500 hover:text-gray-800 hover:bg-panel-light'
           }`}
         >
           {isCallAuditActive && (
@@ -124,10 +124,10 @@ export default function Sidebar({ collapsed, onToggle }) {
                 key={to}
                 to={to}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                     isActive
-                      ? 'text-accent bg-accent/5'
-                      : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                      ? 'text-accent bg-accent-dim font-semibold'
+                      : 'font-medium text-gray-500 hover:text-gray-800 hover:bg-panel-light'
                   }`
                 }
               >
@@ -202,10 +202,10 @@ export default function Sidebar({ collapsed, onToggle }) {
           to="/settings"
           title={collapsed ? 'Settings' : undefined}
           className={({ isActive }) =>
-            `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+            `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${
               isActive
-                ? 'bg-accent/8 text-accent'
-                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                ? 'bg-accent-dim text-accent font-semibold'
+                : 'font-medium text-gray-500 hover:text-gray-800 hover:bg-panel-light'
             }`
           }
         >

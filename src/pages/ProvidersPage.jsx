@@ -4,6 +4,7 @@ import { api } from '../../convex/_generated/api';
 import { Stethoscope, Plus, Pencil, Trash2 } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 
 const EMPTY_FORM = {
   practiceName: '',
@@ -24,8 +25,16 @@ export default function ProvidersPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isLoading = providers === undefined;
+
+  const filteredProviders = (providers ?? []).filter((provider) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return [provider.practiceName, provider.npi, provider.phone, provider.specialty]
+      .some((v) => v && String(v).toLowerCase().includes(q));
+  });
 
   function openCreate() {
     setEditing(null);
@@ -96,14 +105,15 @@ export default function ProvidersPage() {
         <div>
           <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Providers</h1>
           <p className="text-sm text-muted mt-1">
-            {providers ? `${providers.length} provider${providers.length !== 1 ? 's' : ''}` : 'Loading...'}
+            {providers ? `${filteredProviders.length} provider${filteredProviders.length !== 1 ? 's' : ''}` : 'Loading...'}
           </p>
         </div>
-        <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
-          <Plus className="w-4 h-4" />
-          Add Provider
-        </button>
       </div>
+
+      {/* Action toolbar */}
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton icon={Plus} label="Add Provider" onClick={openCreate} />
+      </ListToolbar>
 
       {/* Table */}
       {isLoading ? (
@@ -114,17 +124,23 @@ export default function ProvidersPage() {
             ))}
           </div>
         </div>
-      ) : providers.length === 0 ? (
+      ) : filteredProviders.length === 0 ? (
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Stethoscope}
-            title="No providers yet"
-            description="Add provider information for insurance verification calls."
+            title={searchQuery ? 'No matching providers' : 'No providers yet'}
+            description={
+              searchQuery
+                ? 'Try adjusting your search to find what you are looking for.'
+                : 'Add provider information for insurance verification calls.'
+            }
             action={
-              <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                Add Provider
-              </button>
+              !searchQuery ? (
+                <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Provider
+                </button>
+              ) : undefined
             }
           />
         </div>
@@ -133,18 +149,18 @@ export default function ProvidersPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Practice Name</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">NPI</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Tax ID</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Address</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Phone</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Specialty</th>
-                  <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted font-semibold">Actions</th>
+                <tr className="bg-table-header">
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Practice Name</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">NPI</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Tax ID</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Address</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Phone</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Specialty</th>
+                  <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-table-header-text font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {providers.map((provider) => (
+                {filteredProviders.map((provider) => (
                   <tr key={provider._id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="px-4 py-3 text-sm text-gray-600">
                       <span className="font-medium text-gray-900">{provider.practiceName}</span>

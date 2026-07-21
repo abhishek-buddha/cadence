@@ -4,6 +4,7 @@ import { api } from '../../convex/_generated/api';
 import { Users, Plus, Pencil, Trash2, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 import { useProviderFilter } from '../context/ProviderFilterContext';
 
 const EMPTY_FORM = {
@@ -30,6 +31,7 @@ export default function PatientsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [piiVisible, setPiiVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isLoading = allPatients === undefined;
 
@@ -40,6 +42,13 @@ export default function PatientsPage() {
   const patients = selectedProviderId
     ? (allPatients ?? []).filter((p) => providerPatientIds?.has(p._id))
     : allPatients;
+
+  const filteredPatients = (patients ?? []).filter((patient) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return [patient.firstName, patient.lastName, patient.memberId, patient.groupNumber]
+      .some((v) => v && String(v).toLowerCase().includes(q));
+  });
 
   function openCreate() {
     setEditing(null);
@@ -140,14 +149,15 @@ export default function PatientsPage() {
             </button>
           </div>
           <p className="text-sm text-muted mt-1">
-            {patients ? `${patients.length} patient${patients.length !== 1 ? 's' : ''}` : 'Loading...'}
+            {patients ? `${filteredPatients.length} patient${filteredPatients.length !== 1 ? 's' : ''}` : 'Loading...'}
           </p>
         </div>
-        <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
-          <Plus className="w-4 h-4" />
-          Add Patient
-        </button>
       </div>
+
+      {/* Action toolbar */}
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton icon={Plus} label="Add Patient" onClick={openCreate} />
+      </ListToolbar>
 
       {/* Table */}
       {isLoading ? (
@@ -158,17 +168,23 @@ export default function PatientsPage() {
             ))}
           </div>
         </div>
-      ) : patients.length === 0 ? (
+      ) : filteredPatients.length === 0 ? (
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Users}
-            title="No patients yet"
-            description="Add your first patient record to get started with claims management."
+            title={searchQuery ? 'No matching patients' : 'No patients yet'}
+            description={
+              searchQuery
+                ? 'Try adjusting your search to find what you are looking for.'
+                : 'Add your first patient record to get started with claims management.'
+            }
             action={
-              <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                Add Patient
-              </button>
+              !searchQuery ? (
+                <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Patient
+                </button>
+              ) : undefined
             }
           />
         </div>
@@ -177,17 +193,17 @@ export default function PatientsPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Name</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">DOB</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Member ID</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Group #</th>
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Relationship</th>
-                  <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted font-semibold">Actions</th>
+                <tr className="bg-table-header">
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Name</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">DOB</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Member ID</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Group #</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Relationship</th>
+                  <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-table-header-text font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {patients.map((patient) => (
+                {filteredPatients.map((patient) => (
                   <tr key={patient._id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="px-4 py-3 text-sm text-gray-600">
                       <span className="font-medium text-gray-900">{mask(patient.firstName)} {mask(patient.lastName)}</span>

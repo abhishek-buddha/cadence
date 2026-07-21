@@ -363,7 +363,7 @@ export default function Dashboard() {
                   </span>
                   <StatusBadge status={call.status ?? 'unknown'} />
                   <span className="text-xs text-muted font-data whitespace-nowrap min-w-[60px] text-right">
-                    {formatTime(call._creationTime)}
+                    {formatTime(call.startedAt ?? call._creationTime)}
                   </span>
                 </div>
               ))}

@@ -242,14 +242,27 @@ export const dataAccuracy = query({
 
 // Turnaround time: p50/p95/p99 of (completedAt - startedAt) in seconds, grouped by useCase
 export const turnaroundTime = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    fromDate: v.optional(v.string()),
+    toDate: v.optional(v.string()),
+    payerId: v.optional(v.id('insuranceContacts')),
+    useCase: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject || 'default';
-    const calls = await ctx.db
+    const allCalls = await ctx.db
       .query('calls')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .collect();
+    const calls = allCalls.filter((c) => {
+      if (args.payerId && c.insuranceContactId !== args.payerId) return false;
+      if (args.useCase && c.useCase !== args.useCase) return false;
+      if (args.fromDate || args.toDate) {
+        if (!inRange(c.startedAt, args.fromDate, args.toDate)) return false;
+      }
+      return true;
+    });
     const completed = calls.filter((c) => c.completedAt && c.startedAt);
 
     const buckets = new Map<string, number[]>();
@@ -398,16 +411,21 @@ export const holdMetrics = query({
   },
 });
 
-// Exception report: long holds OR high partial rate per payer in last 24h
+// Exception report: long holds OR high partial rate per payer in last 24h.
+// Deliberately a fixed 24h "what needs attention right now" window — not a
+// historical report, so no date-range filter — but payer narrows it down.
 export const exceptionReport = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { payerId: v.optional(v.id('insuranceContacts')) },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject || 'default';
-    const calls = await ctx.db
+    const allCalls = await ctx.db
       .query('calls')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .collect();
+    const calls = args.payerId
+      ? allCalls.filter((c) => c.insuranceContactId === args.payerId)
+      : allCalls;
 
     const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
     const recent = calls.filter((c) => c.startedAt >= cutoff);

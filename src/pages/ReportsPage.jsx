@@ -25,9 +25,12 @@ const TABS = [
   { value: 'volume_by_tier', label: 'Volume by Tier', icon: Layers },
 ];
 
+// Values must match calls.useCase exactly ("medical_claim" | "dental_ev") —
+// a prior "claim_followup" mismatch silently zeroed out every report whenever
+// this filter was set to the medical option.
 const USE_CASE_OPTIONS = [
   { value: '', label: 'All Case Types' },
-  { value: 'claim_followup', label: 'Claim Follow-up' },
+  { value: 'medical_claim', label: 'Medical Claim' },
   { value: 'dental_ev', label: 'Dental EV' },
 ];
 
@@ -382,8 +385,7 @@ function DataAccuracyTab({ filters }) {
 // Tab content: Turnaround Time
 // ---------------------------------------------------------------------------
 function TurnaroundTimeTab({ filters }) {
-  // turnaroundTime takes no filter args — pass empty object to avoid Convex validation errors
-  const data = useQuery(api.reports?.turnaroundTime, {});
+  const data = useQuery(api.reports?.turnaroundTime, filters);
   const isLoading = data === undefined;
 
   // Backend returns Array<{ useCase, count, p50, p95, p99 }>
@@ -643,8 +645,9 @@ function OperationalKpisTab({ filters }) {
 // Tab content: Exception Report
 // ---------------------------------------------------------------------------
 function ExceptionReportTab({ filters }) {
-  // exceptionReport takes no filter args
-  const data = useQuery(api.reports?.exceptionReport, {});
+  // exceptionReport is a fixed "last 24h" alert view (not historical), so it
+  // only accepts payerId — not the date-range/useCase filters the other tabs use.
+  const data = useQuery(api.reports?.exceptionReport, { payerId: filters.payerId });
   const isLoading = data === undefined;
 
   // Backend returns Array<{ exception, payer, payerName, count, lastSeenAt }>
@@ -676,6 +679,9 @@ function ExceptionReportTab({ filters }) {
 
   return (
     <div className="space-y-6">
+      <p className="text-xs text-muted -mt-2">
+        Always shows the last 24 hours — only the Payer filter above applies here; Date Range and Case Type don't.
+      </p>
       <ChartCard
         title="Exceptions by Type"
         subtitle="Calls that failed or required human escalation (last 24h)"
@@ -754,6 +760,9 @@ function VolumeByTierTab({ filters }) {
 
   return (
     <div className="space-y-6">
+      <p className="text-xs text-muted -mt-2">
+        Always shows the current calendar month across all payers — the filters above don't apply here.
+      </p>
       <ChartCard
         title="Call Volume by Tier"
         subtitle="Distribution of calls this month by payer volume tier"

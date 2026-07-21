@@ -27,6 +27,7 @@ import type * as dentalImport from "../dentalImport.js";
 import type * as dentalPlans from "../dentalPlans.js";
 import type * as devSeed from "../devSeed.js";
 import type * as evResults from "../evResults.js";
+import type * as fabricateHistory from "../fabricateHistory.js";
 import type * as handoff from "../handoff.js";
 import type * as http from "../http.js";
 import type * as insuranceContacts from "../insuranceContacts.js";
@@ -77,6 +78,7 @@ declare const fullApi: ApiFromModules<{
   dentalPlans: typeof dentalPlans;
   devSeed: typeof devSeed;
   evResults: typeof evResults;
+  fabricateHistory: typeof fabricateHistory;
   handoff: typeof handoff;
   http: typeof http;
   insuranceContacts: typeof insuranceContacts;

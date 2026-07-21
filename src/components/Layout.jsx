@@ -71,7 +71,7 @@ function ClaimRoutingNotch({ onClick }) {
       type="button"
       onClick={onClick}
       title="Claim User Routing"
-      className="fixed right-0 top-20 z-10 flex items-center justify-center w-9 h-9 bg-accent/10 border border-accent/20 text-accent rounded-l-lg shadow-lg shadow-gray-200/50 hover:bg-white transition-colors duration-150"
+      className="fixed right-0 top-20 z-30 flex items-center justify-center w-9 h-9 bg-toolbar text-white rounded-l-lg shadow-lg shadow-gray-400/40 hover:bg-accent-hover transition-colors duration-150"
     >
       <Route className="w-4 h-4" />
     </button>

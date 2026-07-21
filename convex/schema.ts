@@ -51,6 +51,10 @@ export default defineSchema({
     // when any of those fields are edited, since an edit invalidates the prior
     // confirmation until it's re-checked against the real call.
     ivrVerifiedAt: v.optional(v.string()),
+    // Voice AI agent config — not yet wired to any call behavior, just stored
+    // for now until the agent-side functionality is built.
+    voiceTone: v.optional(v.string()), // "male" | "female"
+    voiceModulation: v.optional(v.string()), // e.g. "us_neutral" | "us_east_coast" | ...
     userId: v.string(),
     createdAt: v.string(),
     updatedAt: v.string(),
@@ -183,6 +187,49 @@ export default defineSchema({
     // claimed, so concurrent completion paths (poll / call-ended / webhook)
     // can't each place a duplicate call to the human-agent number.
     handoffFollowUpAt: v.optional(v.string()),
+    // ---- LIVE AI→HUMAN HANDOFF (cadence_pro_ivr) ----
+    // These drive the live transfer where the AI navigates the payer IVR on a
+    // Cadence-controlled Twilio conference call, and when the insurance human
+    // picks up, one of our agents takes over the SAME call (AI leg dropped).
+    // All optional / additive — legacy calls and the existing ElevenLabs-native
+    // separate-follow-up path (handoffFollowUpAt above) are unaffected.
+    //   "none"          — no live handoff in play (default / legacy calls)
+    //   "awaiting_human"— insurance human detected; broadcast to our agents
+    //   "accepting"     — one of our agents claimed it; bridging in progress
+    //   "connected"     — our human ↔ insurance human on the same call
+    //   "declined"      — an agent declined (call stays available to others)
+    //   "handoff_failed"— no agent took it / bridge failed
+    //   "handoff_ended" — call ended after a successful handoff
+    handoffState: v.optional(v.string()),
+    handoffRequestedAt: v.optional(v.string()),
+    handoffReason: v.optional(v.string()),
+    handoffAcceptedByUserId: v.optional(v.string()),
+    handoffAcceptedByEmail: v.optional(v.string()),
+    handoffAcceptedAt: v.optional(v.string()),
+    assignedAgentUserId: v.optional(v.id('users')),
+    assignedAgentEmail: v.optional(v.string()),
+    assignedAgentName: v.optional(v.string()),
+    // Deterministic Twilio conference name (cadence-<callId>) that every leg
+    // (payer, AI media, our human) joins so participants can be swapped live.
+    conferenceName: v.optional(v.string()),
+    // The AI's conference participant/call leg — dropped on successful handoff.
+    aiParticipantCallSid: v.optional(v.string()),
+    // Our agent's leg once they join (Phase 1: dialed number; Phase 2: browser
+    // softphone). Kept so we can track/clean it up.
+    humanParticipantCallSid: v.optional(v.string()),
+    // Short numeric token carried in the AI transfer's post-dial DTMF digits so
+    // the inbound leg on our bridge number can be correlated back to THIS call.
+    handoffToken: v.optional(v.string()),
+    // Transcript of the human↔human portion after handoff (Twilio transcription
+    // of the conference recording). Separate from `transcript` (the AI/IVR
+    // portion) so the two don't collide.
+    humanTranscript: v.optional(v.string()),
+    // Downloaded audio bytes, stored in Convex file storage so playback never
+    // depends on ElevenLabs/Twilio retaining the file. Two separate legs:
+    //   aiRecordingStorageId    — the ElevenLabs agent↔IVR recording
+    //   humanRecordingStorageId — the Twilio human↔human conference recording
+    aiRecordingStorageId: v.optional(v.id('_storage')),
+    humanRecordingStorageId: v.optional(v.id('_storage')),
     userId: v.string(),
     startedAt: v.string(),
     completedAt: v.optional(v.string()),
@@ -193,6 +240,8 @@ export default defineSchema({
     .index('by_userId', ['userId'])
     .index('by_status', ['status'])
     .index('by_outcome', ['outcome'])
+    .index('by_handoffState', ['handoffState'])
+    .index('by_assignedAgentUserId', ['assignedAgentUserId'])
     .index('by_elevenLabsConversationId', ['elevenLabsConversationId']),
 
   // Call sessions for multi-patient calls (RFP requirement R-CONV-6)
@@ -296,10 +345,32 @@ export default defineSchema({
     ssoProvider: v.optional(v.string()),
     ssoSubject: v.optional(v.string()),
     lastLoginAt: v.optional(v.string()),
+    insuranceContactIds: v.optional(v.array(v.id('insuranceContacts'))),
+    providerIds: v.optional(v.array(v.id('providers'))),
+    specializations: v.optional(v.array(v.string())), // "claim_status" | "denial_claim" | "claim_eligibility_check"
+    teamLeadName: v.optional(v.string()),
+    // When set, this user's payer/provider/specialization routing scope comes
+    // from the referenced userGroups row instead of the fields above (mutually
+    // exclusive "assign via group" vs "custom" — enforced in the UI, not here).
+    userGroupId: v.optional(v.id('userGroups')),
     createdAt: v.string(),
   })
     .index('by_email', ['email'])
-    .index('by_role', ['role']),
+    .index('by_role', ['role'])
+    .index('by_userGroupId', ['userGroupId']),
+
+  // Reusable Payer/Provider/Specialization bundles for User Management. A
+  // group's members are derived by reverse-querying `users.by_userGroupId`
+  // rather than storing a member array here, to avoid a dual-source-of-truth.
+  userGroups: defineTable({
+    name: v.string(),
+    insuranceContactIds: v.optional(v.array(v.id('insuranceContacts'))),
+    providerIds: v.optional(v.array(v.id('providers'))),
+    specializations: v.optional(v.array(v.string())),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index('by_name', ['name']),
 
   // Audit log (RFP HIPAA-aligned requirement)
   auditEvents: defineTable({

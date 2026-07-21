@@ -165,16 +165,23 @@ function humanRecordingProxyUrl(callId) {
 // ---------------------------------------------------------------------------
 // Call history timeline entry
 // ---------------------------------------------------------------------------
-function CallTimelineEntry({ call }) {
+function CallTimelineEntry({ call, claim, isLatestHandoffCall }) {
   const [expanded, setExpanded] = useState(false);
   // Stored-audio playback URLs (Convex file storage) for both recording legs.
   const recordingUrls = useQuery(api.calls.getRecordingUrls, expanded ? { callId: call._id } : 'skip');
+  // Operator disposition/comment lives on the claim, not the call — a claim can
+  // have many handoff calls (e.g. repeated retries), so only attribute the note
+  // to the MOST RECENT handoff call, not every one that ever touched this claim.
+  const hasOperatorNotes = !!(
+    isLatestHandoffCall && (claim?.followUpComment || claim?.followUpDisposition)
+  );
   // Any artifact worth expanding for.
   const hasArtifacts = !!(
     call.transcript ||
     call.humanTranscript ||
     call.recordingUrl ||
-    call.elevenLabsConversationId
+    call.elevenLabsConversationId ||
+    hasOperatorNotes
   );
 
   const startDate = call.startedAt ? new Date(call.startedAt) : null;
@@ -281,6 +288,39 @@ function CallTimelineEntry({ call }) {
                 </pre>
               </div>
             )}
+
+            {/* Operator Notes — disposition + comment recorded via the
+                operator's post-call workspace for this handoff */}
+            {hasOperatorNotes && (
+              <div>
+                <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5">
+                  <MessageSquare className="w-3 h-3" /> Operator Notes
+                </p>
+                <div className="bg-surface rounded-lg p-3 border border-border space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <DispositionBadge disposition={claim.followUpDisposition} />
+                    {(claim.followUpBy || claim.followUpAt) && (
+                      <span className="text-xs text-muted">
+                        {claim.followUpBy ? `by ${claim.followUpBy}` : ''}
+                        {claim.followUpBy && claim.followUpAt ? ' · ' : ''}
+                        {claim.followUpAt
+                          ? new Date(claim.followUpAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })
+                          : ''}
+                      </span>
+                    )}
+                  </div>
+                  {claim.followUpComment && (
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                      {claim.followUpComment}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -369,6 +409,10 @@ export default function ClaimDetailPage() {
   }
 
   const { claim, patient, insurance, provider, calls, latestResult } = data;
+  // `calls` is ordered newest-first — the operator's disposition/comment lives
+  // on the claim (not per-call), so attribute it to just the most recent
+  // handoff call rather than duplicating it across every historical attempt.
+  const latestHandoffCallId = calls?.find((c) => c.handoffState)?._id ?? null;
 
   // ---- Helpers ------------------------------------------------------------
   const formatAmount = (cents) =>
@@ -692,7 +736,12 @@ export default function ClaimDetailPage() {
           {calls && calls.length > 0 ? (
             <div>
               {calls.map((call) => (
-                <CallTimelineEntry key={call._id} call={call} />
+                <CallTimelineEntry
+                  key={call._id}
+                  call={call}
+                  claim={claim}
+                  isLatestHandoffCall={call._id === latestHandoffCallId}
+                />
               ))}
             </div>
           ) : (

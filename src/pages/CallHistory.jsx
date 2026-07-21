@@ -216,7 +216,7 @@ function AuditExtractedFields({ call, result, isDentalCall, humanHandoffComplete
   );
 }
 
-function CallRow({ call }) {
+function CallRow({ call, isLatestHandoffCall }) {
   const [expanded, setExpanded] = useState(false);
   const persistedDuration = callDuration(call);
   const humanHandoffCompleted = connectedHumanHandoff(call);
@@ -403,8 +403,11 @@ function CallRow({ call }) {
             )}
 
             {/* Operator Notes — disposition + comment recorded via the
-                operator's post-call workspace (convex/claimFollowups.ts) */}
-            {!isDentalCall && claim && (claim.followUpComment || claim.followUpDisposition) && (
+                operator's post-call workspace (convex/claimFollowups.ts). The
+                note lives on the CLAIM, not the call, and one claim can have
+                many calls (retries) — only attribute it to the most recent
+                handoff call for that claim, not every one. */}
+            {!isDentalCall && claim && isLatestHandoffCall && (claim.followUpComment || claim.followUpDisposition) && (
               <div>
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
                   <MessageSquare className="w-3 h-3" />
@@ -560,7 +563,7 @@ function CallRow({ call }) {
 
             {/* No transcript or results */}
             {!call.transcript && !call.humanTranscript && !callResult && !evResult &&
-              !claim?.followUpComment && !claim?.followUpDisposition && (
+              !(isLatestHandoffCall && (claim?.followUpComment || claim?.followUpDisposition)) && (
                 <p className="text-sm text-muted italic">No transcript or extracted data available for this call.</p>
             )}
           </div>
@@ -590,6 +593,19 @@ export default function CallHistory() {
   const calls = selectedProviderId
     ? (allCalls ?? []).filter((c) => providerClaimIds?.has(c.claimId))
     : allCalls;
+
+  // A claim's operator note (disposition/comment) lives on the claim, not the
+  // call, and one claim can have many calls (retries) — this maps each claim
+  // to its single most-recent handoff call, so the note attributes to exactly
+  // one row instead of duplicating across every historical attempt. Built
+  // from the full (pre status/outcome/search filter) list, already
+  // newest-first, so it stays stable regardless of which rows are filtered in.
+  const latestHandoffCallIdByClaim = new Map();
+  (calls ?? []).forEach((c) => {
+    if (c.handoffState && c.claimId && !latestHandoffCallIdByClaim.has(c.claimId)) {
+      latestHandoffCallIdByClaim.set(c.claimId, c._id);
+    }
+  });
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredCalls = calls
@@ -771,7 +787,11 @@ export default function CallHistory() {
           {/* Call rows */}
           <div className="divide-y divide-border/30">
             {filteredCalls.map((call) => (
-              <CallRow key={call._id} call={call} />
+              <CallRow
+                key={call._id}
+                call={call}
+                isLatestHandoffCall={latestHandoffCallIdByClaim.get(call.claimId) === call._id}
+              />
             ))}
           </div>
         </div>

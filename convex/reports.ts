@@ -49,6 +49,7 @@ export const successRateByPayer = query({
   args: {
     fromDate: v.optional(v.string()),
     toDate: v.optional(v.string()),
+    payerId: v.optional(v.id('insuranceContacts')),
     useCase: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -59,6 +60,7 @@ export const successRateByPayer = query({
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .collect();
     const filtered = calls.filter((c) => {
+      if (args.payerId && c.insuranceContactId !== args.payerId) return false;
       if (args.useCase && c.useCase !== args.useCase) return false;
       if (args.fromDate || args.toDate) {
         if (!inRange(c.startedAt, args.fromDate, args.toDate)) return false;

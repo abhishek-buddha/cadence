@@ -14,9 +14,9 @@ export default function MasterDataPage() {
   const [activeKey, setActiveKey] = useState('patients');
 
   return (
-    <div className="animate-fade-in">
-      <div className="bg-white border border-border rounded-xl shadow-sm">
-        <div className="border-b border-border flex items-center gap-1 px-4 overflow-x-auto">
+    <div className="h-full flex flex-col animate-fade-in">
+      <div className="flex-1 min-h-0 flex flex-col bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+        <div className="shrink-0 border-b border-border flex items-center gap-1 px-4 overflow-x-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeKey === tab.key;
@@ -39,7 +39,7 @@ export default function MasterDataPage() {
           })}
         </div>
 
-        <div className="p-6">
+        <div className="flex-1 min-h-0 flex flex-col p-6">
           {activeKey === 'patients' && <PatientsPage />}
           {activeKey === 'insurance' && <InsuranceDirectory />}
           {activeKey === 'providers' && <ProvidersPage />}

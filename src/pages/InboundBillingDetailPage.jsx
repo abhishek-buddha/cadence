@@ -20,7 +20,7 @@ export default function InboundBillingDetailPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       <CaseBackHeader
         backTo="/inbound-billing"
         backLabel="Back to Inbound Billing"

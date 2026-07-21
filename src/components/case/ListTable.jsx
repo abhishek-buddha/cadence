@@ -1,6 +1,6 @@
 export default function ListTable({ columns, rows, getRowKey, onRowClick, emptyState }) {
   return (
-    <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
+    <div className="flex-1 min-h-0 bg-white border border-border rounded-xl overflow-auto shadow-sm">
       <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
         <thead>
           <tr className="sticky top-0 z-10 bg-table-header">

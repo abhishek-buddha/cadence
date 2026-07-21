@@ -111,7 +111,7 @@ export default function Layout({ onLogout }) {
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto grid-bg">
-          <div className="p-6 lg:p-8">
+          <div className="h-full flex flex-col p-4 lg:p-6">
             <Outlet />
           </div>
         </main>

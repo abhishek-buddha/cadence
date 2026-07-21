@@ -162,7 +162,7 @@ export default function AuditPage() {
   // Permission gate (admin and manager allowed per Sidebar config)
   if (!hasRole(role, 'manager')) {
     return (
-      <div className="space-y-6 animate-fade-in">
+      <div className="space-y-4 animate-fade-in">
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Lock}
@@ -290,9 +290,9 @@ function AuditPageContent() {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-white border border-border rounded-xl p-4 shadow-sm">
+      <div className="shrink-0 flex flex-wrap items-center gap-3 bg-white border border-border rounded-xl p-4 shadow-sm">
         <input
           type="date"
           value={dateFrom}
@@ -374,7 +374,8 @@ function AuditPageContent() {
       </ListToolbar>
 
       {/* Table */}
-      <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
+      <div className="flex-1 min-h-0 flex flex-col bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+      <div className="flex-1 min-h-0 overflow-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="sticky top-0 z-10 bg-table-header">
@@ -442,10 +443,11 @@ function AuditPageContent() {
             )}
           </tbody>
         </table>
+      </div>
 
         {/* Pagination footer */}
         {!isLoading && events.length > 0 && (
-          <div className="flex items-center justify-between border-t border-border px-4 py-3">
+          <div className="shrink-0 flex items-center justify-between border-t border-border px-4 py-3">
             <p className="text-xs text-muted">
               Page size: <span className="font-data text-gray-700">{PAGE_SIZE}</span>
             </p>

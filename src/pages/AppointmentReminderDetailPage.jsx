@@ -26,7 +26,7 @@ export default function AppointmentReminderDetailPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       <CaseBackHeader
         backTo="/appointments"
         backLabel="Back to Appointments"

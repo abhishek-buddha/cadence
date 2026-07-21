@@ -68,12 +68,12 @@ export default function UserGroupsTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex-1 min-h-0 flex flex-col space-y-4">
       <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
         <ListToolbarButton icon={UsersRound} label="Add Group" onClick={openCreate} />
       </ListToolbar>
 
-      <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
+      <div className="flex-1 min-h-0 bg-white border border-border rounded-xl overflow-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="sticky top-0 z-10 bg-table-header">

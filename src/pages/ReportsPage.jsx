@@ -819,10 +819,10 @@ export default function ReportsPage() {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
       {/* Tabs */}
-      <div className="bg-white border border-border rounded-xl shadow-sm">
-        <div className="sticky top-0 z-20 bg-white rounded-t-xl border-b border-border flex items-center gap-1 px-4 overflow-x-auto">
+      <div className="flex-1 min-h-0 flex flex-col bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+        <div className="shrink-0 bg-white rounded-t-xl border-b border-border flex items-center gap-1 px-4 overflow-x-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.value;
@@ -847,7 +847,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Filter bar */}
-        <div className="flex flex-wrap items-end gap-5 px-4 py-3 border-b border-border bg-surface/40">
+        <div className="shrink-0 flex flex-wrap items-end gap-5 px-4 py-3 border-b border-border bg-surface/40">
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-muted font-medium mb-1">Date Range</label>
             <div className="flex items-center gap-1.5">
@@ -881,7 +881,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Tab content */}
-        <div className="p-6">
+        <div className="flex-1 min-h-0 overflow-auto p-6">
           {activeTab === 'success_rate' && <SuccessRateTab filters={filters} />}
           {activeTab === 'data_accuracy' && <DataAccuracyTab filters={filters} />}
           {activeTab === 'turnaround_time' && <TurnaroundTimeTab filters={filters} />}

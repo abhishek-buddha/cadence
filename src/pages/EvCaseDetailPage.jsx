@@ -46,7 +46,7 @@ function ShimmerCard() {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       <div className="flex items-center gap-4">
         <Shimmer className="h-9 w-9 rounded-lg" />
         <Shimmer className="h-6 w-48" />
@@ -322,7 +322,7 @@ export default function EvCaseDetailPage() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       {/* Top bar */}
       <div className="flex items-center gap-4 flex-wrap">
         <button

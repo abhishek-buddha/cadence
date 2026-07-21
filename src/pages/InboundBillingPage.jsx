@@ -34,7 +34,7 @@ export default function InboundBillingPage() {
   const filteredRows = filterRows(inboundBillingCases, searchQuery);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
       <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery} />
 
       <ListTable

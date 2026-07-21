@@ -99,7 +99,7 @@ export default function ProvidersPage() {
   const labelClass = 'block text-xs uppercase tracking-wider text-muted font-medium mb-1.5';
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
       {/* Action toolbar */}
       <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
         <ListToolbarButton icon={Plus} label="Add Provider" onClick={openCreate} />
@@ -135,8 +135,8 @@ export default function ProvidersPage() {
           />
         </div>
       ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-auto max-h-[70vh]">
+        <div className="flex-1 min-h-0 flex flex-col bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full">
               <thead>
                 <tr className="sticky top-0 z-10 bg-table-header">

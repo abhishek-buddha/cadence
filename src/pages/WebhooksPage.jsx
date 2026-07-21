@@ -503,7 +503,7 @@ export default function WebhooksPage() {
 
   if (!hasRole(role, 'manager')) {
     return (
-      <div className="space-y-6 animate-fade-in">
+      <div className="space-y-4 animate-fade-in">
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Lock}
@@ -540,12 +540,12 @@ function WebhooksPageContent() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
       <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
         <ListToolbarButton icon={Plus} label="Add Subscription" onClick={() => setAddOpen(true)} />
       </ListToolbar>
 
-      <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
+      <div className="flex-1 min-h-0 bg-white border border-border rounded-xl overflow-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="sticky top-0 z-10 bg-table-header">

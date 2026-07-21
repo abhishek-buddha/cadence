@@ -60,9 +60,9 @@ export default function AppointmentsPage() {
   const filteredRows = filterRows(rows, searchQuery);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
       {/* Tabs */}
-      <div className="flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
+      <div className="shrink-0 flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
         {TABS.map((t) => {
           const isActive = tab === t.key;
           const Icon = t.key === 'scheduling' ? Calendar : Bell;

@@ -134,24 +134,15 @@ export default function PatientsPage() {
   const labelClass = 'block text-xs uppercase tracking-wider text-muted font-medium mb-1.5';
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setPiiVisible((v) => !v)}
-              className={`p-1.5 rounded-lg transition-colors ${piiVisible ? 'text-accent bg-accent/10' : 'text-muted hover:text-gray-700 hover:bg-gray-100'}`}
-              title={piiVisible ? 'Hide patient data' : 'Reveal patient data'}
-            >
-              {piiVisible ? <Eye className="w-4.5 h-4.5" /> : <EyeOff className="w-4.5 h-4.5" />}
-            </button>
-          </div>
-        </div>
-      </div>
-
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
       {/* Action toolbar */}
       <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton
+          icon={piiVisible ? Eye : EyeOff}
+          label={piiVisible ? 'Hide PII' : 'Reveal PII'}
+          onClick={() => setPiiVisible((v) => !v)}
+          variant="white"
+        />
         <ListToolbarButton icon={Plus} label="Add Patient" onClick={openCreate} />
       </ListToolbar>
 
@@ -185,8 +176,8 @@ export default function PatientsPage() {
           />
         </div>
       ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-auto max-h-[70vh]">
+        <div className="flex-1 min-h-0 flex flex-col bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full">
               <thead>
                 <tr className="sticky top-0 z-10 bg-table-header">

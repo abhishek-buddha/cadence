@@ -20,7 +20,7 @@ export default function BenefitVerificationDetailPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       <CaseBackHeader
         backTo="/benefit-verification"
         backLabel="Back to Benefit Verification"

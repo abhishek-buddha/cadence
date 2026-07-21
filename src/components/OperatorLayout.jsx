@@ -132,7 +132,7 @@ export default function OperatorLayout({ onLogout }) {
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto grid-bg">
-          <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+          <div className="h-full flex flex-col p-4 lg:p-6 max-w-[1600px] mx-auto">
             <Outlet />
           </div>
         </main>

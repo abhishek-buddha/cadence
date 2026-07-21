@@ -150,7 +150,7 @@ export default function SettingsPage() {
   }, []);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       {/* Connection Status */}
       <Section title="Connection Status" icon={Database}>
         <div className="flex items-center gap-3">

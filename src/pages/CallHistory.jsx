@@ -657,7 +657,7 @@ export default function CallHistory() {
     'w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-700 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
       {/* Action toolbar */}
       <ListToolbar searchValue={searchTerm} onSearchChange={setSearchTerm}>
         <div className="relative">
@@ -750,9 +750,9 @@ export default function CallHistory() {
           )}
         </div>
       ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+        <div className="flex-1 min-h-0 flex flex-col bg-white border border-border rounded-xl overflow-hidden shadow-sm">
           {/* Table header */}
-          <div className="flex items-center gap-4 px-4 py-3 bg-table-header">
+          <div className="shrink-0 flex items-center gap-4 px-4 py-3 bg-table-header">
             <span className="w-4" /> {/* Chevron spacer */}
             <span className="text-left text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[160px]">Date</span>
             <span className="text-left text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[120px]">Claim #</span>
@@ -764,7 +764,7 @@ export default function CallHistory() {
           </div>
 
           {/* Call rows */}
-          <div className="divide-y divide-border/30 overflow-y-auto max-h-[70vh]">
+          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-border/30">
             {filteredCalls.map((call) => (
               <CallRow
                 key={call._id}

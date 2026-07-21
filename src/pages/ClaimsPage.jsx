@@ -686,9 +686,9 @@ export default function ClaimsPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
       {/* Status Tabs */}
-      <div className="flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
+      <div className="shrink-0 flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
         {STATUS_TABS.map((tab) => {
           const isActive = statusFilter === tab.value;
           return (
@@ -735,7 +735,7 @@ export default function ClaimsPage() {
       </ListToolbar>
 
       {/* Table */}
-      <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
+      <div className="flex-1 min-h-0 bg-white border border-border rounded-xl overflow-auto shadow-sm">
         <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
           <thead>
             <tr className="sticky top-0 z-10 bg-table-header">
@@ -812,13 +812,13 @@ export default function ClaimsPage() {
                     <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{claim.lastCalledAt ? formatDate(claim.lastCalledAt) : '---'}</td>
                     <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{claim.nextFollowUpDate ? formatDate(claim.nextFollowUpDate) : '---'}</td>
                     <td className="px-5 py-3.5 text-[13px] leading-snug text-gray-500 max-w-[300px]">
-                      <div className="flex items-start gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 overflow-hidden">
                         {claim.followUpDisposition && (
                           <DispositionBadge disposition={claim.followUpDisposition} className="shrink-0" />
                         )}
                         {latestUpdate || claim.followUpComment ? (
                           <span
-                            className="text-gray-700 line-clamp-2"
+                            className="text-gray-700 truncate"
                             title={latestUpdate || claim.followUpComment}
                           >
                             {latestUpdate || claim.followUpComment}

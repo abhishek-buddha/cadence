@@ -76,7 +76,7 @@ function ShimmerCard() {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       {/* Top bar shimmer */}
       <div className="flex items-center gap-4">
         <Shimmer className="h-9 w-9 rounded-lg" />
@@ -491,7 +491,7 @@ export default function ClaimDetailPage() {
   // RENDER
   // =========================================================================
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
       {/* ------------------------------------------------------------------ */}
       {/* TOP BAR                                                             */}
       {/* ------------------------------------------------------------------ */}

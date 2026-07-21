@@ -520,7 +520,7 @@ export default function UsersPage() {
 
   if (!hasRole(role, 'admin')) {
     return (
-      <div className="space-y-6 animate-fade-in">
+      <div className="space-y-4 animate-fade-in">
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Lock}
@@ -616,8 +616,8 @@ function UsersPageContent({ currentEmail }) {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
+      <div className="shrink-0 flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
         {TOP_TABS.map((tab) => {
           const isActive = topTab === tab.key;
           return (
@@ -641,14 +641,14 @@ function UsersPageContent({ currentEmail }) {
       {topTab === 'groups' ? (
         <UserGroupsTab />
       ) : (
-      <>
+      <div className="flex-1 min-h-0 flex flex-col space-y-4">
       <ListToolbar
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
       >
         <ListToolbarButton icon={UserPlus} label="Add User" onClick={openCreate} />
       </ListToolbar>
-      <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
+      <div className="flex-1 min-h-0 bg-white border border-border rounded-xl overflow-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="sticky top-0 z-10 bg-table-header">
@@ -778,7 +778,7 @@ function UsersPageContent({ currentEmail }) {
           </tbody>
         </table>
       </div>
-      </>
+      </div>
       )}
 
       <UserModal

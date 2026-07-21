@@ -9,22 +9,26 @@ export default {
         data: ['Roboto Mono', 'monospace'],
       },
       colors: {
-        surface: '#f0f4f8',
-        panel: '#ffffff',
-        'panel-light': '#f1f5f9',
-        border: '#e2e8f0',
-        'border-light': '#cbd5e1',
-        accent: '#6366f1',
-        'accent-hover': '#4f46e5',
-        'accent-dim': '#e0e7ff',
-        cyan: '#7c3aed',
-        success: '#059669',
-        'success-dim': '#d1fae5',
+        // Palette mapped from ECLAT / Evolve RCM mockup CSS variables
+        surface: '#f4f6f9', // --bg-page
+        panel: '#ffffff', // --bg-white
+        'panel-light': '#f8f9ff', // --bg-tint
+        border: '#eaecf0', // --border
+        'border-light': '#e5e7eb', // --border-soft
+        accent: '#4f46e5', // --accent (indigo-600)
+        'accent-hover': '#3b34cc', // --accent-hover
+        'accent-dim': '#eef2ff', // --accent-soft
+        'accent-grad': '#7c3aed', // --accent-grad-start (violet, gradient partner)
+        cyan: '#7c3aed', // secondary / violet
+        toolbar: '#25375c', // --toolbar-bg (dark navy bars)
+        sidebar: '#10141d', // dark sidebar surface
+        success: '#10b981',
+        'success-dim': '#ecfdf5',
         warn: '#d97706',
         'warn-dim': '#fef3c7',
-        danger: '#dc2626',
-        'danger-dim': '#fee2e2',
-        muted: '#64748b',
+        danger: '#f43f5e',
+        'danger-dim': '#fff1f2',
+        muted: '#6b7280', // --text-secondary
       },
     },
   },

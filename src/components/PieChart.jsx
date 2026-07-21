@@ -10,7 +10,7 @@ import { useState } from 'react';
  *   formatValue: (n) => string
  */
 const DEFAULT_PALETTE = [
-  '#6366f1', '#7c3aed', '#16a34a', '#f59e0b', '#dc2626',
+  '#4f46e5', '#7c3aed', '#10b981', '#f59e0b', '#f43f5e',
   '#7c3aed', '#0d9488', '#65a30d', '#ea580c', '#db2777',
 ];
 

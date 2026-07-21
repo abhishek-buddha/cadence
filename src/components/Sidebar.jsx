@@ -1,66 +1,56 @@
-import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   FileText,
+  Users,
+  Building2,
+  Stethoscope,
   PhoneCall,
   Settings,
   Activity,
   PanelLeftClose,
   PanelLeftOpen,
   BarChart3,
-  Radio,
-  ChevronDown,
-  CalendarClock,
+  PhoneForwarded,
   ShieldCheck,
-  ClipboardCheck,
-  Wallet,
-  PhoneIncoming,
+  UserCog,
+  KeyRound,
+  Webhook,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
-const callAuditGroup = {
-  icon: PhoneCall,
-  label: 'Call Audit',
-  paths: ['/call-audit', '/calls', '/live'],
-  children: [
-    { to: '/call-audit/history', icon: PhoneCall, label: 'Call History' },
-    { to: '/call-audit/live', icon: Radio, label: 'Live Sessions' },
-  ],
-};
-
-// Ordered top-to-bottom exactly as the product nav specifies. The Call Audit
-// entry is a special expandable group handled separately in the render loop.
-const navEntries = [
+const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/appointments', icon: CalendarClock, label: 'Appointments' },
-  { to: '/benefit-verification', icon: ShieldCheck, label: 'Benefit Verification' },
-  { to: '/eligibility-verification', icon: Activity, label: 'Eligibility Verification' },
-  { to: '/prior-authorization', icon: ClipboardCheck, label: 'Prior Authorization' },
-  { to: '/claims', icon: FileText, label: 'Claim Management' },
-  { to: '/patient-balance-reminder', icon: Wallet, label: 'Patient Balance Reminder' },
-  { to: '/inbound-billing', icon: PhoneIncoming, label: 'Inbound Billing' },
-  { group: true },
+  { to: '/claims', icon: FileText, label: 'Claims' },
+  { to: '/patients', icon: Users, label: 'Patients' },
+  { to: '/insurance', icon: Building2, label: 'Insurance' },
+  { to: '/providers', icon: Stethoscope, label: 'Providers' },
+  { to: '/calls', icon: PhoneCall, label: 'Call History' },
+  { to: '/eligibility', icon: Activity, label: 'Eligibility' },
+  { to: '/sessions', icon: Users, label: 'Sessions' },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
+  { to: '/transfers', icon: PhoneForwarded, label: 'Transfers' },
+];
+
+const adminItems = [
+  { to: '/audit', icon: ShieldCheck, label: 'Audit Log', roles: ['admin', 'manager'] },
+  { to: '/users', icon: UserCog, label: 'Users', roles: ['admin'] },
+  { to: '/api-keys', icon: KeyRound, label: 'API Keys', roles: ['admin'] },
+  { to: '/webhooks', icon: Webhook, label: 'Webhooks', roles: ['admin', 'manager'] },
 ];
 
 export default function Sidebar({ collapsed, onToggle }) {
-  const location = useLocation();
-  const [callAuditOpen, setCallAuditOpen] = useState(() =>
-    callAuditGroup.paths.some((path) => location.pathname.startsWith(path))
-  );
-  const isCallAuditActive = callAuditGroup.paths.some((path) =>
-    location.pathname.startsWith(path)
-  );
+  const auth = useAuth?.() ?? {};
+  const role = auth?.role ?? auth?.user?.role ?? null;
+  const visibleAdminItems = adminItems.filter((item) => item.roles.includes(role));
 
   const renderNavLink = (item) => {
-    const { to, icon: ItemIcon, label, end, newTab } = item;
+    const { to, icon: ItemIcon, label, end } = item;
     return (
       <NavLink
         key={to}
         to={to}
         end={end}
-        target={newTab ? '_blank' : undefined}
-        rel={newTab ? 'noreferrer' : undefined}
         title={collapsed ? label : undefined}
         className={({ isActive }) =>
           `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
@@ -80,64 +70,6 @@ export default function Sidebar({ collapsed, onToggle }) {
           </>
         )}
       </NavLink>
-    );
-  };
-
-  const renderCallAuditGroup = () => {
-    const GroupIcon = callAuditGroup.icon;
-    const shouldShowChildren = !collapsed && callAuditOpen;
-
-    return (
-      <div>
-        <button
-          type="button"
-          onClick={() => setCallAuditOpen((open) => !open)}
-          title={collapsed ? callAuditGroup.label : undefined}
-          className={`w-full flex items-center ${
-            collapsed ? 'justify-center' : 'gap-3'
-          } px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
-            isCallAuditActive
-              ? 'bg-accent/8 text-accent'
-              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-          }`}
-        >
-          {isCallAuditActive && (
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-accent" />
-          )}
-          <GroupIcon className="w-4 h-4 shrink-0" />
-          {!collapsed && (
-            <>
-              <span className="flex-1 text-left">{callAuditGroup.label}</span>
-              <ChevronDown
-                className={`w-3.5 h-3.5 text-muted transition-transform ${
-                  callAuditOpen ? 'rotate-180' : ''
-                }`}
-              />
-            </>
-          )}
-        </button>
-
-        {shouldShowChildren && (
-          <div className="mt-1 ml-7 space-y-0.5">
-            {callAuditGroup.children.map(({ to, icon: ChildIcon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'text-accent bg-accent/5'
-                      : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-                  }`
-                }
-              >
-                <ChildIcon className="w-4 h-4 shrink-0" />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-          </div>
-        )}
-      </div>
     );
   };
 
@@ -177,7 +109,20 @@ export default function Sidebar({ collapsed, onToggle }) {
           </p>
         )}
         {collapsed && <div className="pt-2" />}
-        {navEntries.map((item) => (item.group ? <div key="call-audit-group">{renderCallAuditGroup()}</div> : renderNavLink(item)))}
+        {navItems.map(renderNavLink)}
+
+        {visibleAdminItems.length > 0 && (
+          <>
+            {/* Divider */}
+            <div className="my-2 mx-3 border-t border-border/60" />
+            {!collapsed && (
+              <p className="px-3 pt-1 pb-2 text-[10px] uppercase tracking-[0.15em] text-muted/60 font-semibold">
+                Admin
+              </p>
+            )}
+            {visibleAdminItems.map(renderNavLink)}
+          </>
+        )}
       </nav>
 
       {/* Bottom section */}

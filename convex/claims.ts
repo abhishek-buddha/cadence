@@ -1,30 +1,6 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 
-const HUMAN_HANDOFF_UPDATE = 'Spoke to insurance human rep and clarified details.';
-
-function connectedHumanHandoff(call: any): boolean {
-  return (
-    !!call.claimId &&
-    (call.handoffState === 'connected' ||
-      call.handoffState === 'handoff_ended' ||
-      !!call.humanTranscript)
-  );
-}
-
-function humanHandoffResult(call: any) {
-  return {
-    callId: call._id,
-    claimId: call.claimId,
-    claimStatus: 'Human follow-up completed',
-    nextSteps: HUMAN_HANDOFF_UPDATE,
-    rawExtraction: HUMAN_HANDOFF_UPDATE,
-    confidence: 1,
-    userId: call.userId,
-    createdAt: call.completedAt || call.handoffAcceptedAt || call.startedAt || call._creationTime,
-  };
-}
-
 export const create = mutation({
   args: {
     claimNumber: v.string(),
@@ -102,25 +78,12 @@ export const getWithDetails = query({
       .order('desc')
       .collect();
 
-    // Get the most recent result for this claim. A completed/connected human
-    // bridge is a valid user-facing outcome even if no AI extraction row exists.
-    const latestExtractedResult = await ctx.db
+    // Get the most recent call result for this claim (not just the latest call)
+    const latestResult = await ctx.db
       .query('callResults')
       .withIndex('by_claimId', (q) => q.eq('claimId', args.id))
       .order('desc')
       .first();
-    const latestHumanHandoffCall = calls.find(connectedHumanHandoff);
-    let latestResult: any = latestExtractedResult;
-    if (latestHumanHandoffCall) {
-      const handoffResult = humanHandoffResult(latestHumanHandoffCall);
-      const extractedTime = latestExtractedResult
-        ? new Date(latestExtractedResult.createdAt || 0).getTime()
-        : 0;
-      const handoffTime = new Date(handoffResult.createdAt || 0).getTime();
-      if (!latestExtractedResult || handoffTime >= extractedTime) {
-        latestResult = handoffResult;
-      }
-    }
 
     return { claim, patient, insurance, provider, calls, latestResult };
   },

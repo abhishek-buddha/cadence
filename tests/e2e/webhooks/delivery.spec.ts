@@ -20,7 +20,7 @@ import { test, expect, request as pwRequest, APIRequestContext } from '@playwrig
  * are skipped with a documented reason.
  */
 
-const API_BASE = process.env.CADENCE_API_BASE ?? 'https://rapid-pheasant-510.convex.site';
+const API_BASE = process.env.CADENCE_API_BASE ?? 'https://colorless-cardinal-959.convex.site';
 const KEY = process.env.CADENCE_API_KEY ?? '';
 const WEBHOOK_SITE = 'https://webhook.site';
 

@@ -119,7 +119,7 @@ export default function ProvidersPage() {
           <EmptyState
             icon={Stethoscope}
             title="No providers yet"
-            description="Add provider information for insurance verification calls."
+            description="Add your practice or provider information for insurance verification calls."
             action={
               <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
                 <Plus className="w-4 h-4" />

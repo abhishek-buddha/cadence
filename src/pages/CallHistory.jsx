@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText, Mic, Search, Download } from 'lucide-react';
+import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import OutcomeBadge from '../components/OutcomeBadge';
 import EmptyState from '../components/EmptyState';
@@ -14,87 +14,11 @@ const OUTCOME_OPTIONS = [
   { value: 'transferred_to_human', label: 'Transferred' },
 ];
 
-const HUMAN_HANDOFF_UPDATE = 'Spoke to insurance human rep and clarified details.';
-
-
-function escapeCsv(value) {
-  if (value == null) return '';
-  const str = String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function downloadCsv(filename, headers, rows) {
-  const csvText = [headers.join(','), ...rows.map((row) => row.map(escapeCsv).join(','))].join('\n');
-  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function transcriptHaystack(call) {
-  return [
-    call?.transcript,
-    call?.humanTranscript,
-    call?.outcomeReason,
-    call?.errorMessage,
-    call?.claimNumber,
-    call?.dentalCaseNumber,
-    call?.insuranceCompany,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-}
-
-function connectedHumanHandoff(call) {
-  return (
-    call?.handoffState === 'connected' ||
-    call?.handoffState === 'handoff_ended' ||
-    !!call?.humanTranscript
-  );
-}
-
-function displayOutcome(call) {
-  if (call?.outcome) return call.outcome;
-  return connectedHumanHandoff(call) ? 'transferred_to_human' : call?.outcome;
-}
-
 function formatDuration(seconds) {
   if (seconds == null) return '--:--';
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-}
-
-function callDuration(call) {
-  if (call.duration != null && call.duration > 0) return call.duration;
-  if (call.startedAt && call.completedAt) {
-    return Math.max(0, Math.round((new Date(call.completedAt).getTime() - new Date(call.startedAt).getTime()) / 1000));
-  }
-  return null;
-}
-
-function convexSiteUrl() {
-  const explicit = import.meta.env.VITE_CONVEX_SITE_URL;
-  if (explicit) return explicit.replace(/\/$/, '');
-  const cloud = import.meta.env.VITE_CONVEX_URL || '';
-  return cloud.replace('.convex.cloud', '.convex.site').replace(/\/$/, '');
-}
-
-function recordingPlaybackUrl(callId) {
-  return `${convexSiteUrl()}/twilio-recording-media?callId=${encodeURIComponent(callId)}`;
-}
-
-function aiRecordingPlaybackUrl(callId) {
-  return `${convexSiteUrl()}/elevenlabs-recording-media?callId=${encodeURIComponent(callId)}`;
 }
 
 function formatDate(isoString) {
@@ -109,116 +33,8 @@ function formatDate(isoString) {
   });
 }
 
-
-function titleCase(value) {
-  if (!value) return '--';
-  return String(value).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function fieldValue(value) {
-  if (value === null || value === undefined || value === '') return '--';
-  return value;
-}
-
-function inferCallbackRequested(result, call) {
-  const text = [
-    result?.nextSteps,
-    result?.rawExtraction,
-    call?.transcript,
-    call?.humanTranscript,
-    call?.outcomeReason,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  if (result?.expectedDecisionDate) return 'Yes';
-  if (/call\s*back|callback|follow\s*up|call again|try again|later/.test(text)) return 'Yes';
-  return 'No';
-}
-
-function inferSentiment(result, call) {
-  const text = [result?.rawExtraction, result?.nextSteps, call?.transcript, call?.humanTranscript]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  if (/angry|frustrated|upset|complaint|escalat/.test(text)) return 'Negative';
-  if (/thank|resolved|confirmed|approved|paid|completed/.test(text)) return 'Positive';
-  return 'Neutral';
-}
-
-function FieldTile({ label, value, tone = 'default' }) {
-  const toneClass = {
-    default: 'text-gray-900',
-    success: 'text-success',
-    warn: 'text-warn',
-    danger: 'text-danger',
-    accent: 'text-accent',
-  }[tone] || 'text-gray-900';
-
-  return (
-    <div className="rounded-lg border border-border bg-white px-3 py-2 min-w-0">
-      <p className="text-[11px] uppercase tracking-[0.08em] text-muted/70 font-semibold truncate">{label}</p>
-      <p className={`mt-1 text-sm font-medium font-data truncate ${toneClass}`} title={String(fieldValue(value))}>
-        {fieldValue(value)}
-      </p>
-    </div>
-  );
-}
-
-function AuditExtractedFields({ call, result, isDentalCall, humanHandoffCompleted }) {
-  if (!result && !humanHandoffCompleted) return null;
-
-  const callbackRequested = inferCallbackRequested(result, call);
-  const sentiment = inferSentiment(result, call);
-  const referenceNumber = result?.referenceNumber || (!isDentalCall ? call?.referenceNumber : null);
-  const denialCode = !isDentalCall ? result?.denialCode || call?.denialCode : null;
-  const claimStatus = isDentalCall
-    ? result?.isActive == null
-      ? call?.outcome
-      : result.isActive
-        ? 'Coverage active'
-        : 'Coverage inactive'
-    : result?.claimStatus || call?.outcome;
-  const confidence = result?.confidence != null ? `${Math.round(result.confidence * 100)}%` : null;
-
-  return (
-    <div>
-      <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5">
-        Extracted Fields
-      </h4>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        <FieldTile label={isDentalCall ? 'EV Status' : 'Claim Status'} value={titleCase(claimStatus)} tone="accent" />
-        <FieldTile label="Reference #" value={referenceNumber} />
-        <FieldTile label="Denial Code" value={denialCode || '--'} tone={denialCode ? 'danger' : 'default'} />
-        <FieldTile label="Callback Requested" value={callbackRequested} tone={callbackRequested === 'Yes' ? 'warn' : 'success'} />
-        <FieldTile label="Sentiment" value={sentiment} tone={sentiment === 'Negative' ? 'danger' : sentiment === 'Positive' ? 'success' : 'default'} />
-        <FieldTile label="Rep Name" value={result?.repName} />
-        <FieldTile label="Confidence" value={confidence} tone="accent" />
-        <FieldTile label="Next Step Date" value={result?.expectedDecisionDate || result?.appealDeadline} />
-      </div>
-      {(result?.nextSteps || result?.denialReason || result?.rawExtraction || humanHandoffCompleted) && (
-        <div className="mt-2 rounded-lg border border-border bg-white p-3 text-sm text-gray-700">
-          {result?.denialReason && (
-            <p><span className="font-medium text-gray-900">Denial reason:</span> {result.denialReason}</p>
-          )}
-          {result?.nextSteps && (
-            <p className={result?.denialReason ? 'mt-1' : ''}>
-              <span className="font-medium text-gray-900">Next steps:</span> {result.nextSteps}
-            </p>
-          )}
-          {!result?.nextSteps && humanHandoffCompleted && (
-            <p><span className="font-medium text-gray-900">Next steps:</span> {HUMAN_HANDOFF_UPDATE}</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function CallRow({ call }) {
   const [expanded, setExpanded] = useState(false);
-  const persistedDuration = callDuration(call);
-  const humanHandoffCompleted = connectedHumanHandoff(call);
 
   const isDentalCall = !!call.dentalCaseId && !call.claimId;
 
@@ -231,8 +47,6 @@ function CallRow({ call }) {
   );
   const callResult = useQuery(api.callResults.getByCall, (expanded && !isDentalCall) ? { callId: call._id } : 'skip');
   const evResult = useQuery(api.evResults?.getByCall, (expanded && isDentalCall) ? { callId: call._id } : 'skip');
-  // Stored-audio playback URLs (Convex file storage) for both recording legs.
-  const recordingUrls = useQuery(api.calls.getRecordingUrls, expanded ? { callId: call._id } : 'skip');
 
   // For the table row — safe guards so undefined IDs never reach Convex
   const claimPreview = useQuery(api.claims.getById, call.claimId ? { id: call.claimId } : 'skip');
@@ -259,20 +73,10 @@ function CallRow({ call }) {
           {insurancePreview?.name ?? '...'}
         </span>
         <span className="min-w-[140px] flex justify-start">
-          <OutcomeBadge outcome={displayOutcome(call)} missingFields={call.missingFields} />
+          <OutcomeBadge outcome={call.outcome} missingFields={call.missingFields} />
         </span>
         <span className="px-4 py-3 text-sm font-data text-gray-600 min-w-[70px] text-right">
-          {formatDuration(persistedDuration)}
-        </span>
-        <span className="min-w-[90px] flex justify-center">
-          {(call.recordingUrl || call.elevenLabsConversationId) ? (
-            <span className="inline-flex items-center gap-1 text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full">
-              <Mic className="w-3 h-3" />
-              Recording
-            </span>
-          ) : (
-            <span className="text-xs text-muted/40">--</span>
-          )}
+          {formatDuration(call.duration)}
         </span>
         <span className="min-w-[110px] flex justify-end">
           <StatusBadge status={call.status} />
@@ -313,89 +117,15 @@ function CallRow({ call }) {
             </div>
 
             {/* Transcript */}
-            {humanHandoffCompleted && (
-              <div>
-                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5">
-                  Latest Update
-                </h4>
-                <div className="bg-white border border-border rounded-lg p-3">
-                  <p className="text-sm text-gray-700">{HUMAN_HANDOFF_UPDATE}</p>
-                </div>
-              </div>
-            )}
-
-            <AuditExtractedFields
-              call={call}
-              result={isDentalCall ? evResult : callResult}
-              isDentalCall={isDentalCall}
-              humanHandoffCompleted={humanHandoffCompleted}
-            />
-
-            {/* AI/IVR Recording — the ElevenLabs agent↔IVR leg, stored in our
-                own file storage (falls back to the on-demand proxy if the
-                bytes aren't stored yet). */}
-            {(recordingUrls?.aiUrl || call.elevenLabsConversationId) && (
-              <div>
-                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
-                  <Mic className="w-3 h-3" />
-                  AI/IVR Recording
-                </h4>
-                <audio
-                  controls
-                  preload="metadata"
-                  src={recordingUrls?.aiUrl || aiRecordingPlaybackUrl(call._id)}
-                  className="h-9 w-full max-w-md"
-                />
-              </div>
-            )}
-
-            {/* Human Agent Recording — the Twilio human↔human conference leg,
-                stored in our own file storage (falls back to the proxy). */}
-            {(recordingUrls?.humanUrl || call.recordingUrl) && (
-              <div>
-                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
-                  <Mic className="w-3 h-3" />
-                  Human Agent Recording
-                  {persistedDuration != null && (
-                    <span className="font-data text-muted normal-case tracking-normal">
-                      {formatDuration(persistedDuration)}
-                    </span>
-                  )}
-                </h4>
-                <audio
-                  controls
-                  preload="metadata"
-                  src={recordingUrls?.humanUrl || recordingPlaybackUrl(call._id)}
-                  className="h-9 w-full max-w-md"
-                />
-              </div>
-            )}
-
-            {/* AI/IVR Transcript */}
             {call.transcript && (
               <div>
                 <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
                   <FileText className="w-3 h-3" />
-                  AI/IVR Transcript
+                  Transcript
                 </h4>
                 <div className="bg-white border border-border rounded-lg p-3 max-h-48 overflow-y-auto">
                   <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
                     {call.transcript}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Human Agent Transcript — Twilio's transcription of the conference recording */}
-            {call.humanTranscript && (
-              <div>
-                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
-                  <FileText className="w-3 h-3" />
-                  Human Agent Transcript
-                </h4>
-                <div className="bg-white border border-border rounded-lg p-3 max-h-48 overflow-y-auto">
-                  <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
-                    {call.humanTranscript}
                   </p>
                 </div>
               </div>
@@ -545,7 +275,6 @@ export default function CallHistory() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [outcomeFilter, setOutcomeFilter] = useState([]); // empty = all
   const [outcomeMenuOpen, setOutcomeMenuOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
 
   const isLoading = allCalls === undefined;
 
@@ -559,29 +288,11 @@ export default function CallHistory() {
     ? (allCalls ?? []).filter((c) => providerClaimIds?.has(c.claimId))
     : allCalls;
 
-  const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredCalls = calls
     ? calls
         .filter((c) => statusFilter === 'all' || c.status === statusFilter)
-        .filter((c) => outcomeFilter.length === 0 || outcomeFilter.includes(displayOutcome(c)))
-        .filter((c) => !normalizedSearch || transcriptHaystack(c).includes(normalizedSearch))
+        .filter((c) => outcomeFilter.length === 0 || outcomeFilter.includes(c.outcome))
     : [];
-
-  function exportFilteredCalls() {
-    downloadCsv(
-      `cadence-call-history-${new Date().toISOString().split('T')[0]}.csv`,
-      ['Date', 'Claim/Case', 'Insurance', 'Outcome', 'Duration', 'Status', 'Transcript Preview'],
-      filteredCalls.map((call) => [
-        formatDate(call.startedAt),
-        call.claimNumber || call.dentalCaseNumber || '--',
-        call.insuranceCompany || '--',
-        displayOutcome(call) || '--',
-        formatDuration(callDuration(call)),
-        call.status || '--',
-        (call.humanTranscript || call.transcript || '').slice(0, 300),
-      ])
-    );
-  }
 
   const toggleOutcome = (value) => {
     setOutcomeFilter((prev) =>
@@ -600,25 +311,7 @@ export default function CallHistory() {
           <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Call History</h1>
           <p className="text-sm text-muted mt-1">All voice agent calls</p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search transcripts..."
-              className={`${inputClass} pl-8 w-56`}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={exportFilteredCalls}
-            disabled={filteredCalls.length === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-gray-600 hover:border-accent hover:text-accent disabled:opacity-50 transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export
-          </button>
+        <div className="flex items-center gap-3">
           <Clock className="w-4 h-4 text-muted" />
           <div className="relative">
             <select
@@ -681,7 +374,7 @@ export default function CallHistory() {
         <div className="flex items-center gap-4 text-sm">
           <span className="text-muted">
             Showing <span className="text-gray-900 font-medium">{filteredCalls.length}</span>
-            {statusFilter !== 'all' && ` ${statusFilter}`} call{filteredCalls.length !== 1 ? 's' : ''}{normalizedSearch && ` matching "${searchTerm.trim()}"`}
+            {statusFilter !== 'all' && ` ${statusFilter}`} call{filteredCalls.length !== 1 ? 's' : ''}
             {statusFilter !== 'all' && (
               <span className="text-muted"> of {calls.length} total</span>
             )}
@@ -732,7 +425,6 @@ export default function CallHistory() {
             <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold flex-1">Insurance</span>
             <span className="min-w-[140px] text-left text-xs uppercase tracking-wider text-muted font-semibold">Outcome</span>
             <span className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted font-semibold min-w-[70px]">Duration</span>
-            <span className="min-w-[90px] text-center text-xs uppercase tracking-wider text-muted font-semibold">Recording</span>
             <span className="min-w-[110px] text-right text-xs uppercase tracking-wider text-muted font-semibold pr-4">Status</span>
           </div>
 

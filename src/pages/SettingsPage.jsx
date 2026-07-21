@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAction, useMutation, useQuery } from 'convex/react';
+import { useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
   Settings,
@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   Info,
   Loader2,
-  RotateCcw,
 } from 'lucide-react';
 
 function Section({ title, icon: Icon, children }) {
@@ -21,89 +20,6 @@ function Section({ title, icon: Icon, children }) {
         <h2 className="font-display font-semibold text-gray-900">{title}</h2>
       </div>
       <div className="px-6 py-5">{children}</div>
-    </div>
-  );
-}
-
-
-const RETRY_SETTINGS = [
-  { key: 'retry:maxAttempts', label: 'Max Attempts', defaultValue: '3', suffix: 'attempts' },
-  { key: 'retry:delayMinutes', label: 'Retry Delay', defaultValue: '15', suffix: 'minutes' },
-  { key: 'retry:windowHours', label: 'Retry Window', defaultValue: '24', suffix: 'hours' },
-  { key: 'retry:concurrencyLimit', label: 'Concurrency Limit', defaultValue: '10', suffix: 'calls' },
-];
-
-function RetryPolicySettings() {
-  const setCallSetting = useMutation(api.calls.setCallSetting);
-  const maxAttempts = useQuery(api.calls.getCallSetting, { key: 'retry:maxAttempts' });
-  const delayMinutes = useQuery(api.calls.getCallSetting, { key: 'retry:delayMinutes' });
-  const windowHours = useQuery(api.calls.getCallSetting, { key: 'retry:windowHours' });
-  const concurrencyLimit = useQuery(api.calls.getCallSetting, { key: 'retry:concurrencyLimit' });
-  const values = [maxAttempts, delayMinutes, windowHours, concurrencyLimit];
-  const [drafts, setDrafts] = useState({});
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  function currentValue(setting, index) {
-    return drafts[setting.key] ?? values[index] ?? setting.defaultValue;
-  }
-
-  async function save() {
-    setSaving(true);
-    setSaved(false);
-    try {
-      for (let i = 0; i < RETRY_SETTINGS.length; i++) {
-        const setting = RETRY_SETTINGS[i];
-        const value = String(currentValue(setting, i)).trim() || setting.defaultValue;
-        await setCallSetting({ key: setting.key, value });
-      }
-      setDrafts({});
-      setSaved(true);
-      window.setTimeout(() => setSaved(false), 2500);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-xs text-muted">
-        These settings define the visible retry policy for failed or no-answer calls. The scheduler can consume
-        the same keys when automatic retry execution is enabled.
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {RETRY_SETTINGS.map((setting, index) => (
-          <label key={setting.key} className="block">
-            <span className="block text-xs uppercase tracking-wider text-muted font-medium mb-1.5">
-              {setting.label}
-            </span>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min="1"
-                value={currentValue(setting, index)}
-                onChange={(e) => setDrafts((prev) => ({ ...prev, [setting.key]: e.target.value }))}
-                className="w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-accent focus:ring-1 focus:ring-accent outline-none"
-              />
-              <span className="text-xs text-muted w-16">{setting.suffix}</span>
-            </div>
-          </label>
-        ))}
-      </div>
-      <div className="flex items-center justify-between pt-2 border-t border-border/60">
-        <p className="text-xs text-muted">
-          {saved ? <span className="text-success font-medium">Retry policy saved.</span> : 'Stored in Convex call settings.'}
-        </p>
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-          Save Policy
-        </button>
-      </div>
     </div>
   );
 }
@@ -196,11 +112,6 @@ export default function SettingsPage() {
             loading={loading}
           />
         </div>
-      </Section>
-
-      {/* Retry Policy */}
-      <Section title="Retry Policy" icon={RotateCcw}>
-        <RetryPolicySettings />
       </Section>
 
       {/* About */}

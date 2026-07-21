@@ -41,10 +41,6 @@ export const initiateEvCall = action({
       throw new Error('ElevenLabs not configured');
     }
 
-    // Live handoff correlation token (see callActions.initiateCall).
-    const handoffToken = `${Date.now()}`.slice(-8);
-    await ctx.runMutation(internal.handoff.setHandoffToken, { callId, token: handoffToken });
-
     // Store forwarding number so the test IVR can route to the correct human agent line
     await ctx.runMutation(api.calls.setCallSetting, {
       key: 'forwardNumber',
@@ -73,22 +69,11 @@ export const initiateEvCall = action({
         human_agent_number: insurance.humanAgentNumber || '',
         ivr_instructions: insurance.ivrInstructions || 'Navigate IVR using voice responses. Speak your selections clearly instead of pressing keys.',
         voice_ivr_phrases: voiceIvrPhrasesJson,
-        // Live AI→human handoff (see callActions.initiateCall).
-        bridge_number: process.env.TWILIO_PHONE_NUMBER || '',
-        handoff_token: handoffToken,
       };
-
-      // Turn on IVR-only / live-handoff mode when this payer has either a live
-      // bridge configured or a legacy human-agent number — in that case the AI
-      // navigates the IVR and hands off (transfer_to_number or end_call) rather
-      // than conversing with the human itself.
-      const bridgeNumber = process.env.TWILIO_PHONE_NUMBER || '';
-      const endAtHumanHandoff = !!bridgeNumber || !!(insurance.humanAgentNumber && insurance.humanAgentNumber.trim());
 
       const composedPrompt = composePrompt({
         useCase: 'dental_ev',
         hasVoiceIvr: !!insurance.voiceIvrEnabled,
-        endAtHumanHandoff,
         ivrContext: buildIvrContextSection(insurance.ivrInstructions, insurance.ivrSteps),
         vars: {
           practice_name: provider.practiceName,
@@ -101,8 +86,6 @@ export const initiateEvCall = action({
           cdt_codes: (dentalCase.cdtCodes || []).join(', ') || 'N/A',
           insurance_name: insurance.name,
           voice_ivr_phrases: voiceIvrPhrasesJson,
-          bridge_number: bridgeNumber,
-          human_agent_number: insurance.humanAgentNumber || 'N/A',
         },
       });
 

@@ -467,6 +467,7 @@ export default function EvCaseDetailPage() {
           <div className="grid grid-cols-2 gap-x-6 gap-y-4">
             <InfoField label="Company" value={insurance?.name} />
             <InfoField label="Phone" value={insurance?.phone} mono />
+            <InfoField label="Department" value={insurance?.department} />
             <InfoField label="Payer ID" value={insurance?.payerId} mono />
           </div>
         </DetailCard>

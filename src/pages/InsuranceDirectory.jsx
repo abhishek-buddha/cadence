@@ -39,26 +39,11 @@ const PAYER_KIND_OPTIONS = [
 
 const WAIT_SECONDS_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-// Voice AI agent config — not wired to any call behavior yet, just stored for
-// now until the agent-side functionality is built.
-const VOICE_TONE_OPTIONS = [
-  { value: 'male', label: 'Male' },
-  { value: 'female', label: 'Female' },
-];
-
-const VOICE_MODULATION_OPTIONS = [
-  { value: 'us_neutral', label: 'US English - Neutral' },
-  { value: 'us_east_coast', label: 'US English - East Coast' },
-  { value: 'us_west_coast', label: 'US English - West Coast' },
-  { value: 'us_southern', label: 'US English - Southern' },
-  { value: 'canadian_english', label: 'Canadian English' },
-  { value: 'vietnamese_english', label: 'Vietnamese English' },
-];
-
 const EMPTY_FORM = {
   name: '',
   phone: '',
   humanAgentNumber: '',
+  department: '',
   payerId: '',
   payerKind: 'medical',
   hours: '',
@@ -71,8 +56,6 @@ const EMPTY_FORM = {
   voiceIvrEnabled: false,
   voiceIvrPhrases: [],
   ivrVerifiedAt: null,
-  voiceTone: '',
-  voiceModulation: '',
 };
 
 function stepsToSequence(steps) {
@@ -117,6 +100,7 @@ export default function InsuranceDirectory() {
       name: contact.name,
       phone: contact.phone,
       humanAgentNumber: contact.humanAgentNumber ?? '',
+      department: contact.department ?? '',
       payerId: contact.payerId ?? '',
       payerKind: contact.payerKind ?? 'medical',
       hours: contact.hours ?? '',
@@ -129,8 +113,6 @@ export default function InsuranceDirectory() {
       voiceIvrEnabled: contact.voiceIvrEnabled ?? false,
       voiceIvrPhrases: contact.voiceIvrPhrases ?? [],
       ivrVerifiedAt: contact.ivrVerifiedAt ?? null,
-      voiceTone: contact.voiceTone ?? '',
-      voiceModulation: contact.voiceModulation ?? '',
     });
     originalIvrKeyRef.current = ivrConfigKey(contact.ivrInstructions, contact.ivrSteps, contact.voiceIvrPhrases);
     // Start the transcript box empty — the playbook may already be filled (e.g.
@@ -244,6 +226,7 @@ export default function InsuranceDirectory() {
         // impossible to CLEAR a saved number. "" is written and reads as "no
         // number" everywhere (follow-up guard + prompt both treat it as unset).
         humanAgentNumber: form.humanAgentNumber,
+        department: form.department || undefined,
         payerId: form.payerId || undefined,
         payerKind: form.payerKind || undefined,
         hours: form.hours || undefined,
@@ -257,8 +240,6 @@ export default function InsuranceDirectory() {
         voiceIvrEnabled: form.voiceIvrEnabled,
         voiceIvrPhrases: cleanPhrases.length ? cleanPhrases : undefined,
         ivrSourceTranscript: transcriptInput.trim() || undefined,
-        voiceTone: form.voiceTone || undefined,
-        voiceModulation: form.voiceModulation || undefined,
       };
 
       if (editing) {
@@ -273,7 +254,7 @@ export default function InsuranceDirectory() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Delete this payer? This cannot be undone.')) return;
+    if (!window.confirm('Delete this insurance contact? This cannot be undone.')) return;
     await removeContact({ id });
   }
 
@@ -294,9 +275,9 @@ export default function InsuranceDirectory() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Payer Directory</h1>
+          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Insurance Directory</h1>
           <p className="text-sm text-muted mt-1">
-            {contacts ? `${contacts.length} payer${contacts.length !== 1 ? 's' : ''}` : 'Loading...'}
+            {contacts ? `${contacts.length} contact${contacts.length !== 1 ? 's' : ''}` : 'Loading...'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -306,7 +287,7 @@ export default function InsuranceDirectory() {
           </button>
           <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 shadow-sm">
             <Plus className="w-4 h-4" />
-            Add Payer
+            Add Insurance
           </button>
         </div>
       </div>
@@ -324,12 +305,12 @@ export default function InsuranceDirectory() {
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Building2}
-            title="No payers yet"
-            description="Build your payer directory to streamline claims follow-up calls."
+            title="No insurance contacts yet"
+            description="Build your insurance directory to streamline claims follow-up calls."
             action={
               <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
                 <Plus className="w-4 h-4" />
-                Add Payer
+                Add Insurance
               </button>
             }
           />
@@ -340,8 +321,9 @@ export default function InsuranceDirectory() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Payer Name</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Company Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Phone</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Department</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Hours</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">Avg Hold Time</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-muted font-semibold">IVR</th>
@@ -363,6 +345,7 @@ export default function InsuranceDirectory() {
                         {contact.phone}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{contact.department ?? '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{contact.hours ?? '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{formatHoldTime(contact.avgHoldTime)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">
@@ -414,11 +397,11 @@ export default function InsuranceDirectory() {
       {/* Add/Edit Modal */}
       <BulkImportInsuranceModal open={importOpen} onClose={() => setImportOpen(false)} />
 
-      <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Payer' : 'Add Payer'} wide>
+      <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Insurance Contact' : 'Add Insurance Contact'} wide>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Payer Name</label>
+              <label className={labelClass}>Company Name</label>
               <input
                 type="text"
                 value={form.name}
@@ -452,15 +435,27 @@ export default function InsuranceDirectory() {
             />
           </div>
 
-          <div>
-            <label className={labelClass}>Payer ID</label>
-            <input
-              type="text"
-              value={form.payerId}
-              onChange={(e) => setField('payerId', e.target.value)}
-              className={inputClass}
-              placeholder="60054"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Department</label>
+              <input
+                type="text"
+                value={form.department}
+                onChange={(e) => setField('department', e.target.value)}
+                className={inputClass}
+                placeholder="Claims, Provider Relations, etc."
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Payer ID</label>
+              <input
+                type="text"
+                value={form.payerId}
+                onChange={(e) => setField('payerId', e.target.value)}
+                className={inputClass}
+                placeholder="60054"
+              />
+            </div>
           </div>
 
           <div>
@@ -480,35 +475,6 @@ export default function InsuranceDirectory() {
                   {opt.label}
                 </button>
               ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Voice Tone</label>
-              <select
-                value={form.voiceTone}
-                onChange={(e) => setField('voiceTone', e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select...</option>
-                {VOICE_TONE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Voice Modulation</label>
-              <select
-                value={form.voiceModulation}
-                onChange={(e) => setField('voiceModulation', e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select...</option>
-                {VOICE_MODULATION_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -755,7 +721,7 @@ export default function InsuranceDirectory() {
               disabled={saving}
               className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
             >
-              {saving ? 'Saving...' : editing ? 'Update Payer' : 'Add Payer'}
+              {saving ? 'Saving...' : editing ? 'Update Contact' : 'Add Contact'}
             </button>
           </div>
         </form>

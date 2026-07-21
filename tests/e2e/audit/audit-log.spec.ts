@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process';
  * so we expect ≥1 audit row to exist before this suite runs.
  */
 
-const API_BASE = process.env.CADENCE_API_BASE ?? 'https://rapid-pheasant-510.convex.site';
+const API_BASE = process.env.CADENCE_API_BASE ?? 'https://colorless-cardinal-959.convex.site';
 const KEY = process.env.CADENCE_API_KEY ?? '';
 
 const authHeaders = () => (KEY ? { Authorization: `Bearer ${KEY}` } : {});

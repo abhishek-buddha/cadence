@@ -192,35 +192,35 @@
     "section": 12,
     "title": "GET /v1/health (no auth)",
     "status": "PASS",
-    "detail": "https://rapid-pheasant-510.convex.site/v1/health → 200 (want 200)",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/health → 200 (want 200)",
     "evidence": "{\"status\":\"healthy\",\"uptime\":219990,\"version\":\"1.0.0\"}"
   },
   {
     "section": 12,
     "title": "GET /v1/payers (no auth → 401)",
     "status": "PASS",
-    "detail": "https://rapid-pheasant-510.convex.site/v1/payers → 401 (want 401)",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/payers → 401 (want 401)",
     "evidence": "{\"error\":{\"code\":\"unauthorized\",\"message\":\"Invalid API key\"}}"
   },
   {
     "section": 12,
     "title": "GET /v1/claim-cases (no auth → 401)",
     "status": "PASS",
-    "detail": "https://rapid-pheasant-510.convex.site/v1/claim-cases?limit=10 → 401 (want 401)",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/claim-cases?limit=10 → 401 (want 401)",
     "evidence": "{\"error\":{\"code\":\"unauthorized\",\"message\":\"Invalid API key\"}}"
   },
   {
     "section": 12,
     "title": "GET /v1/eligibility-cases (no auth → 401)",
     "status": "PASS",
-    "detail": "https://rapid-pheasant-510.convex.site/v1/eligibility-cases → 401 (want 401)",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/eligibility-cases → 401 (want 401)",
     "evidence": "{\"error\":{\"code\":\"unauthorized\",\"message\":\"Invalid API key\"}}"
   },
   {
     "section": 12,
     "title": "GET /v1/reports/success-rate (no auth → 401)",
     "status": "PASS",
-    "detail": "https://rapid-pheasant-510.convex.site/v1/reports/success-rate → 401 (want 401)",
+    "detail": "https://colorless-cardinal-959.convex.site/v1/reports/success-rate → 401 (want 401)",
     "evidence": "{\"error\":{\"code\":\"unauthorized\",\"message\":\"Invalid API key\"}}"
   },
   {

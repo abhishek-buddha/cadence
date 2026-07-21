@@ -1,101 +1,9 @@
-import { action, internalMutation, internalAction, internalQuery } from './_generated/server';
+import { action, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { classifyMedicalCallOutcome } from './outcomeClassifier';
 import { buildIvrInstructionsVar } from './prompts/index';
 
-// Build the full set of ElevenLabs dynamic variables for a medical-claim call.
-// Single source of truth shared by BOTH dialers:
-//   • the ElevenLabs-native path (initiateCall legacy), which passes these in
-//     the outbound-call request body, and
-//   • the Cadence-owned Twilio path (initiateCallViaTwilio), where the bridge
-//     fetches them from /call-metadata and forwards them to ElevenLabs as the
-//     conversation_initiation_client_data. Keeping this in one place is what
-//     makes the agent navigate the IVR identically over either transport.
-export function buildMedicalDynamicVars(args: {
-  claim: any;
-  patient: any;
-  insurance: any;
-  provider: any;
-  callId: string;
-  claimId: string;
-  handoffToken?: string;
-}): Record<string, string> {
-  const { claim, patient, insurance, provider, callId, claimId, handoffToken } = args;
-  const ivrInstructionsVar = buildIvrInstructionsVar(insurance.ivrInstructions, insurance.ivrSteps);
-
-  const dynamicVars: Record<string, string> = {
-    practice_name: provider.practiceName,
-    npi: provider.npi,
-    tax_id: provider.taxId,
-    callback_number: provider.phone,
-    patient_name: `${patient.firstName} ${patient.lastName}`,
-    patient_dob: patient.dateOfBirth,
-    member_id: patient.memberId,
-    group_number: patient.groupNumber || 'N/A',
-    claim_number: claim.claimNumber,
-    date_of_service: claim.dateOfService,
-    amount: (claim.amount / 100).toFixed(2),
-    cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
-    internal_call_id: callId,
-    internal_claim_id: claimId,
-    insurance_name: insurance.name,
-    insurance_phone: insurance.phone,
-    ivr_instructions: ivrInstructionsVar,
-    human_agent_number: insurance.humanAgentNumber || 'N/A',
-    // Live AI→human handoff: bridge/caller number + correlation token. Empty
-    // bridge_number → legacy end_call fallback (see ivrOnlyMode.ts).
-    bridge_number: process.env.TWILIO_PHONE_NUMBER || '',
-    handoff_token: handoffToken || '',
-  };
-
-  // Voice-IVR auto-response phrases — only when the payer has voice IVR enabled.
-  // Render {{placeholders}} inside each response now, since ElevenLabs does not
-  // recursively substitute vars that sit inside a dynamic-variable value.
-  const renderVars = (str: string): string =>
-    String(str || '').replace(/\{\{(\w+)\}\}/g, (m, k) => (dynamicVars[k] != null ? dynamicVars[k] : m));
-  const renderedPhrases = insurance.voiceIvrEnabled
-    ? (insurance.voiceIvrPhrases || []).map((p: any) => ({
-        promptContains: p.promptContains,
-        responseText: renderVars(p.responseText),
-      }))
-    : [];
-  dynamicVars.voice_ivr_phrases = JSON.stringify(renderedPhrases);
-
-  return dynamicVars;
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function bridgeHealthUrl(bridgeUrl: string): string {
-  const httpBase = bridgeUrl
-    .replace(/\/$/, '')
-    .replace(/^wss:/, 'https:')
-    .replace(/^ws:/, 'http:');
-  return `${httpBase}/health`;
-}
-
-async function waitForBridgeReady(bridgeUrl: string, maxWaitMs = 70000): Promise<void> {
-  const healthUrl = bridgeHealthUrl(bridgeUrl);
-  const start = Date.now();
-  let attempt = 0;
-  let lastError = 'not attempted';
-
-  while (Date.now() - start < maxWaitMs) {
-    attempt += 1;
-    try {
-      const res = await fetch(healthUrl);
-      if (res.ok) return;
-      lastError = `HTTP ${res.status}`;
-    } catch (error: any) {
-      lastError = error?.message || String(error);
-    }
-
-    await sleep(Math.min(1000 * attempt, 5000));
-  }
-
-  throw new Error(`Bridge not ready at ${healthUrl}: ${lastError}`);
-}
 // Ground-truth signal for "the agent deliberately ended the call because a
 // human was actively about to join" — NOT a generic ivr_only classification,
 // which is also true when the payer's IVR itself closes/rejects the call
@@ -122,168 +30,7 @@ export function extractHandoffDetected(elTranscript: any[]): boolean {
   return false;
 }
 
-// Primary entry point for placing a medical-claim verification call.
-//
-// Default: the Cadence-owned Twilio dialer (initiateCallViaTwilio) — Cadence
-// dials the payer and owns the CallSid, so the live AI→human handoff can
-// redirect the payer leg into a conference and drop the AI. Set the env var
-// USE_LEGACY_DIALER='true' to fall back to the original ElevenLabs-native
-// outbound path (kept intact as an instant escape hatch).
 export const initiateCall = action({
-  args: {
-    claimId: v.id('claims'),
-  },
-  handler: async (ctx, args): Promise<{ success: boolean; callId: string; twilioCallSid?: string; conversationId?: string }> => {
-    if (process.env.USE_LEGACY_DIALER === 'true') {
-      return await ctx.runAction(api.callActions.initiateCallLegacyElevenLabs, { claimId: args.claimId });
-    }
-    return await ctx.runAction(api.callActions.initiateCallViaTwilio, { claimId: args.claimId });
-  },
-});
-
-// Cadence-owned Twilio dialer (DEFAULT). Cadence places the outbound call to the
-// payer via the Twilio REST API and holds the CallSid. The payer leg's TwiML
-// (/twiml-call-start) opens a <Connect><Stream> to the bridge's /media-stream,
-// where the SAME ElevenLabs agent runs — unchanged — navigating the IVR. Because
-// Cadence owns this leg, the live handoff can later redirect it into a
-// <Dial><Conference> (which closes the stream and drops the AI) and bridge in a
-// human agent. See docs/PLAN.md "LOCKED ARCHITECTURE — Option 1".
-export const initiateCallViaTwilio = action({
-  args: {
-    claimId: v.id('claims'),
-  },
-  handler: async (ctx, args): Promise<{ success: boolean; callId: string; twilioCallSid?: string; conversationId?: string }> => {
-    const data: any = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
-    if (!data || !data.claim) throw new Error('Claim not found');
-
-    const { claim, patient, insurance, provider } = data;
-    if (!patient || !insurance || !provider) {
-      throw new Error('Missing patient, insurance, or provider data for this claim');
-    }
-
-    const callId: any = await ctx.runMutation(api.calls.create, {
-      claimId: args.claimId,
-      insuranceContactId: claim.insuranceContactId,
-      status: 'initiating',
-      startedAt: new Date().toISOString(),
-    });
-    await ctx.runMutation(internal.callActions.patchCallUseCase, { callId, useCase: 'medical_claim' });
-
-    // Deterministic conference name — the sole correlation key for the handoff.
-    const handoffToken = `${Date.now()}`.slice(-8);
-    await ctx.runMutation(internal.handoff.setHandoffToken, { callId, token: handoffToken });
-    await ctx.runMutation(internal.handoff.setConferenceName, {
-      callId,
-      conferenceName: `cadence-${callId}`,
-    });
-
-    await ctx.runMutation(api.calls.setCallSetting, {
-      key: 'forwardNumber',
-      value: insurance.humanAgentNumber || '',
-    });
-
-    const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-    const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-    const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
-    const CONVEX_SITE_URL = process.env.CONVEX_SITE_URL;
-    const BRIDGE_URL = process.env.BRIDGE_SERVER_URL || 'wss://cadence-bridge.onrender.com';
-
-    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE_NUMBER) {
-      await ctx.runMutation(api.calls.updateStatus, {
-        id: callId,
-        status: 'failed',
-        errorMessage: 'Missing Twilio credentials in environment variables',
-      });
-      throw new Error('Twilio not configured');
-    }
-    if (!CONVEX_SITE_URL) {
-      await ctx.runMutation(api.calls.updateStatus, {
-        id: callId,
-        status: 'failed',
-        errorMessage: 'Missing CONVEX_SITE_URL in environment variables',
-      });
-      throw new Error('CONVEX_SITE_URL not configured');
-    }
-
-    try {
-      // The bridge reads the ElevenLabs dynamic variables from /call-metadata,
-      // which serves buildMedicalDynamicVars() — identical data to the legacy
-      // native path. We build them here too only to fail fast if data is bad;
-      // the authoritative copy the agent uses comes from /call-metadata.
-      buildMedicalDynamicVars({
-        claim, patient, insurance, provider,
-        callId, claimId: args.claimId, handoffToken,
-      });
-
-      // Cadence places the call. Payer leg TwiML → /twiml-call-start, which
-      // <Connect><Stream>s to the bridge (AI) + <Start><Stream>s the monitor.
-      // Wake the bridge before dialing. Render free instances can cold-start
-      // slower than Twilio's media-stream setup window; dialing first creates a
-      // silent short call with no /media-stream or /monitor connection.
-      await waitForBridgeReady(BRIDGE_URL);
-      const twimlUrl = `${CONVEX_SITE_URL}/twiml-call-start?callId=${callId}&claimId=${args.claimId}`;
-      const statusCallbackUrl = `${CONVEX_SITE_URL}/twilio-status`;
-      const authHeader = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
-
-      const params = new URLSearchParams();
-      params.append('To', insurance.phone);
-      params.append('From', TWILIO_PHONE_NUMBER);
-      params.append('Url', twimlUrl);
-      params.append('StatusCallback', statusCallbackUrl);
-      params.append('StatusCallbackEvent', 'initiated ringing answered completed');
-      params.append('Timeout', '60');
-      // No call-level Record here — the two legs are recorded from separate
-      // sources: the AI/IVR portion lives entirely in ElevenLabs' own
-      // conversation (fetched on demand via /elevenlabs-recording-media), and
-      // the human↔human portion is recorded at the Twilio conference level
-      // once redirectPayerToConference hands the call off (see
-      // /twiml-bridge-parked and /twiml-payer-conference).
-
-      const response = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Calls.json`,
-        {
-          method: 'POST',
-          headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString(),
-        }
-      );
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Twilio API error ${response.status}: ${errorText}`);
-      }
-      const result = await response.json();
-      const callSid = result.sid;
-
-      // Cadence now owns this CallSid — it's the payer leg we redirect on handoff.
-      await ctx.runMutation(api.calls.updateStatus, {
-        id: callId,
-        status: 'in_progress',
-        twilioCallSid: callSid,
-      });
-
-      await ctx.runMutation(api.claims.update, {
-        id: args.claimId,
-        lastCalledAt: new Date().toISOString(),
-        status: claim.status === 'pending' ? 'in_progress' : claim.status,
-      });
-
-      return { success: true, callId, twilioCallSid: callSid };
-    } catch (error: any) {
-      await ctx.runMutation(api.calls.updateStatus, {
-        id: callId,
-        status: 'failed',
-        errorMessage: error.message,
-      });
-      throw error;
-    }
-  },
-});
-
-// LEGACY: ElevenLabs-native outbound dialer. ElevenLabs owns the Twilio call
-// end-to-end (Cadence gets no controllable CallSid → cannot re-bridge). Retained
-// as a fallback behind USE_LEGACY_DIALER='true'. This is the original body of
-// initiateCall, moved verbatim.
-export const initiateCallLegacyElevenLabs = action({
   args: {
     claimId: v.id('claims'),
   },
@@ -313,12 +60,6 @@ export const initiateCallLegacyElevenLabs = action({
       useCase: 'medical_claim',
     });
 
-    // Live handoff correlation token: short numeric id carried in the AI
-    // transfer's post-dial DTMF so the inbound bridge leg maps back to THIS
-    // call. Derived from the callId's trailing digits + time for uniqueness.
-    const handoffToken = `${Date.now()}`.slice(-8);
-    await ctx.runMutation(internal.handoff.setHandoffToken, { callId, token: handoffToken });
-
     // Store forwarding number for the test IVR to read
     await ctx.runMutation(api.calls.setCallSetting, {
       key: 'forwardNumber',
@@ -345,12 +86,48 @@ export const initiateCallLegacyElevenLabs = action({
       // No prompt override — the agent's system prompt is fixed and permanent
       // (set once via scripts/setup-elevenlabs-agents.mjs). Everything payer-
       // specific reaches the agent purely as dynamic variable data substituted
-      // into that fixed prompt's {{placeholders}}. Shared builder = identical
-      // vars to the Cadence-owned Twilio path (via /call-metadata).
-      const dynamicVars = buildMedicalDynamicVars({
-        claim, patient, insurance, provider,
-        callId, claimId: args.claimId, handoffToken,
-      });
+      // into that fixed prompt's {{placeholders}}, same as patient_name etc.
+      const ivrInstructionsVar = buildIvrInstructionsVar(insurance.ivrInstructions, insurance.ivrSteps);
+
+      // All payer-/claim-specific values sent to the agent as dynamic variables.
+      const dynamicVars: Record<string, string> = {
+        practice_name: provider.practiceName,
+        npi: provider.npi,
+        tax_id: provider.taxId,
+        callback_number: provider.phone,
+        patient_name: `${patient.firstName} ${patient.lastName}`,
+        patient_dob: patient.dateOfBirth,
+        member_id: patient.memberId,
+        group_number: patient.groupNumber || 'N/A',
+        claim_number: claim.claimNumber,
+        date_of_service: claim.dateOfService,
+        amount: (claim.amount / 100).toFixed(2),
+        cpt_codes: (claim.cptCodes || []).join(', ') || 'N/A',
+        internal_call_id: callId,
+        internal_claim_id: args.claimId,
+        insurance_name: insurance.name,
+        insurance_phone: insurance.phone,
+        ivr_instructions: ivrInstructionsVar,
+        human_agent_number: insurance.humanAgentNumber || 'N/A',
+      };
+
+      // Voice-IVR auto-response rules — ONLY when the payer has voice IVR enabled.
+      // (Previously these were sent regardless of the toggle, so turning voice IVR
+      // OFF didn't stop the agent from speaking configured phrases.) When enabled,
+      // substitute the claim values into each response before sending, so the agent
+      // speaks the real Tax ID / member ID etc. instead of the literal
+      // "{{placeholder}}" (ElevenLabs does not recursively substitute {{vars}} that
+      // sit inside a dynamic-variable value, so we render them here).
+      const renderVars = (str: string): string =>
+        String(str || '').replace(/\{\{(\w+)\}\}/g, (m, k) =>
+          dynamicVars[k] != null ? dynamicVars[k] : m);
+      const renderedPhrases = insurance.voiceIvrEnabled
+        ? (insurance.voiceIvrPhrases || []).map((p: any) => ({
+            promptContains: p.promptContains,
+            responseText: renderVars(p.responseText),
+          }))
+        : [];
+      dynamicVars.voice_ivr_phrases = JSON.stringify(renderedPhrases);
 
       // Step 1: Call ElevenLabs native outbound call — handles IVR navigation natively
       const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
@@ -910,7 +687,6 @@ SPECIAL STATUSES:
     // must not miss the follow-up in that case. Guarded by parentCallId (a
     // follow-up call can never spawn another) and the atomic handoffFollowUpAt
     // claim (racing completion paths dial the number only once).
-    //
     if (!callRow?.parentCallId) {
       const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
       if (humanAgentNumber && humanAgentNumber.trim()) {
@@ -1031,13 +807,6 @@ export const getCallStatus = action({
               ? Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000)
               : undefined;
 
-            // Download + store the AI/IVR recording audio bytes (pure storage —
-            // never places a call). Skip if already stored.
-            let aiRecordingStorageId: string | undefined = call.aiRecordingStorageId;
-            if (!aiRecordingStorageId) {
-              aiRecordingStorageId = (await storeElevenLabsAudio(ctx, args.conversationId)) || undefined;
-            }
-
             // Mark call completed WITH transcript and duration
             await ctx.runMutation(api.calls.updateStatus, {
               id: args.callId,
@@ -1045,7 +814,6 @@ export const getCallStatus = action({
               completedAt: new Date().toISOString(),
               duration: elDuration || computedDuration || undefined,
               transcript: transcriptStr || undefined,
-              aiRecordingStorageId: aiRecordingStorageId as any,
             });
 
             // Trigger transcript analysis if we have transcript + claimId
@@ -1102,11 +870,6 @@ export const endCall = action({
     const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
     const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
-    // initiateCallViaTwilio never learns its own conversation id up front (see
-    // resolveElevenLabsConversationId) — resolve it now so the DELETE signal
-    // and transcript fetch below actually have something to work with.
-    const conversationId = await resolveElevenLabsConversationId(ctx, call);
-
     // 2. Terminate via Twilio API if we have a SID
     if (call.twilioCallSid && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
       try {
@@ -1137,13 +900,13 @@ export const endCall = action({
     }
 
     // 2b. Signal ElevenLabs to end the conversation explicitly
-    if (conversationId && ELEVENLABS_API_KEY) {
+    if (call.elevenLabsConversationId && ELEVENLABS_API_KEY) {
       try {
         const elRes = await fetch(
-          `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
+          `https://api.elevenlabs.io/v1/convai/conversations/${call.elevenLabsConversationId}`,
           { method: 'DELETE', headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
         );
-        console.log(`[endCall] ElevenLabs conversation end ${conversationId} → ${elRes.status}`);
+        console.log(`[endCall] ElevenLabs conversation end ${call.elevenLabsConversationId} → ${elRes.status}`);
       } catch (e: any) {
         console.error('[endCall] Failed to end ElevenLabs conversation:', e.message);
       }
@@ -1154,29 +917,37 @@ export const endCall = action({
     let duration: number | undefined;
     let handoffDetected = false;
 
-    if (conversationId && ELEVENLABS_API_KEY) {
+    if (call.elevenLabsConversationId && ELEVENLABS_API_KEY) {
       await new Promise(r => setTimeout(r, 3000));
       try {
         const res = await fetch(
-          `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
+          `https://api.elevenlabs.io/v1/convai/conversations/${call.elevenLabsConversationId}`,
           { headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
         );
         if (res.ok) {
           const data = await res.json();
           duration = data.metadata?.call_duration_secs;
           handoffDetected = extractHandoffDetected(data.transcript || []);
-          transcriptStr = formatElevenLabsTranscript(data.transcript || []);
+
+          transcriptStr = (data.transcript || [])
+            .map((t: any) => {
+              const toolCalls = t.tool_calls?.filter((tc: any) => tc.tool_has_been_called) || [];
+              const dtmf = toolCalls.find((tc: any) => tc.tool_name === 'play_keypad_touch_tone');
+              if (dtmf) {
+                try {
+                  const params = JSON.parse(dtmf.params_as_json);
+                  return `agent: [pressed ${params.dtmf_tones}] ${params.reason || ''}`.trim();
+                } catch { return null; }
+              }
+              if (!t.message || t.message === '...') return null;
+              return `${t.role}: ${t.message}`;
+            })
+            .filter(Boolean)
+            .join('\n');
         }
       } catch (e: any) {
         console.error('Failed to fetch ElevenLabs transcript on endCall:', e.message);
       }
-    }
-
-    // 3b. Download + store the AI/IVR recording audio bytes (pure storage —
-    // never places a call). Skip if already stored.
-    let aiRecordingStorageId: string | undefined = call.aiRecordingStorageId;
-    if (conversationId && !aiRecordingStorageId) {
-      aiRecordingStorageId = (await storeElevenLabsAudio(ctx, conversationId)) || undefined;
     }
 
     // 4. Mark call completed — with transcript if we got it
@@ -1190,8 +961,6 @@ export const endCall = action({
       completedAt: new Date().toISOString(),
       duration: duration || computedDuration,
       transcript: transcriptStr || undefined,
-      elevenLabsConversationId: conversationId || undefined,
-      aiRecordingStorageId: aiRecordingStorageId as any,
     });
 
     // 5. Trigger transcript analysis based on call type
@@ -1223,185 +992,5 @@ export const endCall = action({
     }
 
     return { success: true, hasTranscript: !!transcriptStr };
-  },
-});
-
-// ---------------------------------------------------------------------------
-// initiateCallViaTwilio (the Cadence-owned dialer) never learns its own
-// ElevenLabs conversation_id — the bridge server establishes that conversation
-// independently and only the terminal /elevenlabs-webhook reports it back,
-// which frequently never fires for handoff calls (the AI stream gets closed
-// from our side at handoff time, before ElevenLabs' own conversation reaches a
-// natural "done" state). Without a conversation_id, every finalize path
-// (endCall, getCallStatus, the stale-call cron) silently skips the transcript
-// fetch. This resolves the id after the fact by matching the call's start
-// time against ElevenLabs' own conversation list for the agent — no bridge
-// cooperation required.
-// ---------------------------------------------------------------------------
-async function resolveElevenLabsConversationId(ctx: any, call: any): Promise<string | null> {
-  if (call.elevenLabsConversationId) return call.elevenLabsConversationId;
-
-  const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-  const AGENT_ID = call.dentalCaseId
-    ? (process.env.ELEVENLABS_DENTAL_AGENT_ID || process.env.ELEVENLABS_AGENT_ID)
-    : process.env.ELEVENLABS_AGENT_ID;
-  if (!ELEVENLABS_API_KEY || !AGENT_ID || !call.startedAt) return null;
-
-  const startedUnix = Math.floor(new Date(call.startedAt).getTime() / 1000);
-  const WINDOW_SECS = 300; // tolerance either side of our recorded call start
-  const params = new URLSearchParams({
-    agent_id: AGENT_ID,
-    call_start_after_unix: String(startedUnix - WINDOW_SECS),
-    call_start_before_unix: String(startedUnix + WINDOW_SECS),
-    page_size: '100',
-  });
-
-  try {
-    const res = await fetch(`https://api.elevenlabs.io/v1/convai/conversations?${params}`, {
-      headers: { 'xi-api-key': ELEVENLABS_API_KEY },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const candidates: any[] = data.conversations || [];
-
-    let best: any = null;
-    let bestDelta = Infinity;
-    for (const c of candidates) {
-      const delta = Math.abs((c.start_time_unix_secs || 0) - startedUnix);
-      if (delta >= bestDelta) continue;
-      // Skip conversations already linked to a different call record.
-      const claimedBy = await ctx.runQuery(api.calls.getByConversationId, {
-        conversationId: c.conversation_id,
-      });
-      if (claimedBy && claimedBy._id !== call._id) continue;
-      best = c;
-      bestDelta = delta;
-    }
-    return best?.conversation_id || null;
-  } catch (e: any) {
-    console.error('[resolveElevenLabsConversationId] lookup failed:', e.message);
-    return null;
-  }
-}
-
-function formatElevenLabsTranscript(elTranscript: any[]): string {
-  return (elTranscript || [])
-    .map((t: any) => {
-      const toolCalls = t.tool_calls?.filter((tc: any) => tc.tool_has_been_called) || [];
-      const dtmf = toolCalls.find((tc: any) => tc.tool_name === 'play_keypad_touch_tone');
-      if (dtmf) {
-        try {
-          const params = JSON.parse(dtmf.params_as_json);
-          return `agent: [pressed ${params.dtmf_tones}] ${params.reason || ''}`.trim();
-        } catch { return null; }
-      }
-      if (!t.message || t.message === '...') return null;
-      return `${t.role}: ${t.message}`;
-    })
-    .filter(Boolean)
-    .join('\n');
-}
-
-// Downloads the ElevenLabs agent+IVR recording for a conversation and stores
-// the raw audio bytes in Convex file storage, returning the storage id. The
-// audio can lag a couple seconds behind the conversation ending, so retry
-// briefly. Pure storage — never places a call.
-export async function storeElevenLabsAudio(ctx: any, conversationId: string): Promise<string | null> {
-  const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-  if (!ELEVENLABS_API_KEY) return null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const res = await fetch(
-        `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`,
-        { headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
-      );
-      if (res.ok) {
-        const blob = await res.blob();
-        if (blob.size > 0) {
-          return await ctx.storage.store(blob);
-        }
-      }
-    } catch (e: any) {
-      console.error('[storeElevenLabsAudio] attempt failed:', e.message);
-    }
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Fetch + store the AI/IVR call artifacts (ElevenLabs agent↔IVR transcript AND
-// its recording) for a single call, right after it ends. Resolves the
-// conversation id (the Twilio dialer never captures it up front — see
-// resolveElevenLabsConversationId), fetches the transcript, downloads the
-// audio bytes into Convex storage, and patches both onto the call.
-//
-// IMPORTANT: this is PURE STORAGE. It deliberately does NOT run
-// analyzeTranscript or anything else that can place a phone call — fetching a
-// transcript must never trigger a call. The human↔human leg's transcript and
-// recording are captured separately by the Twilio callbacks in http.ts
-// (/twilio-recording-status, /twilio-transcription). No history sweeping and
-// no time gating: it runs once, for the one call that just ended.
-// ---------------------------------------------------------------------------
-export const fetchAndStoreCallArtifacts = internalAction({
-  args: { callId: v.id('calls'), attempt: v.optional(v.number()) },
-  handler: async (ctx, args): Promise<{ success: boolean; hasTranscript?: boolean; hasAudio?: boolean; reason?: string }> => {
-    const call = await ctx.runQuery(api.calls.getById, { id: args.callId });
-    if (!call) return { success: false, reason: 'call_not_found' };
-
-    // Already fully stored — nothing to do (keeps repeated calls cheap).
-    if (call.transcript && call.aiRecordingStorageId) {
-      return { success: true, hasTranscript: true, hasAudio: true };
-    }
-
-    const conversationId = await resolveElevenLabsConversationId(ctx, call);
-    if (!conversationId) {
-      // For the Twilio dialer, ElevenLabs may not have finalized/listed its
-      // conversation yet at the instant the call ends. Retry a few times for
-      // THIS call only — never a history sweep. Bounded so it always stops.
-      const attempt = args.attempt ?? 0;
-      const MAX_ATTEMPTS = 3;
-      if (attempt < MAX_ATTEMPTS) {
-        await ctx.scheduler.runAfter(15000, internal.callActions.fetchAndStoreCallArtifacts, {
-          callId: args.callId,
-          attempt: attempt + 1,
-        });
-      }
-      return { success: false, reason: 'no_conversation_found_yet' };
-    }
-
-    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-
-    // Fetch the transcript if we don't already have it.
-    let transcriptStr = call.transcript || '';
-    if (!call.transcript && ELEVENLABS_API_KEY) {
-      try {
-        const res = await fetch(
-          `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
-          { headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          transcriptStr = formatElevenLabsTranscript(data.transcript || []);
-        }
-      } catch (e: any) {
-        console.error('[fetchAndStoreCallArtifacts] transcript fetch failed:', e.message);
-      }
-    }
-
-    // Download + store the AI/IVR audio bytes (skip if already stored).
-    let aiRecordingStorageId: string | undefined = call.aiRecordingStorageId;
-    if (!aiRecordingStorageId) {
-      aiRecordingStorageId = (await storeElevenLabsAudio(ctx, conversationId)) || undefined;
-    }
-
-    await ctx.runMutation(api.calls.updateStatus, {
-      id: args.callId,
-      elevenLabsConversationId: conversationId,
-      transcript: transcriptStr || undefined,
-      aiRecordingStorageId: aiRecordingStorageId as any,
-    });
-
-    return { success: true, hasTranscript: !!transcriptStr, hasAudio: !!aiRecordingStorageId };
   },
 });

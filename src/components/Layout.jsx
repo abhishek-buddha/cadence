@@ -1,87 +1,72 @@
-import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import HandoffNotifier from './HandoffNotifier';
-import ClaimUserRoutingDrawer from './ClaimUserRoutingDrawer';
-import { Database, UserCog, LogOut, Route } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { Building2, ChevronDown, Check } from 'lucide-react';
+import { useProviderFilter } from '../context/ProviderFilterContext';
 
-function HeaderIconLink({ to, icon: Icon, label }) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors shadow-sm ${
-          isActive
-            ? 'border-accent/40 bg-accent/5 text-accent'
-            : 'border-border-light bg-white text-gray-600 hover:border-accent/40 hover:text-gray-900'
-        }`
-      }
-    >
-      <Icon className="w-4 h-4" />
-      <span className="hidden sm:inline">{label}</span>
-    </NavLink>
-  );
-}
+function HospitalDropdown() {
+  const { selectedProviderId, setSelectedProviderId, providers, selectedProvider } = useProviderFilter();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
 
-const ROLE_LABELS = { admin: 'Admin', operator: 'Operator' };
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
 
-function getInitials(emailOrName) {
-  if (!emailOrName) return '?';
-  const trimmed = emailOrName.trim();
-  if (trimmed.includes(' ')) {
-    const parts = trimmed.split(' ').filter(Boolean);
-    return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
-  }
-  return trimmed.slice(0, 2).toUpperCase();
-}
+  const options = [
+    { id: null, label: 'All Providers' },
+    ...providers.map((p) => ({ id: p._id, label: p.practiceName })),
+  ];
 
-function UserMenu({ onLogout }) {
-  const auth = useAuth();
-  const label = auth?.name || auth?.email || 'Signed in';
+  const selectedLabel = selectedProvider ? selectedProvider.practiceName : 'All Providers';
 
   return (
-    <div className="flex items-center gap-2.5 pl-3 ml-1 border-l border-border">
-      <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-xs font-display font-semibold text-accent shrink-0">
-        {getInitials(label)}
-      </div>
-      <div className="hidden sm:block leading-tight">
-        <p className="text-sm font-medium text-gray-900">{label}</p>
-        <p className="text-[11px] uppercase tracking-wider text-muted">{ROLE_LABELS[auth?.role] ?? auth?.role ?? '--'}</p>
-      </div>
+    <div className="relative" ref={ref}>
       <button
-        onClick={onLogout}
-        title="Log out"
-        className="p-2 rounded-lg text-muted hover:text-danger hover:bg-danger/5 transition-colors"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 bg-white border border-border-light rounded-lg pl-3 pr-2.5 py-1.5 text-sm text-gray-700 cursor-pointer hover:border-accent/40 focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition-colors min-w-[180px] shadow-sm"
       >
-        <LogOut className="w-4 h-4" />
+        <span className="flex-1 text-left truncate">{selectedLabel}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1.5 min-w-full w-max bg-white border border-border-light rounded-lg shadow-xl shadow-gray-200/60 py-1 z-50 animate-fade-in">
+          {options.map((opt) => {
+            const isActive = opt.id === selectedProviderId;
+            return (
+              <button
+                key={opt.id ?? '__all'}
+                onClick={() => {
+                  setSelectedProviderId(opt.id);
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${
+                  isActive
+                    ? 'bg-accent/5 text-accent'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5 shrink-0 opacity-50" />
+                <span className="flex-1 whitespace-nowrap">{opt.label}</span>
+                {isActive && <Check className="w-3.5 h-3.5 text-accent shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-// Small icon-only tab on the right edge of the screen, independent of the
-// scrollable Sidebar nav list — opening Claim User Routing shouldn't depend
-// on where the sidebar happens to be scrolled to. Fixed positioning + a
-// z-index below the header keeps it reachable without ever covering it.
-function ClaimRoutingNotch({ onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="Claim User Routing"
-      className="fixed right-0 top-20 z-10 flex items-center justify-center w-9 h-9 bg-accent/10 border border-accent/20 text-accent rounded-l-lg shadow-lg shadow-gray-200/50 hover:bg-white transition-colors duration-150"
-    >
-      <Route className="w-4 h-4" />
-    </button>
-  );
-}
-
-export default function Layout({ onLogout }) {
+export default function Layout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebarCollapsed') === 'true'; } catch { return false; }
   });
-  const [routingDrawerOpen, setRoutingDrawerOpen] = useState(false);
 
   function handleToggleSidebar() {
     setSidebarCollapsed((prev) => {
@@ -94,27 +79,26 @@ export default function Layout({ onLogout }) {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} />
-      <ClaimRoutingNotch onClick={() => setRoutingDrawerOpen(true)} />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-3 relative z-20">
-          <HeaderIconLink to="/users" icon={UserCog} label="User Management" />
-          <HeaderIconLink to="/master-data" icon={Database} label="Master Data" />
-          <UserMenu onLogout={onLogout} />
+        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-end px-6 lg:px-8 gap-4 relative z-20">
+          {/* Hospital selector */}
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 text-xs text-muted uppercase tracking-wider font-medium">
+              <Building2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Provider</span>
+            </div>
+            <HospitalDropdown />
+          </div>
         </header>
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto grid-bg">
-          <div className="p-6 lg:p-8">
+          <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
             <Outlet />
           </div>
         </main>
       </div>
-
-      {/* App-wide broadcast toast for incoming AI→human handoffs */}
-      <HandoffNotifier />
-
-      <ClaimUserRoutingDrawer open={routingDrawerOpen} onClose={() => setRoutingDrawerOpen(false)} />
     </div>
   );
 }

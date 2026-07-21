@@ -1,18 +1,9 @@
 import { query, action } from './_generated/server';
 import { v } from 'convex/values';
 
-function inRange(date: string | undefined, fromDate?: string, toDate?: string): boolean {
-  if (!date) return false;
-  if (fromDate && date < fromDate) return false;
-  if (toDate && date > toDate) return false;
-  return true;
-}
-
 export const getStats = query({
   args: {
     providerId: v.optional(v.id('providers')),
-    fromDate: v.optional(v.string()),
-    toDate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -26,10 +17,6 @@ export const getStats = query({
     // Filter by provider if specified
     if (args.providerId) {
       allClaims = allClaims.filter((c) => c.providerId === args.providerId);
-    }
-    // Filter by date of service if a range was given
-    if (args.fromDate || args.toDate) {
-      allClaims = allClaims.filter((c) => inRange(c.dateOfService, args.fromDate, args.toDate));
     }
 
     const claimIds = new Set(allClaims.map((c) => c._id));
@@ -48,10 +35,6 @@ export const getStats = query({
     // Filter calls to only those belonging to filtered claims
     if (args.providerId) {
       allCalls = allCalls.filter((c) => c.claimId !== undefined && claimIds.has(c.claimId));
-    }
-    // Filter calls by their own start date if a range was given
-    if (args.fromDate || args.toDate) {
-      allCalls = allCalls.filter((c) => inRange(c.startedAt?.split('T')[0], args.fromDate, args.toDate));
     }
 
     const callsToday = allCalls.filter((c) => c.startedAt.startsWith(today)).length;
@@ -76,18 +59,14 @@ export const getStats = query({
       appealing: allClaims.filter((c) => c.status === 'appealing').length,
     };
 
-    // RFP requirement: outcome stats for the current week (last 7 days based on
-    // startedAt) — but if the caller passed an explicit date range, honor that
-    // range instead so "Outcome Distribution" doesn't silently go empty when
-    // the picked range falls outside the last 7 days.
-    const hasDateFilter = Boolean(args.fromDate || args.toDate);
+    // RFP requirement: outcome stats for the current week (last 7 days based on startedAt)
     const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
-    const outcomeWindowCalls = hasDateFilter ? allCalls : allCalls.filter((c) => c.startedAt >= sevenDaysAgo);
+    const weekCalls = allCalls.filter((c) => c.startedAt >= sevenDaysAgo);
     const outcomeStats = {
-      successful: outcomeWindowCalls.filter((c) => c.outcome === 'successful').length,
-      partial: outcomeWindowCalls.filter((c) => c.outcome === 'partial').length,
-      failed: outcomeWindowCalls.filter((c) => c.outcome === 'failed').length,
-      transferred_to_human: outcomeWindowCalls.filter((c) => c.outcome === 'transferred_to_human').length,
+      successful: weekCalls.filter((c) => c.outcome === 'successful').length,
+      partial: weekCalls.filter((c) => c.outcome === 'partial').length,
+      failed: weekCalls.filter((c) => c.outcome === 'failed').length,
+      transferred_to_human: weekCalls.filter((c) => c.outcome === 'transferred_to_human').length,
     };
 
     return {
@@ -104,7 +83,6 @@ export const getStats = query({
       byAgingBucket,
       byStatus,
       outcomeStats,
-      outcomeWindowIsDateFilter: hasDateFilter,
     };
   },
 });

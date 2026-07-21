@@ -1,30 +1,6 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 
-const HUMAN_HANDOFF_UPDATE = 'Spoke to insurance human rep and clarified details.';
-
-function connectedHumanHandoff(call: any): boolean {
-  return (
-    !!call.claimId &&
-    (call.handoffState === 'connected' ||
-      call.handoffState === 'handoff_ended' ||
-      !!call.humanTranscript)
-  );
-}
-
-function humanHandoffResult(call: any) {
-  return {
-    callId: call._id,
-    claimId: call.claimId,
-    claimStatus: 'Human follow-up completed',
-    nextSteps: HUMAN_HANDOFF_UPDATE,
-    rawExtraction: HUMAN_HANDOFF_UPDATE,
-    confidence: 1,
-    userId: call.userId,
-    createdAt: call.completedAt || call.handoffAcceptedAt || call.startedAt || call._creationTime,
-  };
-}
-
 export const create = mutation({
   args: {
     callId: v.id('calls'),
@@ -86,26 +62,9 @@ export const listLatestByUser = query({
       .withIndex('by_userId', (q) => q.eq('userId', userId))
       .order('desc')
       .collect();
-    const map: Record<string, any> = {};
+    const map: Record<string, typeof all[0]> = {};
     for (const r of all) {
       if (!map[r.claimId]) map[r.claimId] = r;
-    }
-
-    const recentCalls = await ctx.db
-      .query('calls')
-      .withIndex('by_userId', (q) => q.eq('userId', userId))
-      .order('desc')
-      .take(200);
-
-    for (const call of recentCalls) {
-      if (!connectedHumanHandoff(call)) continue;
-      const summary = humanHandoffResult(call);
-      const existing = map[call.claimId];
-      const existingTime = existing ? new Date(existing.createdAt || 0).getTime() : 0;
-      const summaryTime = new Date(summary.createdAt || 0).getTime();
-      if (!existing || summaryTime >= existingTime) {
-        map[call.claimId] = summary;
-      }
     }
     return map;
   },

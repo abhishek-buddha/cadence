@@ -64,7 +64,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const getCallStatus = useAction(api.callActions.getCallStatus);
   const endCallAction = useAction(api.callActions.endCall);
   const [ending, setEnding] = useState(false);
-  const transcriptScrollerRef = useRef(null);
+  const transcriptEndRef = useRef(null);
   const completionTriggeredRef = useRef(false);
 
   // Ref-based timer freeze — set synchronously when "done" detected
@@ -82,19 +82,10 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const playIntervalRef = useRef(null);
   const wsRef = useRef(null);
 
-  useEffect(() => {
-    mutedRef.current = muted;
-    if (muted) {
-      audioQueueRef.current = [];
-      inboundQueueRef.current = [];
-      outboundQueueRef.current = [];
-      nextPlayTimeRef.current = 0;
-    }
-  }, [muted]);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
 
   // Polling for call status + transcript
   const [polledData, setPolledData] = useState(null);
-  const [liveTranscript, setLiveTranscript] = useState([]);
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -141,19 +132,15 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
 
   const isCompleted = polledData?.status === 'done' || polledData?.status === 'failed' || call?.status === 'completed' || call?.status === 'failed';
 
-  useEffect(() => {
-    setLiveTranscript([]);
-  }, [call?._id]);
-
   const effectiveTranscript = useMemo(() => {
-    const postCallTranscript = (polledData?.transcript || [])
-      .filter(t => t.message && t.message !== '...')
+    if (!polledData?.transcript) return [];
+    return polledData.transcript
+      .filter(t => t.message !== '...')
       .map(t => ({
         role: t.role === 'agent' ? 'agent' : 'user',
         message: t.message,
       }));
-    return postCallTranscript.length > 0 ? postCallTranscript : liveTranscript;
-  }, [polledData, liveTranscript]);
+  }, [polledData]);
 
   // Use ref-based frozen duration (set synchronously) with fallbacks. The ref is
   // only set when THIS component's own poll detects "done". When completion
@@ -172,53 +159,31 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const elapsed = useElapsedTimer(call?.startedAt, frozenDuration);
 
   useEffect(() => {
-    const scroller = transcriptScrollerRef.current;
-    if (!scroller) return;
-    const distanceFromBottom = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
-    if (distanceFromBottom > 120 && effectiveTranscript.length > 2) return;
-    requestAnimationFrame(() => {
-      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
-    });
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [effectiveTranscript.length]);
 
-  // Audio player: live monitoring, not archival playback. Keep the scheduled
-  // audio close to now; if packets arrive in bursts, drop stale buffered audio
-  // instead of playing an increasingly delayed backlog.
+  // Audio player — smooth playback with upsample to native rate
   useEffect(() => {
-    const FRAME = 320; // 40ms @ 8kHz
-    const MAX_QUEUE = 8000; // 1s hard live buffer cap
-    const MAX_LEAD_SECONDS = 0.3;
-
     playIntervalRef.current = setInterval(() => {
       if (mutedRef.current) return;
       const ctx = audioCtxRef.current;
       if (!ctx || ctx.state !== 'running') return;
       const queue = audioQueueRef.current;
+      if (queue.length < 640) return;
 
-      if (queue.length > MAX_QUEUE) {
-        queue.splice(0, queue.length - MAX_QUEUE);
-        nextPlayTimeRef.current = 0;
-      }
-      if (queue.length < FRAME) return;
-
-      const now = ctx.currentTime;
-      if (nextPlayTimeRef.current < now || nextPlayTimeRef.current > now + MAX_LEAD_SECONDS) {
-        nextPlayTimeRef.current = now + 0.005;
-        if (queue.length > FRAME * 4) {
-          queue.splice(0, queue.length - FRAME * 4);
-        }
-      }
-
-      const raw = new Float32Array(queue.splice(0, FRAME));
+      const chunkSize = Math.min(queue.length, 1600);
+      const raw = new Float32Array(queue.splice(0, chunkSize));
       const upsampled = upsample8kTo(raw, ctx.sampleRate);
       const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
       buffer.getChannelData(0).set(upsampled);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.connect(ctx.destination);
-      source.start(nextPlayTimeRef.current);
-      nextPlayTimeRef.current += buffer.duration;
-    }, 20);
+      const now = ctx.currentTime;
+      const startAt = Math.max(now + 0.005, nextPlayTimeRef.current);
+      source.start(startAt);
+      nextPlayTimeRef.current = startAt + buffer.duration;
+    }, 80);
 
     return () => {
       clearInterval(playIntervalRef.current);
@@ -232,6 +197,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       }
     };
   }, []);
+
   // WebSocket for audio from bridge monitor
   useEffect(() => {
     if (!call?._id) return;
@@ -239,6 +205,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     let ws;
     let retryTimeout;
 
+    let wsMessageCount = 0;
     function connect() {
       ws = new WebSocket(`${BRIDGE_URL}/listen/${call._id}`);
       wsRef.current = ws;
@@ -248,31 +215,51 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.event === 'transcript' && data.text) {
-            const message = String(data.text).trim();
-            if (message && message !== '...') {
-              setLiveTranscript((prev) => {
-                const next = [...prev, { role: data.role === 'agent' ? 'agent' : 'user', message }];
-                return next.slice(-80);
-              });
-            }
-            return;
-          }
-
           if (data.event === 'audio' && data.media?.payload) {
-            if (mutedRef.current) return;
+            wsMessageCount++;
+            if (wsMessageCount % 100 === 1) {
+              console.log(`[LiveCallMonitor] Audio chunk #${wsMessageCount}, track=${data.media.track}, muted=${mutedRef.current}, audioCtx=${audioCtxRef.current?.state}, queueSize=${audioQueueRef.current.length}`);
+            }
             const binary = atob(data.media.payload);
             const samples = new Array(binary.length);
             for (let i = 0; i < binary.length; i++) {
               samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xFF];
             }
-            // Live monitor audio is already time-ordered by the bridge. Playing
-            // chunks in arrival order avoids choppy gaps from waiting for a
-            // matching opposite track that may never arrive.
-            audioQueueRef.current.push(...samples);
 
-            if (audioQueueRef.current.length > 12000) {
-              audioQueueRef.current.splice(0, audioQueueRef.current.length - 4000);
+            // Route to separate queues by track, then mix
+            const track = data.media.track;
+            if (track === 'outbound') {
+              outboundQueueRef.current.push(...samples);
+            } else {
+              inboundQueueRef.current.push(...samples);
+            }
+
+            // Mix both tracks into the playback queue
+            const inQ = inboundQueueRef.current;
+            const outQ = outboundQueueRef.current;
+            const mixLen = Math.min(inQ.length, outQ.length);
+            if (mixLen > 0) {
+              const inSamples = inQ.splice(0, mixLen);
+              const outSamples = outQ.splice(0, mixLen);
+              for (let i = 0; i < mixLen; i++) {
+                audioQueueRef.current.push(Math.max(-1, Math.min(1, inSamples[i] + outSamples[i])));
+              }
+            }
+            // Flush solo tracks after small buffer (480 samples = 60ms)
+            // This allows time for the other track to arrive for proper mixing
+            // without the old 2000-sample (250ms) delay
+            if (inQ.length > 480 && outQ.length === 0) {
+              const solo = inQ.splice(0, inQ.length);
+              for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
+            }
+            if (outQ.length > 480 && inQ.length === 0) {
+              const solo = outQ.splice(0, outQ.length);
+              for (let i = 0; i < solo.length; i++) audioQueueRef.current.push(solo[i]);
+            }
+
+            // Overflow protection on mixed queue
+            if (audioQueueRef.current.length > 16000) {
+              audioQueueRef.current.splice(0, audioQueueRef.current.length - 8000);
               nextPlayTimeRef.current = 0;
             }
           }
@@ -324,10 +311,6 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   }
 
   function handleUnmute() {
-    audioQueueRef.current = [];
-    inboundQueueRef.current = [];
-    outboundQueueRef.current = [];
-    nextPlayTimeRef.current = 0;
     setMuted(false);
     ensureAudioContext();
   }
@@ -452,16 +435,14 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
               </span>
             )}
           </div>
-          <div
-            ref={transcriptScrollerRef}
-            className="bg-white/60 border border-border rounded-lg p-3 max-h-56 overflow-y-auto space-y-1.5"
-          >
+          <div className="bg-white/60 border border-border rounded-lg p-3 max-h-56 overflow-y-auto space-y-1.5">
             {effectiveTranscript.map((t, i) => (
               <div key={i} className={`text-xs ${t.role === 'agent' ? 'text-accent' : 'text-gray-600'}`}>
                 <span className="font-data font-medium">{getLabel(t)}:</span>
                 <span className="ml-1.5">{formatEntry(t)}</span>
               </div>
             ))}
+            <div ref={transcriptEndRef} />
           </div>
         </div>
       )}

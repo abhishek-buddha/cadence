@@ -1,16 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { UserCog, UserPlus, Pencil, Lock, ChevronDown, AlertTriangle } from 'lucide-react';
+import { UserCog, UserPlus, Lock, ChevronDown, AlertTriangle } from 'lucide-react';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 import { useAuth, hasRole } from '../context/AuthContext';
-import { SPECIALIZATION_OPTIONS, SPECIALIZATION_LABELS } from '../constants/specializations';
-import UserGroupsTab from '../components/UserGroupsTab';
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin', color: 'bg-danger/10 text-danger' },
-  { value: 'operator', label: 'Operator', color: 'bg-success/10 text-success' },
+  { value: 'manager', label: 'Manager', color: 'bg-accent/10 text-accent' },
+  { value: 'viewer', label: 'Viewer', color: 'bg-gray-500/10 text-gray-600' },
 ];
 
 const INPUT_CLASS =
@@ -146,171 +145,76 @@ function formatLastLogin(ts) {
 }
 
 // ---------------------------------------------------------------------------
-// Add / Edit User Modal
+// Invite User Modal
 // ---------------------------------------------------------------------------
-const EMPTY_FORM = {
-  email: '',
-  name: '',
-  role: 'operator',
-  insuranceContactIds: [],
-  providerIds: [],
-  specializations: [],
-  teamLeadName: '',
-  userGroupId: null,
-};
-
-const SELECT_TABS = [
-  { key: 'payer', label: 'Payer' },
-  { key: 'provider', label: 'Provider' },
-];
-
-const ASSIGNMENT_MODES = [
-  { key: 'group', label: 'User Group' },
-  { key: 'custom', label: 'Custom' },
-];
-
-function UserModal({ open, onClose, editing, insuranceContacts, providers, userGroups, createUser, updateUser }) {
-  const [form, setForm] = useState(EMPTY_FORM);
+function InviteUserModal({ open, onClose, createUser }) {
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('viewer');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [selectTab, setSelectTab] = useState('payer');
-  const [assignmentMode, setAssignmentMode] = useState('custom');
 
-  useEffect(() => {
-    if (!open) return;
+  function reset() {
+    setEmail('');
+    setRole('viewer');
     setError(null);
-    setSelectTab('payer');
-    setForm(
-      editing
-        ? {
-            email: editing.email,
-            name: editing.name ?? '',
-            role: editing.role,
-            insuranceContactIds: editing.insuranceContactIds ?? [],
-            providerIds: editing.providerIds ?? [],
-            specializations: editing.specializations ?? [],
-            teamLeadName: editing.teamLeadName ?? '',
-            userGroupId: editing.userGroupId ?? null,
-          }
-        : EMPTY_FORM
-    );
-    setAssignmentMode(editing?.userGroupId ? 'group' : 'custom');
-  }, [open, editing]);
-
-  function setField(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  function toggleInsurance(id) {
-    setForm((prev) => ({
-      ...prev,
-      insuranceContactIds: prev.insuranceContactIds.includes(id)
-        ? prev.insuranceContactIds.filter((i) => i !== id)
-        : [...prev.insuranceContactIds, id],
-    }));
-  }
-
-  function toggleProvider(id) {
-    setForm((prev) => ({
-      ...prev,
-      providerIds: prev.providerIds.includes(id)
-        ? prev.providerIds.filter((i) => i !== id)
-        : [...prev.providerIds, id],
-    }));
-  }
-
-  function toggleSpecialization(value) {
-    setForm((prev) => ({
-      ...prev,
-      specializations: prev.specializations.includes(value)
-        ? prev.specializations.filter((s) => s !== value)
-        : [...prev.specializations, value],
-    }));
+  function handleClose() {
+    reset();
+    onClose();
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!editing && (!form.email || !form.email.includes('@'))) {
+    if (!email || !email.includes('@')) {
       setError('Please enter a valid email address.');
-      return;
-    }
-    if (assignmentMode === 'group' && !form.userGroupId) {
-      setError('Please select a user group.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const routingPayload = {
-        name: form.name.trim() || undefined,
-        role: form.role,
-        insuranceContactIds: form.insuranceContactIds,
-        providerIds: form.providerIds,
-        specializations: form.specializations,
-        teamLeadName: form.teamLeadName.trim() || undefined,
-        userGroupId: assignmentMode === 'group' ? form.userGroupId : null,
-      };
-      if (editing) {
-        await updateUser({ id: editing._id, ...routingPayload });
-      } else {
-        await createUser({ email: form.email, ...routingPayload });
-      }
-      onClose();
+      await createUser({ email, role });
+      handleClose();
     } catch (err) {
-      setError(err.message || 'Failed to save user.');
+      setError(err.message || 'Failed to invite user.');
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={editing ? 'Edit User' : 'Add User'} wide>
+    <Modal open={open} onClose={handleClose} title="Invite User">
       <form onSubmit={handleSubmit} className="space-y-5">
-        {!editing && (
-          <div className="bg-accent/5 border border-accent/10 rounded-lg p-3">
-            <p className="text-xs text-gray-600 leading-relaxed">
-              <strong className="text-accent">Note:</strong> This records the user in the system. They will be
-              able to sign in once SSO is configured for their email.
-            </p>
-          </div>
-        )}
+        <div className="bg-accent/5 border border-accent/10 rounded-lg p-3">
+          <p className="text-xs text-gray-600 leading-relaxed">
+            <strong className="text-accent">Note:</strong> This records the user in the system. They will be
+            able to sign in once SSO is configured for their email.
+          </p>
+        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={LABEL_CLASS}>Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => setField('email', e.target.value)}
-              placeholder="user@example.com"
-              className={INPUT_CLASS}
-              required
-              autoFocus={!editing}
-              disabled={!!editing}
-            />
-          </div>
-          <div>
-            <label className={LABEL_CLASS}>Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setField('name', e.target.value)}
-              placeholder="A. Reyes"
-              className={INPUT_CLASS}
-            />
-          </div>
+        <div>
+          <label className={LABEL_CLASS}>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="user@example.com"
+            className={INPUT_CLASS}
+            required
+            autoFocus
+          />
         </div>
 
         <div>
           <label className={LABEL_CLASS}>Role</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {ROLE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => setField('role', opt.value)}
+                onClick={() => setRole(opt.value)}
                 className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                  form.role === opt.value
+                  role === opt.value
                     ? 'bg-accent/5 border-accent text-accent'
                     : 'bg-white border-border hover:border-accent/40 text-gray-700'
                 }`}
@@ -319,167 +223,6 @@ function UserModal({ open, onClose, editing, insuranceContacts, providers, userG
               </button>
             ))}
           </div>
-        </div>
-
-        <div>
-          <label className={LABEL_CLASS}>Assignment</label>
-          <div className="grid grid-cols-2 gap-2">
-            {ASSIGNMENT_MODES.map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setAssignmentMode(opt.key)}
-                className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                  assignmentMode === opt.key
-                    ? 'bg-accent/5 border-accent text-accent'
-                    : 'bg-white border-border hover:border-accent/40 text-gray-700'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {assignmentMode === 'group' ? (
-          <div>
-            <label className={LABEL_CLASS}>User Group</label>
-            {(userGroups ?? []).length === 0 ? (
-              <p className="text-xs text-muted italic">No user groups yet — create one from the User Groups tab.</p>
-            ) : (
-              <select
-                value={form.userGroupId ?? ''}
-                onChange={(e) => setField('userGroupId', e.target.value || null)}
-                className={INPUT_CLASS}
-              >
-                <option value="" disabled>Select a group...</option>
-                {userGroups.map((g) => (
-                  <option key={g._id} value={g._id}>{g.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
-        ) : (
-          <>
-            <div>
-              <label className={LABEL_CLASS}>Specialization</label>
-              <div className="grid grid-cols-3 gap-2">
-                {SPECIALIZATION_OPTIONS.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                      form.specializations.includes(opt.value)
-                        ? 'border-accent bg-accent/5'
-                        : 'border-border hover:border-accent/40 bg-white'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={form.specializations.includes(opt.value)}
-                      onChange={() => toggleSpecialization(opt.value)}
-                      className="rounded border-border-light text-accent focus:ring-accent"
-                    />
-                    <span className="text-sm text-gray-700">{opt.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className={LABEL_CLASS}>Payer / Provider this user can handle</label>
-              <div className="border border-border rounded-lg overflow-hidden">
-                <div className="flex items-center gap-1 border-b border-border bg-surface px-2">
-                  {SELECT_TABS.map((tab) => (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() => setSelectTab(tab.key)}
-                      className={`relative px-3 py-2 text-xs font-medium transition-colors ${
-                        selectTab === tab.key ? 'text-accent' : 'text-gray-500 hover:text-gray-800'
-                      }`}
-                    >
-                      {tab.label}
-                      {tab.key === 'payer' && form.insuranceContactIds.length > 0 && (
-                        <span className="ml-1.5 text-[10px] text-muted">({form.insuranceContactIds.length})</span>
-                      )}
-                      {tab.key === 'provider' && form.providerIds.length > 0 && (
-                        <span className="ml-1.5 text-[10px] text-muted">({form.providerIds.length})</span>
-                      )}
-                      {selectTab === tab.key && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="p-3">
-                  {selectTab === 'payer' && (
-                    (insuranceContacts ?? []).length === 0 ? (
-                      <p className="text-xs text-muted italic">No payers in Master Data yet.</p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                        {(insuranceContacts ?? []).map((c) => (
-                          <label
-                            key={c._id}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                              form.insuranceContactIds.includes(c._id)
-                                ? 'border-accent bg-accent/5'
-                                : 'border-border hover:border-accent/40 bg-white'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={form.insuranceContactIds.includes(c._id)}
-                              onChange={() => toggleInsurance(c._id)}
-                              className="rounded border-border-light text-accent focus:ring-accent"
-                            />
-                            <span className="text-sm text-gray-700 truncate">{c.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    )
-                  )}
-
-                  {selectTab === 'provider' && (
-                    (providers ?? []).length === 0 ? (
-                      <p className="text-xs text-muted italic">No providers in Master Data yet.</p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                        {(providers ?? []).map((p) => (
-                          <label
-                            key={p._id}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                              form.providerIds.includes(p._id)
-                                ? 'border-accent bg-accent/5'
-                                : 'border-border hover:border-accent/40 bg-white'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={form.providerIds.includes(p._id)}
-                              onChange={() => toggleProvider(p._id)}
-                              className="rounded border-border-light text-accent focus:ring-accent"
-                            />
-                            <span className="text-sm text-gray-700 truncate">{p.practiceName}</span>
-                          </label>
-                        ))}
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        <div>
-          <label className={LABEL_CLASS}>Team Lead</label>
-          <input
-            value={form.teamLeadName}
-            onChange={(e) => setField('teamLeadName', e.target.value)}
-            placeholder="K. Nolan"
-            className={INPUT_CLASS}
-          />
         </div>
 
         {error && (
@@ -492,7 +235,7 @@ function UserModal({ open, onClose, editing, insuranceContacts, providers, userG
         <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="px-4 py-2 text-sm text-muted hover:text-gray-900 transition-colors"
           >
             Cancel
@@ -502,7 +245,7 @@ function UserModal({ open, onClose, editing, insuranceContacts, providers, userG
             disabled={saving}
             className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
           >
-            {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add User'}
+            {saving ? 'Inviting...' : 'Invite User'}
           </button>
         </div>
       </form>
@@ -538,53 +281,14 @@ export default function UsersPage() {
   return <UsersPageContent currentEmail={auth?.email} />;
 }
 
-const TOP_TABS = [
-  { key: 'users', label: 'Users' },
-  { key: 'groups', label: 'User Groups' },
-];
-
 function UsersPageContent({ currentEmail }) {
-  const [topTab, setTopTab] = useState('users');
   const users = useQuery(api.users?.list);
-  const insuranceContacts = useQuery(api.insuranceContacts.list);
-  const providers = useQuery(api.providers.list);
-  const userGroups = useQuery(api.userGroups.list);
   const updateRole = useMutation(api.users?.updateRole);
   const setStatus = useMutation(api.users?.setStatus);
   const createUser = useMutation(api.users?.create);
-  const updateUser = useMutation(api.users?.updateRoutingProfile);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const isLoading = users === undefined;
-  const insuranceMap = {};
-  (insuranceContacts ?? []).forEach((c) => { insuranceMap[c._id] = c.name; });
-  const providerMap = {};
-  (providers ?? []).forEach((p) => { providerMap[p._id] = p.practiceName; });
-  const groupMap = {};
-  (userGroups ?? []).forEach((g) => { groupMap[g._id] = g; });
-
-  // A user assigned to a group has their Payer/Provider/Specialization scope
-  // resolved from the group instead of their own (mutually exclusive) fields.
-  function resolvedInsuranceIds(user) {
-    return user.userGroupId ? (groupMap[user.userGroupId]?.insuranceContactIds ?? []) : (user.insuranceContactIds ?? []);
-  }
-  function resolvedProviderIds(user) {
-    return user.userGroupId ? (groupMap[user.userGroupId]?.providerIds ?? []) : (user.providerIds ?? []);
-  }
-  function resolvedSpecializations(user) {
-    return user.userGroupId ? (groupMap[user.userGroupId]?.specializations ?? []) : (user.specializations ?? []);
-  }
-
-  function openCreate() {
-    setEditing(null);
-    setModalOpen(true);
-  }
-
-  function openEdit(user) {
-    setEditing(user);
-    setModalOpen(true);
-  }
 
   async function handleRoleChange(userId, role) {
     await updateRole({ id: userId, role });
@@ -600,44 +304,18 @@ function UsersPageContent({ currentEmail }) {
         <div>
           <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Users</h1>
           <p className="text-sm text-muted mt-1">
-            {topTab === 'users' && !isLoading && `${users.length} user${users.length !== 1 ? 's' : ''}`}
+            {!isLoading && `${users.length} user${users.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        {topTab === 'users' && (
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            Add User
-          </button>
-        )}
+        <button
+          onClick={() => setInviteOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+        >
+          <UserPlus className="w-4 h-4" />
+          Invite User
+        </button>
       </div>
 
-      <div className="flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
-        {TOP_TABS.map((tab) => {
-          const isActive = topTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setTopTab(tab.key)}
-              className={`relative inline-flex items-center px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                isActive ? 'text-accent' : 'text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              {tab.label}
-              {isActive && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-t" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {topTab === 'groups' ? (
-        <UserGroupsTab />
-      ) : (
       <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <thead>
@@ -646,21 +324,15 @@ function UsersPageContent({ currentEmail }) {
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Email</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Name</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Role</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">User Group</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Payer</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Provider</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Specialization</th>
-              <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Team Lead</th>
               <th className="text-center px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Active</th>
               <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Last Login</th>
-              <th className="text-right px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap">Edit</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 12 }).map((_, j) => (
+                  {Array.from({ length: 6 }).map((_, j) => (
                     <td key={j} className="px-4 py-3.5">
                       <div className="shimmer rounded h-4 w-full" />
                     </td>
@@ -669,18 +341,18 @@ function UsersPageContent({ currentEmail }) {
               ))
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={12}>
+                <td colSpan={6}>
                   <EmptyState
                     icon={UserCog}
                     title="No users yet"
-                    description="Add your first team member to get started."
+                    description="Invite your first team member to get started."
                     action={
                       <button
-                        onClick={openCreate}
+                        onClick={() => setInviteOpen(true)}
                         className="inline-flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
                       >
                         <UserPlus className="w-4 h-4" />
-                        Add User
+                        Invite User
                       </button>
                     }
                   />
@@ -690,9 +362,6 @@ function UsersPageContent({ currentEmail }) {
               users.map((user) => {
                 const seed = user.name || user.email;
                 const isSelf = user.email === currentEmail;
-                const insuranceNames = resolvedInsuranceIds(user).map((id) => insuranceMap[id]).filter(Boolean);
-                const providerNames = resolvedProviderIds(user).map((id) => providerMap[id]).filter(Boolean);
-                const specLabels = resolvedSpecializations(user).map((s) => SPECIALIZATION_LABELS[s] ?? s);
                 return (
                   <tr key={user._id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="px-4 py-3.5">
@@ -721,21 +390,6 @@ function UsersPageContent({ currentEmail }) {
                         onChange={handleRoleChange}
                       />
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">
-                      {user.userGroupId
-                        ? (groupMap[user.userGroupId]?.name ?? <span className="text-muted/50 italic">Deleted group</span>)
-                        : <span className="text-muted/50 italic">Custom</span>}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-gray-600">
-                      {insuranceNames.length > 0 ? insuranceNames.join(', ') : (user.role === 'operator' ? 'All payers' : '--')}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-gray-600">
-                      {providerNames.length > 0 ? providerNames.join(', ') : (user.role === 'operator' ? 'All providers' : '--')}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-gray-600">
-                      {specLabels.length > 0 ? specLabels.join(', ') : '--'}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">{user.teamLeadName || '--'}</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap">
                       {isSelf ? (
                         <span className="text-xs text-muted">—</span>
@@ -746,15 +400,6 @@ function UsersPageContent({ currentEmail }) {
                     <td className="px-4 py-3.5 text-xs text-gray-600 font-data text-right whitespace-nowrap">
                       {formatLastLogin(user.lastLoginAt)}
                     </td>
-                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                      <button
-                        onClick={() => openEdit(user)}
-                        className="p-1.5 rounded-lg text-muted hover:text-accent hover:bg-accent/5 transition-colors"
-                        title="Edit"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
                   </tr>
                 );
               })
@@ -762,17 +407,11 @@ function UsersPageContent({ currentEmail }) {
           </tbody>
         </table>
       </div>
-      )}
 
-      <UserModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        editing={editing}
-        insuranceContacts={insuranceContacts}
-        providers={providers}
-        userGroups={userGroups}
+      <InviteUserModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
         createUser={createUser}
-        updateUser={updateUser}
       />
     </div>
   );

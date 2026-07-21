@@ -19,44 +19,20 @@ const TABS = [
   { value: 'success_rate', label: 'Success Rate', icon: TrendingUp },
   { value: 'data_accuracy', label: 'Data Accuracy', icon: Target },
   { value: 'turnaround_time', label: 'Turnaround Time', icon: Clock },
-  { value: 'hold_metrics', label: 'Hold Metrics', icon: Clock },
-  { value: 'operational_kpis', label: 'Operational KPIs', icon: BarChart3 },
   { value: 'exception_report', label: 'Exception Report', icon: AlertOctagon },
   { value: 'volume_by_tier', label: 'Volume by Tier', icon: Layers },
 ];
 
 const USE_CASE_OPTIONS = [
-  { value: '', label: 'All Case Types' },
+  { value: '', label: 'All Use Cases' },
   { value: 'claim_followup', label: 'Claim Follow-up' },
   { value: 'dental_ev', label: 'Dental EV' },
 ];
 
 const INPUT_CLASS =
-  'bg-white border border-border-light rounded-lg px-2.5 py-1.5 text-xs text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none w-full';
+  'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none w-full';
 const SELECT_CLASS =
-  'bg-white border border-border-light rounded-lg px-2.5 py-1.5 text-xs text-gray-700 focus:border-accent focus:ring-1 focus:ring-accent outline-none appearance-none cursor-pointer';
-
-function formatSecondsCompact(seconds) {
-  const total = Number(seconds || 0);
-  if (!Number.isFinite(total) || total <= 0) return '0m';
-  const mins = Math.floor(total / 60);
-  const secs = Math.round(total % 60);
-  if (mins >= 60) {
-    const hours = Math.floor(mins / 60);
-    const remMins = mins % 60;
-    return `${hours}h ${remMins}m`;
-  }
-  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
-}
-
-function successPct(row) {
-  return Number(row?.pct || row?.successRatePct || (row?.total ? (row.successful / row.total) * 100 : 0));
-}
-
-// null/undefined means no confidence sample in range — distinct from 0%.
-function formatConfidence(value) {
-  return value == null ? '--' : `${Math.round(value * 100)}%`;
-}
+  'bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-700 focus:border-accent focus:ring-1 focus:ring-accent outline-none appearance-none cursor-pointer';
 
 function FilterSelect({ value, onChange, options, className = '' }) {
   return (
@@ -101,24 +77,6 @@ function downloadCsv(filename, headers, rows) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
-
-
-function MetricCard({ label, value, caption, tone = 'default' }) {
-  const toneClass = {
-    default: 'text-gray-900',
-    success: 'text-success',
-    warn: 'text-warn',
-    danger: 'text-danger',
-    accent: 'text-accent',
-  }[tone] || 'text-gray-900';
-  return (
-    <div className="bg-white border border-border rounded-xl p-5">
-      <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">{label}</p>
-      <p className={`text-2xl font-display font-bold font-data ${toneClass}`}>{value}</p>
-      {caption && <p className="text-xs text-muted mt-1">{caption}</p>}
-    </div>
-  );
 }
 
 function ChartCard({ title, subtitle, children, action }) {
@@ -202,12 +160,13 @@ function SuccessRateTab({ filters }) {
   const weekData = useMemo(
     () => (byWeek ?? []).map((row) => ({
       label: row.weekStart || row.label || '',
-      value: Math.round(successPct(row)),
+      value: Math.round(row.pct || row.successRatePct || 0),
     })),
     [byWeek]
   );
 
   function exportData() {
+    if (!byPayer) return;
     downloadCsv(
       `cadence-success-rate-by-payer-${new Date().toISOString().split('T')[0]}.csv`,
       ['Payer', 'Total Calls', 'Successful', 'Success Rate %'],
@@ -222,38 +181,30 @@ function SuccessRateTab({ filters }) {
 
   if (isLoading) return <LoadingPlaceholder />;
 
-  if (!overall || overall.total === 0) {
-    return (
-      <EmptyState
-        icon={TrendingUp}
-        title="No calls in this range"
-        description="Success rate data will appear here once calls have been made matching these filters."
-      />
-    );
-  }
-
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white border border-border rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Overall Success Rate</p>
-          <p className="text-3xl font-display font-bold text-gray-900">
-            {(overall.successRatePct || 0).toFixed(1)}%
-          </p>
+      {overall && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white border border-border rounded-xl p-5">
+            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Overall Success Rate</p>
+            <p className="text-3xl font-display font-bold text-gray-900">
+              {(overall.successRatePct || 0).toFixed(1)}%
+            </p>
+          </div>
+          <div className="bg-white border border-border rounded-xl p-5">
+            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Total Calls</p>
+            <p className="text-3xl font-display font-bold text-gray-900 font-data">
+              {(overall.total || 0).toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-white border border-border rounded-xl p-5">
+            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Successful Calls</p>
+            <p className="text-3xl font-display font-bold text-success font-data">
+              {(overall.successful || 0).toLocaleString()}
+            </p>
+          </div>
         </div>
-        <div className="bg-white border border-border rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Total Calls</p>
-          <p className="text-3xl font-display font-bold text-gray-900 font-data">
-            {(overall.total || 0).toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-white border border-border rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Successful Calls</p>
-          <p className="text-3xl font-display font-bold text-success font-data">
-            {(overall.successful || 0).toLocaleString()}
-          </p>
-        </div>
-      </div>
+      )}
 
       <ChartCard
         title="Success Rate by Payer"
@@ -305,10 +256,11 @@ function DataAccuracyTab({ filters }) {
   );
 
   function exportData() {
+    if (!data?.byField) return;
     downloadCsv(
       `cadence-data-accuracy-${new Date().toISOString().split('T')[0]}.csv`,
       ['Field', 'Total', 'Captured', 'Capture Rate %', 'Avg Confidence %'],
-      (data?.byField ?? []).map((row) => [
+      data.byField.map((row) => [
         row.field,
         row.totalCalls ?? 0,
         row.capturedCount ?? 0,
@@ -320,32 +272,24 @@ function DataAccuracyTab({ filters }) {
 
   if (isLoading) return <LoadingPlaceholder />;
 
-  if (!data || data.byField.length === 0 || data.byField[0].totalCalls === 0) {
-    return (
-      <EmptyState
-        icon={Target}
-        title="No extracted call results in this range"
-        description="Field capture rates will appear here once calls have completed with AI-extracted data matching these filters."
-      />
-    );
-  }
-
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white border border-border rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Avg Field Capture Rate</p>
-          <p className="text-3xl font-display font-bold text-gray-900">
-            {Math.round((data.overall.captureRate || 0) * 100)}%
-          </p>
+      {data?.overall && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white border border-border rounded-xl p-5">
+            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Avg Field Capture Rate</p>
+            <p className="text-3xl font-display font-bold text-gray-900">
+              {Math.round((data.overall.captureRate || 0) * 100)}%
+            </p>
+          </div>
+          <div className="bg-white border border-border rounded-xl p-5">
+            <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Avg Confidence</p>
+            <p className="text-3xl font-display font-bold text-gray-900">
+              {Math.round((data.overall.avgConfidence || 0) * 100)}%
+            </p>
+          </div>
         </div>
-        <div className="bg-white border border-border rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Avg Confidence</p>
-          <p className="text-3xl font-display font-bold text-gray-900">
-            {formatConfidence(data.overall.avgConfidence)}
-          </p>
-        </div>
-      </div>
+      )}
 
       <ChartCard
         title="Field Capture Rate"
@@ -369,7 +313,7 @@ function DataAccuracyTab({ filters }) {
               (row.totalCalls ?? 0).toLocaleString(),
               (row.capturedCount ?? 0).toLocaleString(),
               `${Math.round((row.captureRate || 0) * 100)}%`,
-              formatConfidence(row.avgConfidence),
+              `${Math.round((row.avgConfidence || 0) * 100)}%`,
             ])}
           />
         </div>
@@ -412,16 +356,6 @@ function TurnaroundTimeTab({ filters }) {
   }
 
   if (isLoading) return <LoadingPlaceholder />;
-
-  if (rows.length === 0) {
-    return (
-      <EmptyState
-        icon={Clock}
-        title="No completed calls yet"
-        description="Turnaround time will appear here once calls have completed."
-      />
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -467,172 +401,6 @@ function TurnaroundTimeTab({ filters }) {
               row.p99 ?? '--',
             ])}
           />
-        </div>
-      </ChartCard>
-    </div>
-  );
-}
-
-
-// ---------------------------------------------------------------------------
-// Tab content: Hold Metrics
-// ---------------------------------------------------------------------------
-function HoldMetricsTab({ filters }) {
-  const data = useQuery(api.reports?.holdMetrics, filters);
-  const isLoading = data === undefined;
-  const metrics = data || {
-    totalCalls: 0,
-    callsWithHold: 0,
-    avgHoldSeconds: 0,
-    p95HoldSeconds: 0,
-    maxHoldSeconds: 0,
-    longHoldCount: 0,
-    over30MinCount: 0,
-    byPayer: [],
-  };
-  const payerRows = metrics.byPayer || [];
-
-  const chartData = useMemo(
-    () => payerRows.map((row) => ({
-      label: row.payerName || 'Unknown',
-      value: Math.round((row.avgHoldSeconds || 0) / 60),
-    })),
-    [payerRows]
-  );
-
-  function exportData() {
-    downloadCsv(
-      `cadence-hold-metrics-${new Date().toISOString().split('T')[0]}.csv`,
-      ['Payer', 'Total Calls', 'Calls With Hold', 'Avg Hold', 'Longest Hold', 'Long Holds >= 10m'],
-      payerRows.map((row) => [
-        row.payerName || row.payer || '--',
-        row.totalCalls ?? 0,
-        row.callsWithHold ?? 0,
-        formatSecondsCompact(row.avgHoldSeconds),
-        formatSecondsCompact(row.maxHoldSeconds),
-        row.longHoldCount ?? 0,
-      ])
-    );
-  }
-
-  if (isLoading) return <LoadingPlaceholder />;
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-border rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Avg Hold Time</p>
-          <p className="text-2xl font-display font-bold text-gray-900 font-data">
-            {formatSecondsCompact(metrics.avgHoldSeconds)}
-          </p>
-        </div>
-        <div className="bg-white border border-border rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Calls With Hold</p>
-          <p className="text-2xl font-display font-bold text-gray-900 font-data">
-            {(metrics.callsWithHold || 0).toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-white border border-border rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">P95 Hold</p>
-          <p className="text-2xl font-display font-bold text-warn font-data">
-            {formatSecondsCompact(metrics.p95HoldSeconds)}
-          </p>
-        </div>
-        <div className="bg-white border border-border rounded-xl p-5">
-          <p className="text-xs uppercase tracking-wider text-muted font-medium mb-2">Long Holds</p>
-          <p className="text-2xl font-display font-bold text-danger font-data">
-            {(metrics.longHoldCount || 0).toLocaleString()}
-          </p>
-        </div>
-      </div>
-
-      <ChartCard
-        title="Average Hold Time by Payer"
-        subtitle="Average time spent waiting on payer hold queues"
-        action={
-          <button
-            onClick={exportData}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 border border-border rounded-lg hover:border-accent hover:text-accent transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export CSV
-          </button>
-        }
-      >
-        <BarChart data={chartData} formatValue={(n) => `${n}m`} yAxisLabel="Avg hold minutes" />
-        <div className="mt-4">
-          <DataTable
-            headers={['Payer', 'Total Calls', 'Calls With Hold', 'Avg Hold', 'Longest Hold', 'Long Holds']}
-            rows={payerRows.map((row) => [
-              row.payerName || row.payer || '--',
-              (row.totalCalls ?? 0).toLocaleString(),
-              (row.callsWithHold ?? 0).toLocaleString(),
-              formatSecondsCompact(row.avgHoldSeconds),
-              formatSecondsCompact(row.maxHoldSeconds),
-              (row.longHoldCount ?? 0).toLocaleString(),
-            ])}
-          />
-        </div>
-      </ChartCard>
-    </div>
-  );
-}
-
-
-// ---------------------------------------------------------------------------
-// Tab content: Operational KPIs
-// ---------------------------------------------------------------------------
-function OperationalKpisTab({ filters }) {
-  const data = useQuery(api.reports?.operationalKpis, filters);
-  const isLoading = data === undefined;
-  const metrics = data || {};
-
-  function exportData() {
-    downloadCsv(
-      `cadence-operational-kpis-${new Date().toISOString().split('T')[0]}.csv`,
-      ['Metric', 'Value'],
-      [
-        ['Total Calls', metrics.totalCalls ?? 0],
-        ['Completed Calls', metrics.completedCalls ?? 0],
-        ['IVR Traversal Rate', `${metrics.ivrTraversalRate ?? 0}%`],
-        ['Transfer Rate', `${metrics.transferRate ?? 0}%`],
-        ['Automation Rate', `${metrics.automationRate ?? 0}%`],
-        ['Calls Per Hour', metrics.callsPerHour ?? 0],
-        ['Estimated Minutes Saved', metrics.estimatedMinutesSaved ?? 0],
-        ['Estimated Cost Savings', `$${metrics.estimatedCostSavings ?? 0}`],
-      ]
-    );
-  }
-
-  if (isLoading) return <LoadingPlaceholder />;
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <MetricCard label="IVR Traversal" value={`${metrics.ivrTraversalRate || 0}%`} caption={`${metrics.ivrTraversed || 0}/${metrics.ivrAttempted || 0} calls`} tone="accent" />
-        <MetricCard label="Transfer Rate" value={`${metrics.transferRate || 0}%`} caption={`${metrics.transferredCalls || 0} calls transferred`} tone="warn" />
-        <MetricCard label="Automation Rate" value={`${metrics.automationRate || 0}%`} caption="Completed without handoff" tone="success" />
-        <MetricCard label="Productivity" value={`${metrics.callsPerHour || 0}/hr`} caption="Completed call throughput" />
-      </div>
-
-      <ChartCard
-        title="ROI and Efficiency"
-        subtitle="Estimated from completed call duration and hold time"
-        action={
-          <button
-            onClick={exportData}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 border border-border rounded-lg hover:border-accent hover:text-accent transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export CSV
-          </button>
-        }
-      >
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <MetricCard label="Total Calls" value={(metrics.totalCalls || 0).toLocaleString()} />
-          <MetricCard label="Completed" value={(metrics.completedCalls || 0).toLocaleString()} tone="success" />
-          <MetricCard label="Minutes Saved" value={(metrics.estimatedMinutesSaved || 0).toLocaleString()} tone="accent" />
-          <MetricCard label="Cost Savings" value={`$${(metrics.estimatedCostSavings || 0).toLocaleString()}`} tone="success" />
         </div>
       </ChartCard>
     </div>
@@ -693,15 +461,23 @@ function ExceptionReportTab({ filters }) {
       </ChartCard>
 
       <ChartCard title="Exception Details" subtitle="Payers with exceptions in the last 24h">
-        <DataTable
-          headers={['Exception Type', 'Payer', 'Count', 'Last Seen']}
-          rows={exceptions.map((row) => [
-            (row.exception || '--').replace(/_/g, ' '),
-            row.payerName || row.payer || '--',
-            (row.count ?? 1).toLocaleString(),
-            row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString() : '--',
-          ])}
-        />
+        {exceptions.length === 0 ? (
+          <EmptyState
+            icon={AlertOctagon}
+            title="No exceptions"
+            description="No long holds or high partial-rate payers in the last 24 hours."
+          />
+        ) : (
+          <DataTable
+            headers={['Exception Type', 'Payer', 'Count', 'Last Seen']}
+            rows={exceptions.map((row) => [
+              (row.exception || '--').replace(/_/g, ' '),
+              row.payerName || row.payer || '--',
+              (row.count ?? 1).toLocaleString(),
+              row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleString() : '--',
+            ])}
+          />
+        )}
       </ChartCard>
     </div>
   );
@@ -716,41 +492,25 @@ function VolumeByTierTab({ filters }) {
   const isLoading = data === undefined;
 
   // Backend returns Array<{ payer, payerName, count, tier }>
-  const rows = data ?? [];
-
   // Group by tier for the pie chart
   const tierData = useMemo(() => {
     const grouped = {};
-    rows.forEach((row) => {
+    (data ?? []).forEach((row) => {
       const t = row.tier || 'low';
       grouped[t] = (grouped[t] || 0) + (row.count || 0);
     });
     return Object.entries(grouped).map(([label, value]) => ({ label, value }));
-  }, [rows]);
+  }, [data]);
 
   function exportData() {
     downloadCsv(
       `cadence-volume-by-tier-${new Date().toISOString().split('T')[0]}.csv`,
       ['Payer', 'Tier', 'Calls This Month'],
-      rows.map((row) => [
-        row.payerName || row.payer || '--',
-        row.tier || 'low',
-        row.count ?? 0,
-      ])
+      (data ?? []).map((row) => [row.payerName || row.payer || '--', row.tier || 'low', row.count ?? 0])
     );
   }
 
   if (isLoading) return <LoadingPlaceholder />;
-
-  if (rows.length === 0) {
-    return (
-      <EmptyState
-        icon={Layers}
-        title="No calls this month"
-        description="Call volume by payer tier will appear here once calls have been made this month."
-      />
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -771,7 +531,7 @@ function VolumeByTierTab({ filters }) {
         <div className="mt-4">
           <DataTable
             headers={['Payer', 'Tier', 'Calls This Month']}
-            rows={rows.map((row) => [
+            rows={(data ?? []).map((row) => [
               row.payerName || row.payer || '--',
               row.tier || 'low',
               (row.count ?? 0).toLocaleString(),
@@ -843,37 +603,22 @@ export default function ReportsPage() {
         </div>
 
         {/* Filter bar */}
-        <div className="flex flex-wrap items-end gap-5 px-4 py-3 border-b border-border bg-surface/40">
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-muted font-medium mb-1">Date Range</label>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className={`${INPUT_CLASS} w-32`}
-              />
-              <span className="text-[11px] text-muted">–</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className={`${INPUT_CLASS} w-32`}
-              />
-            </div>
-          </div>
-
-          <div className="w-px h-8 bg-border" />
-
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-muted font-medium mb-1">Payer</label>
-            <FilterSelect value={payerId} onChange={setPayerId} options={payerOptions} className="w-40" />
-          </div>
-
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-muted font-medium mb-1">Case Type</label>
-            <FilterSelect value={useCase} onChange={setUseCase} options={USE_CASE_OPTIONS} className="w-36" />
-          </div>
+        <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className={`${INPUT_CLASS} w-40`}
+          />
+          <span className="text-xs text-muted">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className={`${INPUT_CLASS} w-40`}
+          />
+          <FilterSelect value={payerId} onChange={setPayerId} options={payerOptions} className="w-52" />
+          <FilterSelect value={useCase} onChange={setUseCase} options={USE_CASE_OPTIONS} className="w-44" />
         </div>
 
         {/* Tab content */}
@@ -881,8 +626,6 @@ export default function ReportsPage() {
           {activeTab === 'success_rate' && <SuccessRateTab filters={filters} />}
           {activeTab === 'data_accuracy' && <DataAccuracyTab filters={filters} />}
           {activeTab === 'turnaround_time' && <TurnaroundTimeTab filters={filters} />}
-          {activeTab === 'hold_metrics' && <HoldMetricsTab filters={filters} />}
-          {activeTab === 'operational_kpis' && <OperationalKpisTab filters={filters} />}
           {activeTab === 'exception_report' && <ExceptionReportTab filters={filters} />}
           {activeTab === 'volume_by_tier' && <VolumeByTierTab filters={filters} />}
         </div>

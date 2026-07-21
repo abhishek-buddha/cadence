@@ -52,8 +52,6 @@ export const updateStatus = mutation({
     duration: v.optional(v.number()),
     transcript: v.optional(v.string()),
     recordingUrl: v.optional(v.string()),
-    aiRecordingStorageId: v.optional(v.id('_storage')),
-    humanRecordingStorageId: v.optional(v.id('_storage')),
     errorMessage: v.optional(v.string()),
     completedAt: v.optional(v.string()),
     callPhase: v.optional(v.string()),
@@ -106,16 +104,11 @@ export const listRecent = query({
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject || 'default';
     const limit = args.limit ?? 20;
-    const calls = (await ctx.db
+    const calls = await ctx.db
       .query('calls')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
-      .collect())
-      .sort((a, b) => {
-        const aTime = new Date(a.startedAt || a.completedAt || a._creationTime).getTime();
-        const bTime = new Date(b.startedAt || b.completedAt || b._creationTime).getTime();
-        return bTime - aTime;
-      })
-      .slice(0, limit);
+      .order('desc')
+      .take(limit);
 
     const enriched = await Promise.all(
       calls.map(async (call) => {
@@ -156,21 +149,6 @@ export const getById = query({
   args: { id: v.id('calls') },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.id);
-  },
-});
-
-// Resolves the two stored recording legs to playable Convex file-storage URLs.
-// The audio bytes were downloaded from ElevenLabs / Twilio at call end and
-// stored in our own file storage, so these URLs don't depend on those services
-// keeping the file around.
-export const getRecordingUrls = query({
-  args: { callId: v.id('calls') },
-  handler: async (ctx, args) => {
-    const call = await ctx.db.get(args.callId);
-    if (!call) return { aiUrl: null, humanUrl: null };
-    const aiUrl = call.aiRecordingStorageId ? await ctx.storage.getUrl(call.aiRecordingStorageId) : null;
-    const humanUrl = call.humanRecordingStorageId ? await ctx.storage.getUrl(call.humanRecordingStorageId) : null;
-    return { aiUrl, humanUrl };
   },
 });
 

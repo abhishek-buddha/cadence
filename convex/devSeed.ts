@@ -240,7 +240,6 @@ export const seedDemoData = internalMutation({
     const userSeeds = [
       { email: 'admin@cadence.demo', name: 'Admin User', role: 'admin' },
       { email: 'manager@cadence.demo', name: 'Manager User', role: 'manager' },
-      { email: 'agent@cadence.demo', name: 'Agent User', role: 'operator' },
       { email: 'viewer@cadence.demo', name: 'Viewer User', role: 'viewer' },
     ];
     for (const u of userSeeds) {
@@ -437,7 +436,6 @@ export const wipeAndReseed = internalMutation({
     const userSeeds = [
       { email: 'admin@cadence.demo', name: 'Admin User', role: 'admin' },
       { email: 'manager@cadence.demo', name: 'Manager User', role: 'manager' },
-      { email: 'agent@cadence.demo', name: 'Agent User', role: 'operator' },
       { email: 'viewer@cadence.demo', name: 'Viewer User', role: 'viewer' },
     ];
     for (const u of userSeeds) {

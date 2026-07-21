@@ -65,10 +65,9 @@ const MEDICAL_CLAIM_AGENT_PROMPT = readPrompt('convex/prompts/medicalClaim.ts');
 const DENTAL_EV_AGENT_PROMPT = readPrompt('convex/prompts/dentalEv.ts');
 const MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT = readPrompt('convex/prompts/multiPatientHandoff.ts');
 const VOICE_IVR_NAVIGATION_GUIDANCE = readPrompt('convex/prompts/voiceIvrNavigation.ts');
-const IVR_ONLY_MODE_GUIDANCE = readPrompt('convex/prompts/ivrOnlyMode.ts');
 const TRANSFER_TRIGGER_GUIDANCE = readPrompt('convex/prompts/transferTrigger.ts');
 
-function composePrompt({ useCase, isMultiPatient = false, hasVoiceIvr = false, endAtHumanHandoff = false }) {
+function composePrompt({ useCase, isMultiPatient = false, hasVoiceIvr = false }) {
   let base;
   switch (useCase) {
     case 'medical_claim':
@@ -81,9 +80,7 @@ function composePrompt({ useCase, isMultiPatient = false, hasVoiceIvr = false, e
       throw new Error(`Unknown useCase: ${useCase}`);
   }
 
-  const sections = [];
-  if (endAtHumanHandoff) sections.push(IVR_ONLY_MODE_GUIDANCE);
-  sections.push(base);
+  const sections = [base];
   if (isMultiPatient) sections.push(MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT);
   if (hasVoiceIvr) sections.push(VOICE_IVR_NAVIGATION_GUIDANCE);
   sections.push(TRANSFER_TRIGGER_GUIDANCE);
@@ -239,7 +236,7 @@ const AGENT_DEFINITIONS = [
   {
     key: 'medical',
     name: 'Cadence — Medical Claim Follow-Up',
-    prompt: composePrompt({ useCase: 'medical_claim', hasVoiceIvr: true, endAtHumanHandoff: true }),
+    prompt: composePrompt({ useCase: 'medical_claim', hasVoiceIvr: true }),
     envIdVar: 'ELEVENLABS_MEDICAL_AGENT_ID',
   },
   {

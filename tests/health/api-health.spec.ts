@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test.describe.configure({ mode: 'parallel' });
 
-const API_BASE = process.env.CADENCE_API_BASE ?? 'https://rapid-pheasant-510.convex.site';
-const CLOUD_BASE = process.env.CADENCE_CONVEX_CLOUD ?? 'https://rapid-pheasant-510.convex.cloud';
+const API_BASE = process.env.CADENCE_API_BASE ?? 'https://colorless-cardinal-959.convex.site';
+const CLOUD_BASE = process.env.CADENCE_CONVEX_CLOUD ?? 'https://colorless-cardinal-959.convex.cloud';
 const FRONTEND_BASE = process.env.CADENCE_BASE_URL ?? 'https://cadence-new.onrender.com';
 const KEY = process.env.CADENCE_API_KEY ?? '';
 

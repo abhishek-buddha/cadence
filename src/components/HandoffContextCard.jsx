@@ -13,15 +13,17 @@ function valueOrDash(value) {
   return value;
 }
 
-function formatMoney(centsOrDollars) {
-  if (centsOrDollars === null || centsOrDollars === undefined || centsOrDollars === '') return '-';
-  const amount = Number(centsOrDollars);
-  if (!Number.isFinite(amount)) return String(centsOrDollars);
+// claim.amount (and thus call.claimAmount) is stored in cents — see
+// AddClaimModal.jsx's Math.round(dollars * 100) and devSeed.ts's seed values.
+function formatMoney(cents) {
+  if (cents === null || cents === undefined || cents === '') return '-';
+  const amount = Number(cents);
+  if (!Number.isFinite(amount)) return String(cents);
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(amount / 100);
 }
 
 function formatList(values) {

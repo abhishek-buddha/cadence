@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText, Mic, Search, Download } from 'lucide-react';
+import { PhoneCall, ChevronDown, ChevronRight, Clock, FileText, Mic, Search, Download, MessageSquare } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import OutcomeBadge from '../components/OutcomeBadge';
 import EmptyState from '../components/EmptyState';
+import DispositionBadge from '../components/DispositionBadge';
 import { useProviderFilter } from '../context/ProviderFilterContext';
 
 const OUTCOME_OPTIONS = [
@@ -401,6 +402,36 @@ function CallRow({ call }) {
               </div>
             )}
 
+            {/* Operator Notes — disposition + comment recorded via the
+                operator's post-call workspace (convex/claimFollowups.ts) */}
+            {!isDentalCall && claim && (claim.followUpComment || claim.followUpDisposition) && (
+              <div>
+                <h4 className="text-xs uppercase tracking-wider text-muted font-medium mb-1.5 flex items-center gap-1.5">
+                  <MessageSquare className="w-3 h-3" />
+                  Operator Notes
+                </h4>
+                <div className="bg-white border border-border rounded-lg p-3 space-y-2">
+                  {claim.followUpDisposition && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <DispositionBadge disposition={claim.followUpDisposition} />
+                      {(claim.followUpBy || claim.followUpAt) && (
+                        <span className="text-xs text-muted">
+                          {claim.followUpBy ? `by ${claim.followUpBy}` : ''}
+                          {claim.followUpBy && claim.followUpAt ? ' · ' : ''}
+                          {claim.followUpAt ? formatDate(claim.followUpAt) : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {claim.followUpComment && (
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                      {claim.followUpComment}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Extracted Results */}
             {callResult && (
               <div>
@@ -528,8 +559,9 @@ function CallRow({ call }) {
             )}
 
             {/* No transcript or results */}
-            {!call.transcript && !callResult && !evResult && (
-              <p className="text-sm text-muted italic">No transcript or extracted data available for this call.</p>
+            {!call.transcript && !call.humanTranscript && !callResult && !evResult &&
+              !claim?.followUpComment && !claim?.followUpDisposition && (
+                <p className="text-sm text-muted italic">No transcript or extracted data available for this call.</p>
             )}
           </div>
         </div>

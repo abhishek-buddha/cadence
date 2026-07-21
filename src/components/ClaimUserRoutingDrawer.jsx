@@ -23,6 +23,7 @@ const AVAILABILITY_CONFIG = {
   available: { bg: 'bg-success/10', text: 'text-success', dot: 'bg-success', label: 'Available' },
   assigned: { bg: 'bg-accent/10', text: 'text-accent', dot: 'bg-accent', label: 'Assigned' },
   in_call: { bg: 'bg-warn/10', text: 'text-warn', dot: 'bg-warn', label: 'In call' },
+  wrap_up: { bg: 'bg-cyan/10', text: 'text-cyan', dot: 'bg-cyan', label: 'Wrap-up' },
   offline: { bg: 'bg-gray-500/10', text: 'text-gray-500', dot: 'bg-gray-400', label: 'Offline' },
 };
 

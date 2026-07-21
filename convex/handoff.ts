@@ -27,17 +27,12 @@
 import { mutation, query, action, internalMutation, internalQuery } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
+import { isStaleLiveCall, findFirstActiveCall, anyCallActive } from './lib/routingStatus';
 
 // ---------------------------------------------------------------------------
 // Enrichment helper — mirrors calls.listRecent so the UI gets human-readable
 // labels (payer, claim/case number, patient name) without extra round-trips.
 // ---------------------------------------------------------------------------
-const STALE_LIVE_MS = 2 * 60 * 60 * 1000;
-
-function isStaleLiveCall(call: any): boolean {
-  if (!call.startedAt) return false;
-  return Date.now() - new Date(call.startedAt).getTime() > STALE_LIVE_MS;
-}
 
 async function enrichCall(ctx: any, call: any) {
   let claimNumber: string | null = null;
@@ -134,14 +129,6 @@ function routingDisplayName(user: any, index: number): string {
   return user.name || user.email || `Agent ${index + 1}`;
 }
 
-function isRoutingCallActive(call: any): boolean {
-  if (call.status === 'completed' || call.status === 'failed') return false;
-  if (isStaleLiveCall(call)) return false;
-  const liveStatuses = new Set(['initiating', 'in_progress']);
-  const liveHandoffStates = new Set(['awaiting_human', 'accepting', 'connected']);
-  return liveStatuses.has(call.status) || liveHandoffStates.has(call.handoffState);
-}
-
 async function findAvailableRoutingAgent(ctx: any) {
   const users = await ctx.db.query('users').collect();
   const activeUsers = users
@@ -154,7 +141,7 @@ async function findAvailableRoutingAgent(ctx: any) {
       .query('calls')
       .withIndex('by_assignedAgentUserId', (q: any) => q.eq('assignedAgentUserId', user._id))
       .collect();
-    const busy = assignedCalls.some(isRoutingCallActive);
+    const busy = anyCallActive(assignedCalls);
     if (!busy) {
       return {
         user,
@@ -253,14 +240,16 @@ export const getMyRoutingStatus = query({
       .order('desc')
       .collect();
 
-    const activeCall = assignedCalls.find(isRoutingCallActive) || null;
+    const activeCall = findFirstActiveCall(assignedCalls);
     const enrichedActiveCall = activeCall ? await enrichCall(ctx, activeCall) : null;
     const availability =
       activeCall?.handoffState === 'awaiting_human'
         ? 'assigned'
-        : activeCall
-          ? 'in_call'
-          : 'available';
+        : activeCall?.status === 'completed'
+          ? 'wrap_up'
+          : activeCall
+            ? 'in_call'
+            : 'available';
 
     return {
       user,
@@ -548,6 +537,22 @@ export const endHandoffFromClient = mutation({
     if (!call) return { ok: false, reason: 'not_found' };
     await ctx.db.patch(args.callId, { handoffState: 'handoff_ended' });
     await logEvent(ctx, args.callId, 'handoff_ended', 'ended_by_operator');
+    return { ok: true };
+  },
+});
+
+// Explicit "Complete Call" action — the ONLY thing that clears an ended
+// handoff call from the operator's queue and frees them up for new routing
+// (see isRoutingCallActive in lib/routingStatus.ts). Deliberately separate
+// from claim dispositions: an operator may work several same-payer sibling
+// claims on one call before they're actually done with it.
+export const completeWrapUp = mutation({
+  args: { callId: v.id('calls') },
+  handler: async (ctx, args) => {
+    const call = await ctx.db.get(args.callId);
+    if (!call) return { ok: false, reason: 'not_found' };
+    await ctx.db.patch(args.callId, { wrapUpCompletedAt: new Date().toISOString() });
+    await logEvent(ctx, args.callId, 'wrap_up_completed', 'operator marked call complete');
     return { ok: true };
   },
 });

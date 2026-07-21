@@ -301,28 +301,62 @@ function OnCallPanel({ call, softphone }) {
 // ---------------------------------------------------------------------------
 function EndedPanel({ call }) {
   const ended = call.handoffState === 'handoff_ended';
+  const completeWrapUp = useMutation(api.handoff.completeWrapUp);
+  const [completing, setCompleting] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleComplete() {
+    if (completing) return;
+    setCompleting(true);
+    setError(null);
+    try {
+      const res = await completeWrapUp({ callId: call._id });
+      if (!res?.ok) setError('Could not complete — please retry');
+    } catch (e) {
+      setError(e?.message || 'Could not complete');
+    } finally {
+      setCompleting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div
-        className={`rounded-xl border px-5 py-4 flex items-center gap-3 ${
+        className={`rounded-xl border px-5 py-4 flex items-center justify-between gap-3 flex-wrap ${
           ended ? 'border-success/30 bg-success/5' : 'border-danger/30 bg-danger/5'
         }`}
       >
-        {ended ? (
-          <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
-        ) : (
-          <XCircle className="w-5 h-5 text-danger shrink-0" />
-        )}
-        <div>
-          <p className={`font-medium ${ended ? 'text-success' : 'text-danger'}`}>
-            {ended ? 'Call ended' : 'Handoff failed'}
-          </p>
-          <p className="text-sm text-gray-600">
-            {subjectLabel(call)}
-            {call.patientName ? ` · ${call.patientName}` : ''}
-          </p>
+        <div className="flex items-center gap-3">
+          {ended ? (
+            <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
+          ) : (
+            <XCircle className="w-5 h-5 text-danger shrink-0" />
+          )}
+          <div>
+            <p className={`font-medium ${ended ? 'text-success' : 'text-danger'}`}>
+              {ended ? 'Call ended' : 'Handoff failed'}
+            </p>
+            <p className="text-sm text-gray-600">
+              {subjectLabel(call)}
+              {call.patientName ? ` · ${call.patientName}` : ''}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={handleComplete}
+            disabled={completing}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors"
+          >
+            {completing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Complete Call
+          </button>
+          {error && <span className="text-xs text-danger">{error}</span>}
         </div>
       </div>
+      <p className="text-xs text-muted -mt-2">
+        This call stays in your queue until you click Complete Call — finish setting next steps below first.
+      </p>
 
       {(call.recordingUrl || call.humanTranscript) && (
         <div className="bg-white border border-border rounded-xl p-5 shadow-sm space-y-3">
@@ -352,8 +386,6 @@ function EndedPanel({ call }) {
       {/* Post-call: set the disposition for the handed-off claim and process any
           other open claims for the same payer. */}
       <PostCallWorkspace call={call} />
-
-      <p className="text-xs text-muted text-center">You'll go back to waiting once this call clears.</p>
     </div>
   );
 }

@@ -239,6 +239,11 @@ export default defineSchema({
     //   humanRecordingStorageId — the Twilio human↔human conference recording
     aiRecordingStorageId: v.optional(v.id('_storage')),
     humanRecordingStorageId: v.optional(v.id('_storage')),
+    // Set explicitly by the operator clicking "Complete Call" once they're
+    // done working the handoff (and any same-payer sibling claims). Until
+    // this is set, an ended handoff call stays "active" — visible in the
+    // operator's queue and blocking new routing — see convex/lib/routingStatus.ts.
+    wrapUpCompletedAt: v.optional(v.string()),
     userId: v.string(),
     startedAt: v.string(),
     completedAt: v.optional(v.string()),

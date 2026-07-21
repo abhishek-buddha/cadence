@@ -26,6 +26,7 @@ import {
   Mic,
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
+import DispositionBadge from '../components/DispositionBadge';
 import Modal from '../components/Modal';
 import LiveCallMonitor from '../components/LiveCallMonitor';
 
@@ -549,6 +550,29 @@ export default function ClaimDetailPage() {
           {claim.notes && (
             <div className="mt-4 pt-4 border-t border-border">
               <InfoField label="Notes" value={claim.notes} />
+            </div>
+          )}
+          {(claim.followUpComment || claim.followUpDisposition) && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted/70 mb-1.5">
+                <MessageSquare className="w-3.5 h-3.5" />
+                Operator Update
+              </div>
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                <DispositionBadge disposition={claim.followUpDisposition} />
+                {(claim.followUpBy || claim.followUpAt) && (
+                  <span className="text-xs text-muted">
+                    {claim.followUpBy ? `by ${claim.followUpBy}` : ''}
+                    {claim.followUpBy && claim.followUpAt ? ' · ' : ''}
+                    {claim.followUpAt ? formatDate(claim.followUpAt) : ''}
+                  </span>
+                )}
+              </div>
+              {claim.followUpComment && (
+                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {claim.followUpComment}
+                </p>
+              )}
             </div>
           )}
         </DetailCard>

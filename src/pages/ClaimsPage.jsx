@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import StatusBadge from '../components/StatusBadge';
+import DispositionBadge from '../components/DispositionBadge';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 import AddClaimModal from '../components/AddClaimModal';
@@ -842,11 +843,21 @@ export default function ClaimsPage() {
                     <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{claim.lastCalledAt ? formatDate(claim.lastCalledAt) : '---'}</td>
                     <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{claim.nextFollowUpDate ? formatDate(claim.nextFollowUpDate) : '---'}</td>
                     <td className="px-5 py-3.5 text-[13px] leading-snug text-gray-500 max-w-[300px]">
-                      {latestUpdate ? (
-                        <span className="text-gray-700 line-clamp-2" title={latestUpdate}>{latestUpdate}</span>
-                      ) : (
-                        <span className="text-muted italic">No calls yet</span>
-                      )}
+                      <div className="flex items-start gap-1.5 flex-wrap">
+                        {claim.followUpDisposition && (
+                          <DispositionBadge disposition={claim.followUpDisposition} className="shrink-0" />
+                        )}
+                        {latestUpdate || claim.followUpComment ? (
+                          <span
+                            className="text-gray-700 line-clamp-2"
+                            title={latestUpdate || claim.followUpComment}
+                          >
+                            {latestUpdate || claim.followUpComment}
+                          </span>
+                        ) : (
+                          !claim.followUpDisposition && <span className="text-muted italic">No calls yet</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

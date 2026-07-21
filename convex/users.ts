@@ -1,6 +1,7 @@
 import { mutation, query, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
 import { VALID_SPECIALIZATIONS } from './lib/specializations';
+import { findFirstActiveCall } from './lib/routingStatus';
 
 const VALID_ROLES = ['admin', 'operator'];
 const VALID_STATUSES = ['active', 'disabled'];
@@ -21,21 +22,6 @@ export const list = query({
 
 function routingDisplayName(user: any, index: number): string {
   return user.name || user.email || `Agent ${index + 1}`;
-}
-
-const STALE_LIVE_MS = 2 * 60 * 60 * 1000;
-
-function isStaleLiveCall(call: any): boolean {
-  if (!call.startedAt) return false;
-  return Date.now() - new Date(call.startedAt).getTime() > STALE_LIVE_MS;
-}
-
-function isRoutingCallActive(call: any): boolean {
-  if (call.status === 'completed' || call.status === 'failed') return false;
-  if (isStaleLiveCall(call)) return false;
-  const liveStatuses = new Set(['initiating', 'in_progress']);
-  const liveHandoffStates = new Set(['awaiting_human', 'accepting', 'connected']);
-  return liveStatuses.has(call.status) || liveHandoffStates.has(call.handoffState);
 }
 
 async function enrichRoutingCall(ctx: any, call: any) {
@@ -146,16 +132,18 @@ export const listRoutingAgents = query({
           .order('desc')
           .collect();
 
-        const activeCall = assignedCalls.find(isRoutingCallActive) || null;
+        const activeCall = findFirstActiveCall(assignedCalls);
         const enrichedActiveCall = activeCall
           ? await enrichRoutingCall(ctx, activeCall)
           : null;
         const availability =
           activeCall?.handoffState === 'awaiting_human'
             ? 'assigned'
-            : activeCall
-              ? 'in_call'
-              : 'available';
+            : activeCall?.status === 'completed'
+              ? 'wrap_up'
+              : activeCall
+                ? 'in_call'
+                : 'available';
 
         return {
           ...user,

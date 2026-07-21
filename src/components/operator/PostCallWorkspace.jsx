@@ -12,18 +12,11 @@
 import { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
-import {
-  ChevronDown,
-  Layers,
-  ClipboardCheck,
-  CheckCircle2,
-  RefreshCw,
-  CalendarClock,
-  XCircle,
-} from 'lucide-react';
+import { ChevronDown, Layers, ClipboardCheck, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ClaimDetailBlock from './ClaimDetailBlock';
 import ClaimDispositionControls from './ClaimDispositionControls';
+import DispositionBadge from '../DispositionBadge';
 
 const STATUS_STYLES = {
   pending: 'bg-gray-100 text-gray-600',
@@ -40,13 +33,6 @@ const PRIORITY_STYLES = {
   low: 'bg-success/10 text-success',
 };
 
-const DISPOSITION_BADGE = {
-  complete: { label: 'Complete', icon: CheckCircle2, cls: 'bg-success/10 text-success' },
-  retry: { label: 'Retry', icon: RefreshCw, cls: 'bg-warn/10 text-warn' },
-  reschedule: { label: 'Reschedule', icon: CalendarClock, cls: 'bg-accent/10 text-accent' },
-  denied: { label: 'Denied', icon: XCircle, cls: 'bg-danger/10 text-danger' },
-};
-
 function Badge({ children, className }) {
   return (
     <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${className}`}>
@@ -60,17 +46,16 @@ function prettyStatus(s) {
   return s.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function money(amount) {
-  if (amount == null) return null;
-  const n = Number(amount);
+// claim.amount is stored in cents (see AddClaimModal.jsx's dollars*100 conversion)
+function money(cents) {
+  if (cents == null) return null;
+  const n = Number(cents);
   if (!Number.isFinite(n)) return null;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n / 100);
 }
 
 function RelatedClaimRow({ claim, operatorName }) {
   const [open, setOpen] = useState(false);
-  const disp = claim.followUpDisposition ? DISPOSITION_BADGE[claim.followUpDisposition] : null;
-  const DispIcon = disp?.icon;
 
   return (
     <div className="border border-border rounded-xl bg-white overflow-hidden">
@@ -94,13 +79,7 @@ function RelatedClaimRow({ claim, operatorName }) {
                 {prettyStatus(claim.priority)}
               </Badge>
             )}
-            {disp && (
-              <Badge className={disp.cls}>
-                <span className="inline-flex items-center gap-1">
-                  {DispIcon && <DispIcon className="w-3 h-3" />} {disp.label}
-                </span>
-              </Badge>
-            )}
+            <DispositionBadge disposition={claim.followUpDisposition} />
           </div>
           <p className="mt-0.5 text-xs text-muted truncate">
             {[claim.patientName, money(claim.amount), claim.dateOfService && `DOS ${claim.dateOfService}`]

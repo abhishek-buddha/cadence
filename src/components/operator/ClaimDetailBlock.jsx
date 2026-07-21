@@ -18,15 +18,16 @@ function valueOrDash(value) {
   return value;
 }
 
-function formatMoney(amount) {
-  if (amount === null || amount === undefined || amount === '') return '-';
-  const n = Number(amount);
-  if (!Number.isFinite(n)) return String(amount);
+// claim.amount is stored in cents (see AddClaimModal.jsx's dollars*100 conversion)
+function formatMoney(cents) {
+  if (cents === null || cents === undefined || cents === '') return '-';
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return String(cents);
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 0,
-  }).format(n);
+  }).format(n / 100);
 }
 
 function formatList(values) {

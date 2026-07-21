@@ -10,8 +10,8 @@ import { useState } from 'react';
  *   formatValue: (n) => string
  */
 const DEFAULT_PALETTE = [
-  '#4f46e5', '#7c3aed', '#10b981', '#f59e0b', '#f43f5e',
-  '#7c3aed', '#0d9488', '#65a30d', '#ea580c', '#db2777',
+  '#2c93d8', '#0891b2', '#10b981', '#f59e0b', '#f43f5e',
+  '#63b8e8', '#0d9488', '#65a30d', '#ea580c', '#db2777',
 ];
 
 export default function PieChart({

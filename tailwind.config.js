@@ -9,26 +9,28 @@ export default {
         data: ['Roboto Mono', 'monospace'],
       },
       colors: {
-        // Palette mapped from ECLAT / Evolve RCM mockup CSS variables
-        surface: '#f4f6f9', // --bg-page
+        // Palette mapped from the "Sky Blue" theme (grad-sky) in the ECLAT /
+        // Evolve RCM theme-switcher mockup — see `list view themes 3.html`.
+        surface: '#f2f9fe', // --bg-page
         panel: '#ffffff', // --bg-white
-        'panel-light': '#f8f9ff', // --bg-tint
-        border: '#eaecf0', // --border
-        'border-light': '#e5e7eb', // --border-soft
-        accent: '#4f46e5', // --accent (indigo-600)
-        'accent-hover': '#3b34cc', // --accent-hover
-        'accent-dim': '#eef2ff', // --accent-soft
-        'accent-grad': '#7c3aed', // --accent-grad-start (violet, gradient partner)
-        cyan: '#7c3aed', // secondary / violet
-        toolbar: '#25375c', // --toolbar-bg (dark navy bars)
-        sidebar: '#10141d', // dark sidebar surface
+        'panel-light': '#e8f4fd', // --bg-hover
+        border: '#d7ecfa', // --border
+        'border-light': '#c5e3f7', // --border-soft
+        accent: '#2c93d8', // --accent
+        'accent-hover': '#1f7cbb', // --accent-hover
+        'accent-dim': '#e3f2fc', // --accent-soft
+        'accent-grad': '#63b8e8', // --accent-grad-start (gradient partner)
+        cyan: '#0891b2', // secondary status color — kept a true teal so it stays
+        // visually distinct from the new blue accent (mock has no equivalent role)
+        toolbar: '#1c4f73', // --toolbar-bg (dark navy bars) — not yet used in any real UI
+        sidebar: '#10141d', // dark sidebar surface — unused placeholder
         success: '#10b981',
         'success-dim': '#ecfdf5',
         warn: '#d97706',
         'warn-dim': '#fef3c7',
         danger: '#f43f5e',
         'danger-dim': '#fff1f2',
-        muted: '#6b7280', // --text-secondary
+        muted: '#5482a0', // --text-secondary
       },
     },
   },

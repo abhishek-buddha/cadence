@@ -10,12 +10,14 @@ import {
   Layers,
   Download,
   ChevronDown,
+  Sparkles,
 } from 'lucide-react';
 import BarChart from '../components/BarChart';
 import PieChart from '../components/PieChart';
 import EmptyState from '../components/EmptyState';
 
 const TABS = [
+  { value: 'call_analytics', label: 'Call Analytics', icon: Sparkles },
   { value: 'success_rate', label: 'Success Rate', icon: TrendingUp },
   { value: 'data_accuracy', label: 'Data Accuracy', icon: Target },
   { value: 'turnaround_time', label: 'Turnaround Time', icon: Clock },
@@ -24,6 +26,11 @@ const TABS = [
   { value: 'exception_report', label: 'Exception Report', icon: AlertOctagon },
   { value: 'volume_by_tier', label: 'Volume by Tier', icon: Layers },
 ];
+
+// Industry-typical manual hold+talk time for a claims follow-up call — an
+// estimate, not a measured value. Used only to illustrate relative speed on
+// the Call Analytics tab; every other number on that tab is real, queried data.
+const MANUAL_BASELINE_SECONDS = 12 * 60;
 
 // Values must match calls.useCase exactly ("medical_claim" | "dental_ev") —
 // a prior "claim_followup" mismatch silently zeroed out every report whenever
@@ -180,6 +187,141 @@ function LoadingPlaceholder() {
     <div className="space-y-3">
       <div className="shimmer rounded h-48 w-full" />
       <div className="shimmer rounded h-32 w-full" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab content: Call Analytics — headline ROI summary, first tab.
+// Every stat card is real queried data; the only assumption is the manual
+// baseline used for the speed comparison, which is disclosed inline.
+// ---------------------------------------------------------------------------
+function CallAnalyticsTab({ filters }) {
+  const successData = useQuery(api.reports?.successRate, filters);
+  const kpis = useQuery(api.reports?.operationalKpis, filters);
+  const accuracy = useQuery(api.reports?.dataAccuracy, filters);
+  const turnaround = useQuery(api.reports?.turnaroundTime, filters);
+
+  const isLoading =
+    successData === undefined || kpis === undefined || accuracy === undefined || turnaround === undefined;
+
+  const rows = turnaround ?? [];
+  const totalCount = rows.reduce((s, r) => s + (r.count || 0), 0);
+  const overallP50 = rows.length > 0 && totalCount > 0
+    ? Math.round(rows.reduce((s, r) => s + (r.p50 || 0) * (r.count || 0), 0) / totalCount)
+    : 0;
+
+  if (isLoading) return <LoadingPlaceholder />;
+
+  if (!successData || successData.total === 0) {
+    return (
+      <EmptyState
+        icon={Sparkles}
+        title="No calls in this range"
+        description="Call analytics will appear here once calls have been made matching these filters."
+      />
+    );
+  }
+
+  const minutesSaved = kpis?.estimatedMinutesSaved || 0;
+  const hoursSaved = Math.round((minutesSaved / 60) * 10) / 10;
+  const daysSaved = Math.round((minutesSaved / 60 / 24) * 10) / 10;
+  const costSavings = kpis?.estimatedCostSavings || 0;
+
+  const capturePct = Math.round((accuracy?.overall?.captureRate || 0) * 100);
+  const confidencePct = accuracy?.overall?.avgConfidence != null
+    ? Math.round(accuracy.overall.avgConfidence * 100)
+    : null;
+
+  const speedMultiple = overallP50 > 0 ? Math.round((MANUAL_BASELINE_SECONDS / overallP50) * 10) / 10 : 0;
+  const automationRate = kpis?.automationRate || 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Headline stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <MetricCard
+          label="Time Saved"
+          value={hoursSaved >= 24 ? `${daysSaved}d` : `${hoursSaved}h`}
+          caption={`${minutesSaved.toLocaleString()} min of hold+talk time offloaded to AI`}
+          tone="accent"
+        />
+        <MetricCard
+          label="Est. Cost Savings"
+          value={`$${costSavings.toLocaleString()}`}
+          caption="At $28/hr fully-loaded agent cost"
+          tone="success"
+        />
+        <MetricCard
+          label="AI Data Accuracy"
+          value={`${capturePct}%`}
+          caption={confidencePct != null ? `${confidencePct}% avg extraction confidence` : 'Field capture rate'}
+          tone="success"
+        />
+        <MetricCard
+          label="Success Rate"
+          value={`${(successData.successRatePct || 0).toFixed(1)}%`}
+          caption={`${(successData.total || 0).toLocaleString()} calls`}
+        />
+      </div>
+
+      {/* Processing speed comparison */}
+      <ChartCard title="Processing Speed" subtitle="Median AI call time vs. a typical manual follow-up call">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+          <MetricCard label="AI Median Call Time" value={formatSecondsCompact(overallP50)} tone="accent" />
+          <MetricCard
+            label="Typical Manual Call"
+            value={formatSecondsCompact(MANUAL_BASELINE_SECONDS)}
+            caption="Industry estimate — hold + talk time"
+          />
+          <MetricCard
+            label="Speed Improvement"
+            value={speedMultiple > 0 ? `${speedMultiple}x faster` : '--'}
+            tone="success"
+          />
+        </div>
+        <p className="text-xs text-muted italic">
+          The manual baseline is an industry estimate for a typical insurance claims follow-up call (hold + talk
+          time), not a measured value — it's shown only to illustrate relative speed. Every other figure on this
+          tab comes directly from your call data.
+        </p>
+      </ChartCard>
+
+      {/* Key insights */}
+      <ChartCard title="Key Insights" subtitle="What the numbers mean for your team">
+        <ul className="space-y-3">
+          <li className="flex items-start gap-2.5 text-sm text-gray-700">
+            <TrendingUp className="w-4 h-4 text-success shrink-0 mt-0.5" />
+            <span>
+              AI calls resolve in a median of <strong className="font-data">{formatSecondsCompact(overallP50)}</strong>
+              {speedMultiple > 0 && <> — roughly <strong>{speedMultiple}x faster</strong> than a typical manual follow-up call</>}.
+            </span>
+          </li>
+          <li className="flex items-start gap-2.5 text-sm text-gray-700">
+            <Clock className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+            <span>
+              Across <strong className="font-data">{(successData.total || 0).toLocaleString()}</strong> calls in this range,
+              an estimated <strong className="font-data">{minutesSaved.toLocaleString()} minutes ({hoursSaved}h)</strong> of
+              hold and talk time was handled by AI instead of a human agent.
+            </span>
+          </li>
+          <li className="flex items-start gap-2.5 text-sm text-gray-700">
+            <Target className="w-4 h-4 text-success shrink-0 mt-0.5" />
+            <span>
+              Field data-capture accuracy is <strong className="font-data">{capturePct}%</strong>
+              {confidencePct != null && <> with <strong className="font-data">{confidencePct}%</strong> average extraction confidence</>},
+              reducing manual re-entry and follow-up errors.
+            </span>
+          </li>
+          <li className="flex items-start gap-2.5 text-sm text-gray-700">
+            <BarChart3 className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+            <span>
+              <strong className="font-data">{automationRate}%</strong> of completed calls resolved fully without a
+              human handoff.
+            </span>
+          </li>
+        </ul>
+      </ChartCard>
     </div>
   );
 }
@@ -796,7 +938,7 @@ function VolumeByTierTab({ filters }) {
 // MAIN COMPONENT
 // ===========================================================================
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState('success_rate');
+  const [activeTab, setActiveTab] = useState('call_analytics');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [payerId, setPayerId] = useState('');
@@ -882,6 +1024,7 @@ export default function ReportsPage() {
 
         {/* Tab content */}
         <div className="flex-1 min-h-0 overflow-auto p-6">
+          {activeTab === 'call_analytics' && <CallAnalyticsTab filters={filters} />}
           {activeTab === 'success_rate' && <SuccessRateTab filters={filters} />}
           {activeTab === 'data_accuracy' && <DataAccuracyTab filters={filters} />}
           {activeTab === 'turnaround_time' && <TurnaroundTimeTab filters={filters} />}

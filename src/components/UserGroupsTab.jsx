@@ -76,7 +76,7 @@ export default function UserGroupsTab() {
       <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
+            <tr className="sticky top-0 z-10 bg-table-header">
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Name</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Payer</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Provider</th>

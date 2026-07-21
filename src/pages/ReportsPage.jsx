@@ -820,10 +820,6 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <p className="text-sm text-muted mt-1">Operational metrics and analytics</p>
-      </div>
-
       {/* Tabs */}
       <div className="bg-white border border-border rounded-xl shadow-sm">
         <div className="sticky top-0 z-20 bg-white rounded-t-xl border-b border-border flex items-center gap-1 px-4 overflow-x-auto">

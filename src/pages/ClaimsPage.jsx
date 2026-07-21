@@ -687,13 +687,6 @@ export default function ClaimsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <p className="text-sm text-muted mt-1">
-          {!isLoading && `${filteredClaims.length} claim${filteredClaims.length !== 1 ? 's' : ''}`}
-        </p>
-      </div>
-
       {/* Status Tabs */}
       <div className="flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
         {STATUS_TABS.map((tab) => {
@@ -745,7 +738,7 @@ export default function ClaimsPage() {
       <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
         <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
           <thead>
-            <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
+            <tr className="sticky top-0 z-10 bg-table-header">
               <th className="pl-5 pr-2 py-3.5 w-10">
                 <input
                   type="checkbox"

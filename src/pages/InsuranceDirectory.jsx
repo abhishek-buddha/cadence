@@ -340,7 +340,7 @@ export default function InsuranceDirectory() {
           <div className="overflow-auto max-h-[70vh]">
             <table className="w-full">
               <thead>
-                <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
+                <tr className="sticky top-0 z-10 bg-table-header">
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Payer Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Phone</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Hours</th>

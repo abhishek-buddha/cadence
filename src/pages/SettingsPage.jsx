@@ -151,11 +151,6 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <p className="text-sm text-muted mt-1">Application configuration and status</p>
-      </div>
-
       {/* Connection Status */}
       <Section title="Connection Status" icon={Database}>
         <div className="flex items-center gap-3">

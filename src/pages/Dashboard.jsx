@@ -119,11 +119,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
-      <div className="flex items-end justify-between flex-wrap gap-4">
-        <div>
-          <p className="text-sm text-muted mt-1">Real-time claims overview</p>
-        </div>
-
+      <div className="flex items-end justify-end flex-wrap gap-4">
         <div className="flex items-end gap-3 bg-white border border-border rounded-xl px-4 py-2.5 shadow-sm">
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-muted font-medium mb-1">Date Range</label>

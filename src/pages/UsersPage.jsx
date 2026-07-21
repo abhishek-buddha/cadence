@@ -521,9 +521,6 @@ export default function UsersPage() {
   if (!hasRole(role, 'admin')) {
     return (
       <div className="space-y-6 animate-fade-in">
-        <div>
-          <p className="text-sm text-muted mt-1">Manage user access and roles</p>
-        </div>
         <div className="bg-white border border-border rounded-xl shadow-sm">
           <EmptyState
             icon={Lock}
@@ -654,7 +651,7 @@ function UsersPageContent({ currentEmail }) {
       <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
+            <tr className="sticky top-0 z-10 bg-table-header">
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold w-12"></th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Email</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Name</th>

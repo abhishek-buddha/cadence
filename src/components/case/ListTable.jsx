@@ -3,7 +3,7 @@ export default function ListTable({ columns, rows, getRowKey, onRowClick, emptyS
     <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
       <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
         <thead>
-          <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
+          <tr className="sticky top-0 z-10 bg-table-header">
             {columns.map((col) => (
               <th
                 key={col.key}

@@ -92,7 +92,7 @@ export default function SessionsPage() {
       <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
+            <tr className="sticky top-0 z-10 bg-table-header">
               <th className="pl-4 pr-2 py-3.5 w-8"></th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Session #</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Payer</th>

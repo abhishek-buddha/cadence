@@ -40,10 +40,6 @@ export default function OperatorDashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <p className="text-sm text-muted mt-1">Your call activity and recent handoffs</p>
-      </div>
-
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (

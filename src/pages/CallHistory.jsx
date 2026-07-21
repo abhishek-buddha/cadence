@@ -658,11 +658,6 @@ export default function CallHistory() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <p className="text-sm text-muted mt-1">All voice agent calls</p>
-      </div>
-
       {/* Action toolbar */}
       <ListToolbar searchValue={searchTerm} onSearchChange={setSearchTerm}>
         <div className="relative">

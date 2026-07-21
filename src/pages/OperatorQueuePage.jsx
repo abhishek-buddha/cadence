@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import HandoffContextCard from '../components/HandoffContextCard';
 import HandoffTimeline from '../components/HandoffTimeline';
+import PostCallWorkspace from '../components/operator/PostCallWorkspace';
 import { useSoftphone } from '../hooks/useSoftphone';
 import { useAuth } from '../context/AuthContext';
 
@@ -287,6 +288,10 @@ function OnCallPanel({ call, softphone }) {
       </div>
 
       <HandoffContextCard call={c} />
+
+      {/* Claim grouping + disposition workspace — same-payer claims the operator
+          can process while the payer rep is still on the line. */}
+      <PostCallWorkspace call={c} />
     </div>
   );
 }
@@ -343,6 +348,11 @@ function EndedPanel({ call }) {
       )}
 
       <HandoffContextCard call={call} />
+
+      {/* Post-call: set the disposition for the handed-off claim and process any
+          other open claims for the same payer. */}
+      <PostCallWorkspace call={call} />
+
       <p className="text-xs text-muted text-center">You'll go back to waiting once this call clears.</p>
     </div>
   );

@@ -118,6 +118,14 @@ export default defineSchema({
     lastCalledAt: v.optional(v.string()),
     nextFollowUpDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    // Human follow-up disposition set by an operator during/after a handoff
+    // call (see convex/claimFollowups.ts). Kept separate from `status` (which
+    // has guarded transitions) so recording a disposition can never throw.
+    //   "complete" | "retry" | "reschedule" | "denied"
+    followUpDisposition: v.optional(v.string()),
+    followUpComment: v.optional(v.string()),
+    followUpBy: v.optional(v.string()),
+    followUpAt: v.optional(v.string()),
     userId: v.string(),
     createdAt: v.string(),
     updatedAt: v.string(),
@@ -127,7 +135,8 @@ export default defineSchema({
     .index('by_priority', ['priority'])
     .index('by_patientId', ['patientId'])
     .index('by_claimNumber', ['claimNumber'])
-    .index('by_agingBucket', ['agingBucket']),
+    .index('by_agingBucket', ['agingBucket'])
+    .index('by_insuranceContactId', ['insuranceContactId']),
 
   // Dental eligibility verification cases (dental use case core entity)
   dentalCases: defineTable({

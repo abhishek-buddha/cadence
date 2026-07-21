@@ -522,7 +522,6 @@ export default function UsersPage() {
     return (
       <div className="space-y-6 animate-fade-in">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Users</h1>
           <p className="text-sm text-muted mt-1">Manage user access and roles</p>
         </div>
         <div className="bg-white border border-border rounded-xl shadow-sm">
@@ -621,13 +620,6 @@ function UsersPageContent({ currentEmail }) {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Users</h1>
-        <p className="text-sm text-muted mt-1">
-          {topTab === 'users' && !isLoading && `${filteredUsers.length} user${filteredUsers.length !== 1 ? 's' : ''}`}
-        </p>
-      </div>
-
       <div className="flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
         {TOP_TABS.map((tab) => {
           const isActive = topTab === tab.key;
@@ -659,10 +651,10 @@ function UsersPageContent({ currentEmail }) {
       >
         <ListToolbarButton icon={UserPlus} label="Add User" onClick={openCreate} />
       </ListToolbar>
-      <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
+      <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-table-header">
+            <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold w-12"></th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Email</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Name</th>

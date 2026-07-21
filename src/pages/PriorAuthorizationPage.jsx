@@ -1,10 +1,20 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardCheck } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/case/PriorityBadge';
 import ListTable from '../components/case/ListTable';
+import ListToolbar from '../components/ListToolbar';
 import EmptyState from '../components/EmptyState';
 import { priorAuthorizations } from '../data/staticCaseData';
+
+function filterRows(rows, searchQuery) {
+  if (!searchQuery) return rows;
+  const q = searchQuery.toLowerCase();
+  return rows.filter((row) =>
+    Object.values(row).some((v) => (typeof v === 'string' || typeof v === 'number') && String(v).toLowerCase().includes(q))
+  );
+}
 
 const COLUMNS = [
   { key: 'patientName', label: 'Patient Name' },
@@ -23,24 +33,23 @@ const COLUMNS = [
 
 export default function PriorAuthorizationPage() {
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredRows = filterRows(priorAuthorizations, searchQuery);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Prior Authorization</h1>
-        <p className="text-sm text-muted mt-1">{priorAuthorizations.length} record{priorAuthorizations.length !== 1 ? 's' : ''}</p>
-      </div>
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery} />
 
       <ListTable
         columns={COLUMNS}
-        rows={priorAuthorizations}
+        rows={filteredRows}
         getRowKey={(r) => r.id}
         onRowClick={(r) => navigate(`/prior-authorization/${r.id}`)}
         emptyState={
           <EmptyState
             icon={ClipboardCheck}
-            title="No prior authorization records"
-            description="Records will appear here once this module is connected."
+            title={searchQuery ? 'No matching records' : 'No prior authorization records'}
+            description={searchQuery ? 'Try a different search term.' : 'Records will appear here once this module is connected.'}
           />
         }
       />

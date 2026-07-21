@@ -41,7 +41,6 @@ export default function OperatorDashboardPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">My Dashboard</h1>
         <p className="text-sm text-muted mt-1">Your call activity and recent handoffs</p>
       </div>
 

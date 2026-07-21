@@ -821,13 +821,12 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Reports</h1>
         <p className="text-sm text-muted mt-1">Operational metrics and analytics</p>
       </div>
 
       {/* Tabs */}
       <div className="bg-white border border-border rounded-xl shadow-sm">
-        <div className="border-b border-border flex items-center gap-1 px-4 overflow-x-auto">
+        <div className="sticky top-0 z-20 bg-white rounded-t-xl border-b border-border flex items-center gap-1 px-4 overflow-x-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.value;

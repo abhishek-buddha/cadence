@@ -4,8 +4,17 @@ import { Calendar, Bell } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/case/PriorityBadge';
 import ListTable from '../components/case/ListTable';
+import ListToolbar from '../components/ListToolbar';
 import EmptyState from '../components/EmptyState';
 import { appointmentScheduling, appointmentReminders } from '../data/staticCaseData';
+
+function filterRows(rows, searchQuery) {
+  if (!searchQuery) return rows;
+  const q = searchQuery.toLowerCase();
+  return rows.filter((row) =>
+    Object.values(row).some((v) => (typeof v === 'string' || typeof v === 'number') && String(v).toLowerCase().includes(q))
+  );
+}
 
 const TABS = [
   { key: 'scheduling', label: 'Scheduling' },
@@ -44,17 +53,14 @@ const REMINDER_COLUMNS = [
 export default function AppointmentsPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('scheduling');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const rows = tab === 'scheduling' ? appointmentScheduling : appointmentReminders;
   const columns = tab === 'scheduling' ? SCHEDULING_COLUMNS : REMINDER_COLUMNS;
+  const filteredRows = filterRows(rows, searchQuery);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Appointments</h1>
-        <p className="text-sm text-muted mt-1">{rows.length} record{rows.length !== 1 ? 's' : ''}</p>
-      </div>
-
       {/* Tabs */}
       <div className="flex items-center gap-1 bg-white border border-border rounded-xl px-2 shadow-sm overflow-x-auto">
         {TABS.map((t) => {
@@ -77,16 +83,18 @@ export default function AppointmentsPage() {
         })}
       </div>
 
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery} />
+
       <ListTable
         columns={columns}
-        rows={rows}
+        rows={filteredRows}
         getRowKey={(r) => r.id}
         onRowClick={(r) => navigate(`/appointments/${tab}/${r.id}`)}
         emptyState={
           <EmptyState
             icon={tab === 'scheduling' ? Calendar : Bell}
-            title={`No ${tab === 'scheduling' ? 'scheduling' : 'reminder'} records`}
-            description="Records will appear here once this module is connected."
+            title={searchQuery ? 'No matching records' : `No ${tab === 'scheduling' ? 'scheduling' : 'reminder'} records`}
+            description={searchQuery ? 'Try a different search term.' : 'Records will appear here once this module is connected.'}
           />
         }
       />

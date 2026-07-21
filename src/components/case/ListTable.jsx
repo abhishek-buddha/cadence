@@ -1,13 +1,13 @@
 export default function ListTable({ columns, rows, getRowKey, onRowClick, emptyState }) {
   return (
-    <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
+    <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
       <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
         <thead>
-          <tr className="border-b border-border bg-white">
+          <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-4 py-3.5 text-xs uppercase tracking-wider text-muted font-semibold whitespace-nowrap ${
+                className={`px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap ${
                   col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
                 }`}
               >

@@ -139,7 +139,6 @@ export default function PatientsPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Patient Information</h1>
             <button
               onClick={() => setPiiVisible((v) => !v)}
               className={`p-1.5 rounded-lg transition-colors ${piiVisible ? 'text-accent bg-accent/10' : 'text-muted hover:text-gray-700 hover:bg-gray-100'}`}
@@ -148,9 +147,6 @@ export default function PatientsPage() {
               {piiVisible ? <Eye className="w-4.5 h-4.5" /> : <EyeOff className="w-4.5 h-4.5" />}
             </button>
           </div>
-          <p className="text-sm text-muted mt-1">
-            {patients ? `${filteredPatients.length} patient${filteredPatients.length !== 1 ? 's' : ''}` : 'Loading...'}
-          </p>
         </div>
       </div>
 
@@ -190,10 +186,10 @@ export default function PatientsPage() {
         </div>
       ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[70vh]">
             <table className="w-full">
               <thead>
-                <tr className="bg-table-header">
+                <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">DOB</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Member ID</th>

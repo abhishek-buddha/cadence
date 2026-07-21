@@ -100,16 +100,6 @@ export default function ProvidersPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Providers</h1>
-          <p className="text-sm text-muted mt-1">
-            {providers ? `${filteredProviders.length} provider${filteredProviders.length !== 1 ? 's' : ''}` : 'Loading...'}
-          </p>
-        </div>
-      </div>
-
       {/* Action toolbar */}
       <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
         <ListToolbarButton icon={Plus} label="Add Provider" onClick={openCreate} />
@@ -146,10 +136,10 @@ export default function ProvidersPage() {
         </div>
       ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[70vh]">
             <table className="w-full">
               <thead>
-                <tr className="bg-table-header">
+                <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Practice Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">NPI</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Tax ID</th>

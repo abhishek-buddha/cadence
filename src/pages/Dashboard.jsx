@@ -121,9 +121,6 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">
-            Dashboard
-          </h1>
           <p className="text-sm text-muted mt-1">Real-time claims overview</p>
         </div>
 

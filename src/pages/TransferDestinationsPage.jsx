@@ -326,7 +326,6 @@ export default function TransferDestinationsPage() {
     return (
       <div className="space-y-6 animate-fade-in">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Transfer Destinations</h1>
           <p className="text-sm text-muted mt-1">Where calls can be transferred to a human</p>
         </div>
         <div className="bg-white border border-border rounded-xl shadow-sm">
@@ -413,21 +412,14 @@ function TransferDestinationsPageContent() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Transfer Destinations</h1>
-        <p className="text-sm text-muted mt-1">
-          {!isLoading && `${filteredDestinations.length} destination${filteredDestinations.length !== 1 ? 's' : ''}`}
-        </p>
-      </div>
-
       <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
         <ListToolbarButton icon={Plus} label="Add Destination" onClick={openCreate} />
       </ListToolbar>
 
-      <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
+      <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-table-header">
+            <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Name</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Phone</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Kind</th>

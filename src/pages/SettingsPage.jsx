@@ -150,10 +150,9 @@ export default function SettingsPage() {
   }, []);
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-3xl">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Settings</h1>
         <p className="text-sm text-muted mt-1">Application configuration and status</p>
       </div>
 

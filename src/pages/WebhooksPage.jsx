@@ -505,7 +505,6 @@ export default function WebhooksPage() {
     return (
       <div className="space-y-6 animate-fade-in">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Webhooks</h1>
           <p className="text-sm text-muted mt-1">External event subscriptions</p>
         </div>
         <div className="bg-white border border-border rounded-xl shadow-sm">
@@ -545,21 +544,14 @@ function WebhooksPageContent() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Webhooks</h1>
-        <p className="text-sm text-muted mt-1">
-          {!isLoading && `${filteredSubscriptions.length} subscription${filteredSubscriptions.length !== 1 ? 's' : ''}`}
-        </p>
-      </div>
-
       <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
         <ListToolbarButton icon={Plus} label="Add Subscription" onClick={() => setAddOpen(true)} />
       </ListToolbar>
 
-      <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
+      <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-table-header">
+            <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
               <th className="pl-4 pr-2 py-3.5 w-8"></th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">URL</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold">Events</th>

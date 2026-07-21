@@ -366,7 +366,6 @@ export default function LiveCallsPage() {
           <Radio className="w-5 h-5 text-accent" />
         </div>
         <div>
-          <h1 className="text-xl font-display font-bold text-gray-900">Live Calls</h1>
           <p className="text-sm text-muted">
             Take over insurance calls from the AI the moment a rep picks up.
           </p>

@@ -300,16 +300,6 @@ export default function InsuranceDirectory() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Payer Directory</h1>
-          <p className="text-sm text-muted mt-1">
-            {contacts ? `${filteredContacts.length} payer${filteredContacts.length !== 1 ? 's' : ''}` : 'Loading...'}
-          </p>
-        </div>
-      </div>
-
       {/* Action toolbar */}
       <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
         <ListToolbarButton icon={Upload} label="Upload Workbook" onClick={() => setImportOpen(true)} variant="white" />
@@ -347,10 +337,10 @@ export default function InsuranceDirectory() {
         </div>
       ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[70vh]">
             <table className="w-full">
               <thead>
-                <tr className="bg-table-header">
+                <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Payer Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Phone</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Hours</th>

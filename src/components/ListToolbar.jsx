@@ -37,7 +37,7 @@ export default function ListToolbar({
   children,
 }) {
   return (
-    <div className="flex items-center justify-between flex-wrap gap-4 bg-toolbar rounded-xl px-4 py-3 shadow-md">
+    <div className="sticky top-0 z-20 flex items-center justify-between flex-wrap gap-4 bg-toolbar rounded-xl px-4 py-3 shadow-md">
       <div className="relative flex items-center flex-1 max-w-[380px] min-w-[220px]">
         <Search className="absolute left-3.5 w-4 h-4 text-white/50 pointer-events-none" />
         <input

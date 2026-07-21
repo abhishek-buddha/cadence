@@ -660,7 +660,6 @@ export default function CallHistory() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Call History</h1>
         <p className="text-sm text-muted mt-1">All voice agent calls</p>
       </div>
 
@@ -722,19 +721,6 @@ export default function CallHistory() {
         <ListToolbarButton icon={Download} label="Export" onClick={exportFilteredCalls} disabled={filteredCalls.length === 0} variant="white" />
       </ListToolbar>
 
-      {/* Call count summary */}
-      {!isLoading && calls.length > 0 && (
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-muted">
-            Showing <span className="text-gray-900 font-medium">{filteredCalls.length}</span>
-            {statusFilter !== 'all' && ` ${statusFilter}`} call{filteredCalls.length !== 1 ? 's' : ''}{normalizedSearch && ` matching "${searchTerm.trim()}"`}
-            {statusFilter !== 'all' && (
-              <span className="text-muted"> of {calls.length} total</span>
-            )}
-          </span>
-        </div>
-      )}
-
       {/* Call List */}
       {isLoading ? (
         <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
@@ -773,17 +759,17 @@ export default function CallHistory() {
           {/* Table header */}
           <div className="flex items-center gap-4 px-4 py-3 bg-table-header">
             <span className="w-4" /> {/* Chevron spacer */}
-            <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[160px]">Date</span>
-            <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[120px]">Claim #</span>
-            <span className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold flex-1">Insurance</span>
+            <span className="text-left text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[160px]">Date</span>
+            <span className="text-left text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[120px]">Claim #</span>
+            <span className="text-left text-xs uppercase tracking-wider text-table-header-text font-semibold flex-1">Insurance</span>
             <span className="min-w-[140px] text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Outcome</span>
-            <span className="px-4 py-3 text-right text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[70px]">Duration</span>
+            <span className="text-right text-xs uppercase tracking-wider text-table-header-text font-semibold min-w-[70px]">Duration</span>
             <span className="min-w-[90px] text-center text-xs uppercase tracking-wider text-table-header-text font-semibold">Recording</span>
             <span className="min-w-[110px] text-right text-xs uppercase tracking-wider text-table-header-text font-semibold pr-4">Status</span>
           </div>
 
           {/* Call rows */}
-          <div className="divide-y divide-border/30">
+          <div className="divide-y divide-border/30 overflow-y-auto max-h-[70vh]">
             {filteredCalls.map((call) => (
               <CallRow
                 key={call._id}

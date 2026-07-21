@@ -110,12 +110,6 @@ export default function EligibilityPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Dental Eligibility</h1>
-          <p className="text-sm text-muted mt-1">
-            {!isLoading && `${filtered.length} case${filtered.length !== 1 ? 's' : ''}`}
-          </p>
-        </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setImportModalOpen(true)}

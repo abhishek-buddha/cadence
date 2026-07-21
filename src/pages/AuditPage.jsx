@@ -164,7 +164,6 @@ export default function AuditPage() {
     return (
       <div className="space-y-6 animate-fade-in">
         <div>
-          <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Audit Log</h1>
           <p className="text-sm text-muted mt-1">System activity history</p>
         </div>
         <div className="bg-white border border-border rounded-xl shadow-sm">
@@ -295,14 +294,6 @@ function AuditPageContent() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Audit Log</h1>
-        <p className="text-sm text-muted mt-1">
-          {!isLoading && `${filteredEvents.length} event${filteredEvents.length !== 1 ? 's' : ''} on this page`}
-        </p>
-      </div>
-
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3 bg-white border border-border rounded-xl p-4 shadow-sm">
         <input
@@ -386,10 +377,10 @@ function AuditPageContent() {
       </ListToolbar>
 
       {/* Table */}
-      <div className="bg-white border border-border rounded-xl overflow-x-auto shadow-sm">
+      <div className="bg-white border border-border rounded-xl overflow-auto max-h-[70vh] shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-table-header">
+            <tr className="sticky top-[var(--toolbar-h)] z-10 bg-table-header">
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Timestamp</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">User</th>
               <th className="text-left px-4 py-3.5 text-xs uppercase tracking-wider text-table-header-text font-semibold whitespace-nowrap">Action</th>

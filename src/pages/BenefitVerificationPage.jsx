@@ -1,10 +1,20 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/case/PriorityBadge';
 import ListTable from '../components/case/ListTable';
+import ListToolbar from '../components/ListToolbar';
 import EmptyState from '../components/EmptyState';
 import { benefitVerifications } from '../data/staticCaseData';
+
+function filterRows(rows, searchQuery) {
+  if (!searchQuery) return rows;
+  const q = searchQuery.toLowerCase();
+  return rows.filter((row) =>
+    Object.values(row).some((v) => (typeof v === 'string' || typeof v === 'number') && String(v).toLowerCase().includes(q))
+  );
+}
 
 const COLUMNS = [
   { key: 'patientName', label: 'Patient Name' },
@@ -22,24 +32,24 @@ const COLUMNS = [
 
 export default function BenefitVerificationPage() {
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredRows = filterRows(benefitVerifications, searchQuery);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-display font-bold text-gray-900 tracking-tight">Benefit Verification</h1>
-        <p className="text-sm text-muted mt-1">{benefitVerifications.length} record{benefitVerifications.length !== 1 ? 's' : ''}</p>
-      </div>
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery} />
 
       <ListTable
         columns={COLUMNS}
-        rows={benefitVerifications}
+        rows={filteredRows}
         getRowKey={(r) => r.id}
         onRowClick={(r) => navigate(`/benefit-verification/${r.id}`)}
         emptyState={
           <EmptyState
             icon={ShieldCheck}
-            title="No benefit verification records"
-            description="Records will appear here once this module is connected."
+            title={searchQuery ? 'No matching records' : 'No benefit verification records'}
+            description={searchQuery ? 'Try a different search term.' : 'Records will appear here once this module is connected.'}
           />
         }
       />

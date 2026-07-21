@@ -6,6 +6,11 @@
   /* "Sky Blue" theme (grad-sky) — values pulled 1:1 from the theme-switcher
      mockup (list view themes 3.html) so the app matches it exactly. */
   :root {
+    /* Rendered height of ListToolbar (dark search/action bar) on a single
+       line — used to offset sticky table headers so they stack below the
+       sticky toolbar instead of overlapping it. Tune here if it ever
+       drifts out of sync with the real toolbar height. */
+    --toolbar-h: 60px;
     --surface: #f2f9fe;
     --panel: #ffffff;
     --panel-light: #e8f4fd;

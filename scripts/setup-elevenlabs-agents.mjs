@@ -271,7 +271,12 @@ function buildAgentBody({ name, prompt }) {
       turn: {
         turn_timeout: 10,
         silence_end_call_timeout: -1,
-        turn_eagerness: 'normal',
+        // A payer IVR reads one long sentence with pauses in it. Default
+        // turn-taking treats those pauses as "the caller finished speaking" and
+        // the agent answers a menu it has not heard the end of. Neither setting
+        // costs anything against a recording, which never gets impatient.
+        turn_eagerness: 'patient',
+        speculative_turn: false,
       },
     },
   };

@@ -98,6 +98,21 @@ const END_CALL_DESCRIPTION =
   '(system__message_to_speak). Speaking before the hang-up lets a looping IVR ' +
   'announcement abort the tool call, so the call never actually ends.';
 
+// Turn-taking. An IVR greeting is one long uninterrupted sentence with natural
+// pauses in it, which the default settings read as "the caller has finished
+// speaking". In conv_8201ky508ypseswbwftknq8dpq78 the agent pressed 5 at 3s
+// against a transcript still cut off mid-word ("…Dean Health Plan by Med") and
+// landed in the Spanish branch before the options had been read.
+//
+//   speculative_turn: true generates a response DURING silence, before full
+//     turn confidence is reached. It trades correctness for latency — the wrong
+//     trade when the other party is a recorded menu that never gets impatient.
+//     ElevenLabs defaults this to false; it was on here.
+//   turn_eagerness: 'patient' holds out for a higher turn probability.
+//
+// Agent-level, so this applies to every payer at once.
+const TURN_OVERRIDES = { speculative_turn: false, turn_eagerness: 'patient' };
+
 const DTMF_DESCRIPTION =
   'Presses a key on the phone keypad to navigate automated phone menus. Use digits 0-9, star, or pound. ' +
   'Pressing a key is your ENTIRE turn — say nothing before or after it. Never announce the option you ' +
@@ -239,6 +254,15 @@ async function main() {
   console.log('  tools: end_call + play_keypad_touch_tone -> pre_tool_speech off, ' +
               'interruption_mode disable_during_tool_and_turn, suppress_turn_after_dtmf true.');
 
+  // --- 5. Turn-taking: wait for the IVR to actually finish ------------------
+  const liveTurn = agent.conversation_config.turn || {};
+  const turnDrift = Object.entries(TURN_OVERRIDES).filter(([k, want]) => liveTurn[k] !== want);
+  if (turnDrift.length) {
+    console.log('  turn: ' + turnDrift.map(([k, want]) => `${k} ${JSON.stringify(liveTurn[k])} -> ${JSON.stringify(want)}`).join(', ') + '.');
+  } else {
+    console.log('  turn: already patient / non-speculative — skipping.');
+  }
+
   const body = {
     conversation_config: {
       ...agent.conversation_config,
@@ -246,6 +270,7 @@ async function main() {
         ...agent.conversation_config.agent,
         prompt: { ...promptCfg, prompt: newPrompt, tools },
       },
+      turn: { ...liveTurn, ...TURN_OVERRIDES },
     },
   };
 
@@ -268,6 +293,9 @@ async function main() {
   console.log(`  end_call.interruption_mode: ${endCall?.interruption_mode}`);
   console.log(`  end_call.pre_tool_speech: ${endCall?.pre_tool_speech}`);
   console.log(`  tools: ${(afterPrompt.tools || []).map((t) => t.name).join(', ')}`);
+  const afterTurn = after.conversation_config.turn || {};
+  console.log(`  turn.speculative_turn: ${afterTurn.speculative_turn}`);
+  console.log(`  turn.turn_eagerness: ${afterTurn.turn_eagerness}`);
 }
 
 main().catch((err) => {

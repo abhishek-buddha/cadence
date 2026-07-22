@@ -42,3 +42,7 @@ dev-snapshot.zip
 *.njsproj
 *.sln
 *.sw?
+
+# ElevenLabs agent config backups written by scripts/patch-agent-payer-termination.mjs
+scripts/agent-backup-*.json
+scripts/agent-patch-preview-*.json

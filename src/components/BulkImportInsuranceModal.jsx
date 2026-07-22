@@ -57,6 +57,79 @@ function compileSteps(steps) {
   return { playbook, transcript };
 }
 
+// Steps whose state describes the post-handoff human conversation. The agent's
+// leg ends at the queue, so these never produce a menu response.
+const HUMAN_PHASE_STATE = /represent|subscriber|benefit|read-?back|close|write-?back|queue|announce/i;
+
+function clip(s, max = 60) {
+  const t = s.trim();
+  if (t.length <= max) return t;
+  // Never cut mid-word — a dangling fragment can't substring-match live speech.
+  return t.slice(0, max).replace(/\s+\S*$/, '');
+}
+
+// Pull the payer's spoken menu prompt out of a flow-sheet action. RCM writes it
+// as `IVR: "…"` or `IVR presents …: …`; either way we want a short, distinctive
+// fragment to substring-match against live speech (matching is case-insensitive
+// `promptContains`, so a fragment is more robust than the whole sentence).
+function extractPrompt(action, state, digit) {
+  // `IVR presents inquiry options: Pharmacy (1), Eligibility & Benefits (2), …`
+  // The label paired with the key we press is what the recording actually says
+  // ("for eligibility and benefits, press two"), so it matches far better than
+  // the option list as written in the sheet.
+  if (digit) {
+    const esc = digit.replace(/[*#]/g, '\\$&');
+    const paired = action.match(new RegExp(`([A-Za-z][A-Za-z&/'’ -]{3,40}?)\\s*\\(${esc}\\)`));
+    if (paired) return clip(paired[1]);
+  }
+  const quoted = action.match(/IVR:\s*"([^"]+)"/i) || action.match(/"([^"]{8,})"/);
+  if (quoted) {
+    // First clause only — live ASR rarely reproduces a long menu verbatim.
+    const first = quoted[1].split(/[.?]|,\s*(?=press|for\b)/i)[0].trim();
+    if (first.length >= 6) return clip(first);
+  }
+  return state ? clip(state) : '';
+}
+
+// Pull the key Cadence should press. Handles "sends DTMF 1", "press 2",
+// "typically 1 for participating", "e.g., 4 for Claims".
+function extractDigit(action) {
+  const patterns = [
+    /(?:sends?|enters?|presses?)\s+(?:the\s+)?(?:configured\s+)?DTMF\s*([0-9*#]+)/i,
+    /\bDTMF\s*([0-9*#]+)/i,
+    /\bpress(?:es|ing)?\s*([0-9*#]+)/i,
+    /\btypically\s*([0-9*#]+)\b/i,
+    /\be\.g\.,?\s*([0-9*#]+)\s+for\b/i,
+  ];
+  for (const re of patterns) {
+    const m = action.match(re);
+    if (m) return m[1];
+  }
+  return '';
+}
+
+// Derive a voice-IVR phrase table from the uploaded flow. Only steps that yield
+// BOTH a recognisable prompt and a concrete key become entries — a half-derived
+// row would send the agent down a wrong branch, which is worse than leaving it
+// to the playbook text.
+function derivePhrases(steps) {
+  const out = [];
+  const seen = new Set();
+  for (const s of [...steps].sort((a, b) => a.step - b.step)) {
+    if (HUMAN_PHASE_STATE.test(s.state || '')) continue;
+    const action = String(s.action || '');
+    const digit = extractDigit(action);
+    if (!digit) continue;
+    const promptContains = extractPrompt(action, s.state, digit);
+    if (!promptContains) continue;
+    const key = promptContains.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ promptContains, responseText: digit });
+  }
+  return out;
+}
+
 export default function BulkImportInsuranceModal({ open, onClose }) {
   const bulkImport = useMutation(api.insuranceContacts.bulkImportContacts);
   const existing = useQuery(api.insuranceContacts.list);
@@ -130,6 +203,7 @@ export default function BulkImportInsuranceModal({ open, onClose }) {
           const { playbook, transcript } = steps.length
             ? compileSteps(steps)
             : { playbook: '', transcript: '' };
+          const phrases = derivePhrases(steps);
 
           const avgRaw = get(m, 'avg hold time (min)', 'avg hold time', 'avghold');
           const avgNum = avgRaw ? Number(avgRaw) : undefined;
@@ -146,15 +220,20 @@ export default function BulkImportInsuranceModal({ open, onClose }) {
             avgHoldTime: Number.isFinite(avgNum) ? avgNum : undefined,
             verificationRequirements: get(m, 'verification requirements') || undefined,
             notes: get(m, 'notes') || undefined,
-            // The whole flow is compiled into the ivrInstructions playbook, so we
-            // do NOT populate the separate DTMF-steps or voice-phrase tables here
-            // (those are optional UI extras for simpler payers). Keep both toggles
-            // off so they never show as "enabled but empty".
-            voiceIvrEnabled: false,
+            // The flow is compiled into the ivrInstructions playbook AND, where
+            // the sheet states a concrete key per menu, into a voice-IVR phrase
+            // table. Previously both toggles were forced off here, so every
+            // bulk-imported payer reached the agent with `voice_ivr_phrases: []`
+            // and had to improvise its way through the menus from prose. The
+            // toggle now follows the data: on when we derived usable entries,
+            // off when we didn't, so it is never "enabled but empty".
+            voiceIvrEnabled: phrases.length > 0,
+            voiceIvrPhrases: phrases.length ? phrases : undefined,
             ivrEnabled: false,
             ivrInstructions: playbook || undefined,
             ivrSourceTranscript: transcript || undefined,
             _stepCount: steps.length,
+            _phraseCount: phrases.length,
           };
         })
         .filter(Boolean);
@@ -194,7 +273,9 @@ export default function BulkImportInsuranceModal({ open, onClose }) {
     setError(null);
     try {
       // Strip preview-only fields before sending.
-      const contacts = payers.map(({ _stepCount, ...rest }) => rest);
+      // Strip every preview-only field — the mutation validator rejects unknown
+      // keys, so a stray underscore field fails the entire import.
+      const contacts = payers.map(({ _stepCount, _phraseCount, ...rest }) => rest);
       const res = await bulkImport({ contacts });
       setResult(res);
       setStage('done');
@@ -306,7 +387,14 @@ export default function BulkImportInsuranceModal({ open, onClose }) {
                           {p.phone || <span className="text-danger">missing</span>}
                         </td>
                         <td className="px-3 py-2 text-gray-700">{p.payerKind || '--'}</td>
-                        <td className="px-3 py-2 text-gray-700">{p._stepCount || 0}</td>
+                        <td className="px-3 py-2 text-gray-700">
+                          {p._stepCount || 0}
+                          {p._phraseCount > 0 && (
+                            <span className="ml-1 text-success" title={`${p._phraseCount} menu responses derived — voice IVR auto-enabled`}>
+                              ({p._phraseCount} auto)
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-gray-700 font-data">{p.humanAgentNumber || '--'}</td>
                       </tr>
                     );

@@ -10,7 +10,8 @@
 // Optional appended fragments:
 //   isMultiPatient: true → MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT
 //   hasVoiceIvr:    true → VOICE_IVR_NAVIGATION_GUIDANCE
-//   (TRANSFER_TRIGGER_GUIDANCE is always appended — universal)
+//   (TRANSFER_TRIGGER_GUIDANCE and PAYER_TERMINATION_GUIDANCE are always
+//    appended — both are universal)
 //
 // Consumers:
 //   - scripts/setup-elevenlabs-agents.mjs (programmatic agent create/update)
@@ -22,6 +23,7 @@ export { DENTAL_EV_AGENT_PROMPT } from './dentalEv';
 export { MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT } from './multiPatientHandoff';
 export { VOICE_IVR_NAVIGATION_GUIDANCE } from './voiceIvrNavigation';
 export { TRANSFER_TRIGGER_GUIDANCE } from './transferTrigger';
+export { PAYER_TERMINATION_GUIDANCE } from './payerTermination';
 export { IVR_ONLY_MODE_GUIDANCE } from './ivrOnlyMode';
 export { buildIvrContextSection, buildIvrInstructionsVar } from './ivrContext';
 export type { IvrStep } from './ivrContext';
@@ -31,6 +33,7 @@ import { DENTAL_EV_AGENT_PROMPT } from './dentalEv';
 import { MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT } from './multiPatientHandoff';
 import { VOICE_IVR_NAVIGATION_GUIDANCE } from './voiceIvrNavigation';
 import { TRANSFER_TRIGGER_GUIDANCE } from './transferTrigger';
+import { PAYER_TERMINATION_GUIDANCE } from './payerTermination';
 import { IVR_ONLY_MODE_GUIDANCE } from './ivrOnlyMode';
 
 export type UseCase = 'medical_claim' | 'dental_ev';
@@ -105,6 +108,12 @@ export function composePrompt(options: ComposePromptOptions): string {
       vars.all_patients_data
     );
   }
+
+  // Sits ahead of the base prompt because it overrides the base's closing lines:
+  // a payer self-termination (closed office, voicemail-only, dead-end menu) is a
+  // silent hang-up, and end_call must never carry a spoken message. Universal —
+  // every use case, every payer, every operating mode.
+  sections.push(PAYER_TERMINATION_GUIDANCE);
 
   sections.push(base);
 

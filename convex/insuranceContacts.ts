@@ -126,6 +126,14 @@ export const bulkImportContacts = mutation({
         digit: v.string(),
         label: v.optional(v.string()),
       }))),
+      // Menu-prompt -> response table derived from the uploaded IVR Flow sheet.
+      // Without this the importer could not carry the RCM team's per-menu
+      // answers through, so every bulk-imported payer reached the agent with an
+      // empty phrase table and navigated on free-text guesswork alone.
+      voiceIvrPhrases: v.optional(v.array(v.object({
+        promptContains: v.string(),
+        responseText: v.string(),
+      }))),
       ivrSourceTranscript: v.optional(v.string()),
     })),
   },

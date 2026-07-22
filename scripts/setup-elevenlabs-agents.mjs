@@ -66,6 +66,7 @@ const DENTAL_EV_AGENT_PROMPT = readPrompt('convex/prompts/dentalEv.ts');
 const MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT = readPrompt('convex/prompts/multiPatientHandoff.ts');
 const VOICE_IVR_NAVIGATION_GUIDANCE = readPrompt('convex/prompts/voiceIvrNavigation.ts');
 const TRANSFER_TRIGGER_GUIDANCE = readPrompt('convex/prompts/transferTrigger.ts');
+const PAYER_TERMINATION_GUIDANCE = readPrompt('convex/prompts/payerTermination.ts');
 
 function composePrompt({ useCase, isMultiPatient = false, hasVoiceIvr = false }) {
   let base;
@@ -80,7 +81,7 @@ function composePrompt({ useCase, isMultiPatient = false, hasVoiceIvr = false })
       throw new Error(`Unknown useCase: ${useCase}`);
   }
 
-  const sections = [base];
+  const sections = [PAYER_TERMINATION_GUIDANCE, base];
   if (isMultiPatient) sections.push(MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT);
   if (hasVoiceIvr) sections.push(VOICE_IVR_NAVIGATION_GUIDANCE);
   sections.push(TRANSFER_TRIGGER_GUIDANCE);

@@ -360,7 +360,7 @@ export default function LiveCallsPage() {
   const loading = awaiting === undefined || live === undefined;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
           <Radio className="w-5 h-5 text-accent" />

@@ -47,7 +47,7 @@ function getInitials(emailOrName) {
 
 function OperatorSidebar() {
   return (
-    <aside className="bg-white border-r border-border flex flex-col relative shrink-0 w-64">
+    <aside className="font-ui bg-white border-r border-border flex flex-col relative shrink-0 w-64">
       <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-accent/20 via-cyan/10 to-transparent" />
 
       <div className="p-6 pb-4">
@@ -57,7 +57,7 @@ function OperatorSidebar() {
           </div>
           <div>
             <h1 className="font-display font-bold text-lg tracking-tight text-gray-900">Cadence</h1>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">Claims AI</p>
+            <p className="font-display text-[10px] uppercase tracking-[0.2em] text-muted font-medium">Claims AI</p>
           </div>
         </div>
       </div>

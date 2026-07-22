@@ -143,7 +143,7 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   return (
     <aside
-      className={`bg-white border-r border-border flex flex-col relative shrink-0 transition-[width] duration-300 ease-in-out ${
+      className={`font-ui bg-white border-r border-border flex flex-col relative shrink-0 transition-[width] duration-300 ease-in-out ${
         collapsed ? 'w-[68px]' : 'w-64'
       }`}
     >
@@ -161,7 +161,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               <h1 className="font-display font-bold text-lg tracking-tight text-gray-900">
                 Cadence
               </h1>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
+              <p className="font-display text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
                 Claims AI
               </p>
             </div>

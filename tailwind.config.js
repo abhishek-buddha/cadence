@@ -7,6 +7,19 @@ export default {
         display: ['Roboto', 'sans-serif'],
         body: ['Roboto', 'sans-serif'],
         data: ['Roboto Mono', 'monospace'],
+        // Native OS UI font stack (no webfont) — used for the sidebar nav,
+        // matching the "system font, not a custom typeface" pattern for
+        // left-menu chrome.
+        ui: [
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Segoe UI"',
+          'Roboto',
+          '"Helvetica Neue"',
+          'Arial',
+          'sans-serif',
+        ],
       },
       colors: {
         // Neutral light-gray page background, with blue reserved as the

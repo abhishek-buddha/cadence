@@ -9,13 +9,13 @@ export default {
         data: ['Roboto Mono', 'monospace'],
       },
       colors: {
-        // Palette mapped from the "Sky Blue" theme (grad-sky) in the ECLAT /
-        // Evolve RCM theme-switcher mockup — see `list view themes 3.html`.
-        surface: '#f2f9fe', // --bg-page
+        // Neutral light-gray page background, with blue reserved as the
+        // accent color only (buttons, links, active states, toolbar).
+        surface: '#f5f6f8', // --bg-page
         panel: '#ffffff', // --bg-white
-        'panel-light': '#e8f4fd', // --bg-hover
-        border: '#d7ecfa', // --border
-        'border-light': '#c5e3f7', // --border-soft
+        'panel-light': '#eef0f2', // --bg-hover
+        border: '#dde0e4', // --border
+        'border-light': '#e8eaed', // --border-soft
         accent: '#2c93d8', // --accent
         'accent-hover': '#1f7cbb', // --accent-hover
         'accent-dim': '#e3f2fc', // --accent-soft

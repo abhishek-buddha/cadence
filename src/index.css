@@ -3,14 +3,14 @@
 @tailwind utilities;
 
 @layer base {
-  /* "Sky Blue" theme (grad-sky) — values pulled 1:1 from the theme-switcher
-     mockup (list view themes 3.html) so the app matches it exactly. */
+  /* Neutral light-gray theme — blue reserved as the accent color only
+     (buttons, links, active states, toolbar), not the page background. */
   :root {
-    --surface: #f2f9fe;
+    --surface: #f5f6f8;
     --panel: #ffffff;
-    --panel-light: #e8f4fd;
-    --border: #d7ecfa;
-    --border-light: #c5e3f7;
+    --panel-light: #eef0f2;
+    --border: #dde0e4;
+    --border-light: #e8eaed;
     --accent: #2c93d8;
     --accent-hover: #1f7cbb;
     --accent-grad-start: #63b8e8;
@@ -22,8 +22,7 @@
 
   body {
     background: var(--surface);
-    /* Exact page-bg-image from the mock's grad-sky theme */
-    background-image: linear-gradient(160deg, #eff6ff 0%, #f0f9ff 100%);
+    background-image: linear-gradient(160deg, #f7f8fa 0%, #f2f3f5 100%);
     min-height: 100vh;
   }
 
@@ -49,8 +48,8 @@
 /* Grid background pattern */
 .grid-bg {
   background-image:
-    linear-gradient(rgba(44, 147, 216, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(44, 147, 216, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 

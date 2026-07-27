@@ -33,6 +33,20 @@ before using it:
 - The playbook may not match what you actually hear. Trust the live audio over
   this document, and use it only to decide which key to press.`;
 
+// Tag every quoted line in the playbook at the point of use. The block warning
+// above is 2000+ chars from the quotes it governs, and on the Harvard Pilgrim
+// call (conv_3601ky51xgxkesc9xxgm7v7yvz33) the agent read step 1's greeting out
+// loud with that warning already in place — nearby text beats a distant header.
+// Attribution travels with each line instead.
+function annotateSpeakers(text: string): string {
+  return text
+    .replace(/\bIVR:\s*"/g, 'THE PAYER\'S RECORDING PLAYS (never say this) — "')
+    .replace(/\bRepresentative:\s*"/g, 'THE REP SAYS (never say this) — "')
+    // `Cadence: "…"` lines are ours, but they belong to the human-conversation
+    // phase that this leg never reaches.
+    .replace(/\bCadence:\s*"/g, 'OUT OF SCOPE on this leg — do not say — "');
+}
+
 function renderIvrParts(
   ivrInstructions: string | undefined,
   ivrSteps: IvrStep[] | undefined
@@ -47,7 +61,7 @@ function renderIvrParts(
     // post-handoff human conversation (subscriber lookup, benefit capture,
     // read-back), which is out of scope on an IVR-navigation leg. Both need
     // framing, so the playbook is never handed over as bare text.
-    parts.push(`${IVR_PLAYBOOK_FRAMING}\n\n${ivrInstructions.trim()}`);
+    parts.push(`${IVR_PLAYBOOK_FRAMING}\n\n${annotateSpeakers(ivrInstructions.trim())}`);
   }
 
   if (ivrSteps && ivrSteps.length) {

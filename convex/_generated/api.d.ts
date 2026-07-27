@@ -35,6 +35,7 @@ import type * as prompts_ivrOnlyMode from "../prompts/ivrOnlyMode.js";
 import type * as prompts_medicalClaim from "../prompts/medicalClaim.js";
 import type * as prompts_multiPatientHandoff from "../prompts/multiPatientHandoff.js";
 import type * as prompts_payerTermination from "../prompts/payerTermination.js";
+import type * as prompts_silentTurn from "../prompts/silentTurn.js";
 import type * as prompts_transferTrigger from "../prompts/transferTrigger.js";
 import type * as prompts_voiceIvrNavigation from "../prompts/voiceIvrNavigation.js";
 import type * as providers from "../providers.js";
@@ -78,6 +79,7 @@ declare const fullApi: ApiFromModules<{
   "prompts/medicalClaim": typeof prompts_medicalClaim;
   "prompts/multiPatientHandoff": typeof prompts_multiPatientHandoff;
   "prompts/payerTermination": typeof prompts_payerTermination;
+  "prompts/silentTurn": typeof prompts_silentTurn;
   "prompts/transferTrigger": typeof prompts_transferTrigger;
   "prompts/voiceIvrNavigation": typeof prompts_voiceIvrNavigation;
   providers: typeof providers;

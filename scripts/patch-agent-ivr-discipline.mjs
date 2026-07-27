@@ -43,7 +43,17 @@ const AGENT_ID = process.env.ELEVENLABS_AGENT_ID || 'agent_5801kxx4zjhxfzcv5mz9c
 const DRY_RUN = process.argv.includes('--dry-run');
 
 // Marker used for idempotency — the first line of PAYER_TERMINATION_GUIDANCE.
+// Also the boundary between the operating-mode head and everything after it.
 const SECTION_MARKER = '# WHEN THE PAYER ENDS THE CALL';
+
+// Repo fragments injected ahead of the base prompt, in this order. Each is
+// matched by its own marker so re-running is a no-op. They are inserted before
+// ANCHOR (and therefore after the operating-mode head), so the head-replacement
+// step below still sees exactly the text it expects.
+const INSERT_SECTIONS = [
+  { file: 'convex/prompts/payerTermination.ts', marker: SECTION_MARKER },
+  { file: 'convex/prompts/silentTurn.ts', marker: '# SILENCE IS AN ACTION' },
+];
 // The live prompt's first base-prompt section; the new guidance goes right above
 // it so it outranks the base prompt's closing rules, matching the section order
 // composePrompt() produces in convex/prompts/index.ts.
@@ -74,6 +84,25 @@ const REPLACEMENTS = [
       'the machine is not waiting on you, it is processing. Filler ("one moment", "let me get that", "okay", ' +
       '"sure") is heard as a menu response and can send you down the wrong branch. If nothing has been asked ' +
       'of you, your entire turn is silence.',
+  },
+  {
+    // The live prompt said to SPEAK the responseText. Entries derived from an
+    // uploaded IVR Flow sheet are keypad digits, so on Quartz the agent
+    // answered "Para español, presione el dos" by saying the word "Two."
+    label: 'phrase-table digits are keypresses, not speech',
+    from:
+      'Example: if the IVR says "Main menu — please tell me what you\'d like to do", and the table contains ' +
+      '{ "promptContains": "main menu", "responseText": "claims" }, you should say: "claims".',
+    to:
+      'Example: if the IVR says "Main menu — please tell me what you\'d like to do", and the table contains ' +
+      '{ "promptContains": "main menu", "responseText": "claims" }, you should say: "claims".\n\n' +
+      'IF THE responseText IS ONLY DIGITS (optionally with * or #), DO NOT SPEAK IT. Send it with ' +
+      'play_keypad_touch_tone instead. A responseText of "2" means press 2 — it does NOT mean say the word ' +
+      '"two". Entries derived from the payer\'s uploaded IVR flow are digits for exactly this reason. ' +
+      'Pressing the key is your entire turn: say nothing before it and nothing after it.\n\n' +
+      'A phrase-table entry is permission to respond WHEN THAT PROMPT IS ADDRESSED TO YOU — it is not an ' +
+      'instruction to respond to every prompt that resembles it. If the menu option is for members, ' +
+      'pharmacies, Spanish speakers, or anyone who is not a provider calling about a claim, call skip_turn.',
   },
   {
     label: 'voice-IVR answer-only-what-is-asked',
@@ -162,19 +191,21 @@ async function main() {
   const promptCfg = agent.conversation_config.agent.prompt;
   const livePrompt = promptCfg.prompt;
 
-  // --- 1. Prompt insert -----------------------------------------------------
+  // --- 1. Prompt inserts ----------------------------------------------------
   let newPrompt = livePrompt;
-  if (livePrompt.includes(SECTION_MARKER)) {
-    console.log('  prompt: already contains the payer-termination section — skipping insert.');
-  } else if (livePrompt.includes(ANCHOR)) {
-    newPrompt = livePrompt.replace(ANCHOR, `${guidance}\n\n${ANCHOR}`);
-    console.log(`  prompt: inserting ${guidance.length} chars before "${ANCHOR}" ` +
-                `(${livePrompt.length} -> ${newPrompt.length} chars).`);
-  } else {
-    // Never silently drop the fix — if the anchor moved, say so and append.
-    newPrompt = `${livePrompt}\n\n${guidance}`;
-    console.warn(`  prompt: WARNING anchor "${ANCHOR}" not found — appending at the end instead. ` +
-                 'Check the section order on the agent afterwards.');
+  for (const { file, marker } of INSERT_SECTIONS) {
+    const section = readPrompt(file);
+    if (newPrompt.includes(marker)) {
+      console.log(`  section: already present — ${marker}`);
+    } else if (newPrompt.includes(ANCHOR)) {
+      newPrompt = newPrompt.replace(ANCHOR, `${section}\n\n${ANCHOR}`);
+      console.log(`  section: inserted ${section.length} chars before "${ANCHOR}" — ${marker}`);
+    } else {
+      // Never silently drop a fix — if the anchor moved, say so and append.
+      newPrompt = `${newPrompt}\n\n${section}`;
+      console.warn(`  section: WARNING anchor "${ANCHOR}" not found — appended at the end — ${marker}. ` +
+                   'Check the section order on the agent afterwards.');
+    }
   }
 
   // --- 2. Clause rewrites: speak only when actually asked -------------------
@@ -250,6 +281,28 @@ async function main() {
     if (!seen.includes(required)) {
       throw new Error(`No ${required} tool on this agent — aborting rather than guessing.`);
     }
+  }
+
+  // skip_turn is what makes SILENT_TURN_GUIDANCE actionable. Without it the
+  // model is handed a turn with no way to spend it silently, so it fills the
+  // turn with speech no prompt wording can suppress.
+  if (!tools.some((t) => t.name === 'skip_turn')) {
+    tools.push({
+      type: 'system',
+      name: 'skip_turn',
+      description:
+        'Stay silent and end your turn without speaking. Call this whenever the payer has not asked YOU ' +
+        'for a specific input: greetings, disclaimers, recording or survey notices, hold messages, a menu ' +
+        'still being read, or options addressed to members, pharmacies or other language speakers. This is ' +
+        'the correct action for most turns on an IVR call — when in doubt, call it rather than speaking.',
+      response_timeout_secs: 20,
+      interruption_mode: 'allow',
+      pre_tool_speech: 'off',
+      params: { system_tool_type: 'skip_turn' },
+    });
+    console.log('  tools: added skip_turn (silence needs a callable action).');
+  } else {
+    console.log('  tools: skip_turn already present.');
   }
   console.log('  tools: end_call + play_keypad_touch_tone -> pre_tool_speech off, ' +
               'interruption_mode disable_during_tool_and_turn, suppress_turn_after_dtmf true.');

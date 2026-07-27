@@ -24,6 +24,7 @@ export { MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT } from './multiPatientHandoff';
 export { VOICE_IVR_NAVIGATION_GUIDANCE } from './voiceIvrNavigation';
 export { TRANSFER_TRIGGER_GUIDANCE } from './transferTrigger';
 export { PAYER_TERMINATION_GUIDANCE } from './payerTermination';
+export { SILENT_TURN_GUIDANCE } from './silentTurn';
 export { IVR_ONLY_MODE_GUIDANCE } from './ivrOnlyMode';
 export { buildIvrContextSection, buildIvrInstructionsVar } from './ivrContext';
 export type { IvrStep } from './ivrContext';
@@ -34,6 +35,7 @@ import { MULTI_PATIENT_HANDOFF_PROMPT_FRAGMENT } from './multiPatientHandoff';
 import { VOICE_IVR_NAVIGATION_GUIDANCE } from './voiceIvrNavigation';
 import { TRANSFER_TRIGGER_GUIDANCE } from './transferTrigger';
 import { PAYER_TERMINATION_GUIDANCE } from './payerTermination';
+import { SILENT_TURN_GUIDANCE } from './silentTurn';
 import { IVR_ONLY_MODE_GUIDANCE } from './ivrOnlyMode';
 
 export type UseCase = 'medical_claim' | 'dental_ev';
@@ -114,6 +116,12 @@ export function composePrompt(options: ComposePromptOptions): string {
   // silent hang-up, and end_call must never carry a spoken message. Universal —
   // every use case, every payer, every operating mode.
   sections.push(PAYER_TERMINATION_GUIDANCE);
+
+  // Also ahead of the base prompt: the base assumes a conversation, and this
+  // says most turns are not one. Requires the `skip_turn` system tool on the
+  // agent — without it the model has no way to spend a turn silently and will
+  // fill it with speech.
+  sections.push(SILENT_TURN_GUIDANCE);
 
   sections.push(base);
 

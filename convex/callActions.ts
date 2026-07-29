@@ -917,7 +917,12 @@ SPECIAL STATUSES:
     // "ivr_only_cut_at_handoff" payers are explicitly configured to end the
     // call at the handoff point and never engage a human — skip this follow-up
     // entirely for them, regardless of whether a human-agent number is set.
-    const skipHumanFollowUp = claimData?.insurance?.callConnectionType === 'ivr_only_cut_at_handoff';
+    // "direct_to_agent" payers already talked to the human agent directly on
+    // this same call (no separate follow-up needed, and humanAgentNumber
+    // isn't populated for this type anyway — this is just defense in depth).
+    const skipHumanFollowUp = ['ivr_only_cut_at_handoff', 'direct_to_agent'].includes(
+      claimData?.insurance?.callConnectionType
+    );
     if (!callRow?.parentCallId && !skipHumanFollowUp) {
       const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
       if (humanAgentNumber && humanAgentNumber.trim()) {

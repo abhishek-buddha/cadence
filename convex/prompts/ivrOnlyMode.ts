@@ -9,7 +9,7 @@
 // chosen per-payer via insuranceContacts.callConnectionType, passed in as the
 // {{call_connection_type}} dynamic variable.
 //
-// THREE handoff modes are supported (chosen by which is configured):
+// FOUR call-routing modes are supported (chosen by which is configured):
 //
 //   (A) LIVE UI HANDOFF (cadence_pro_ivr, preferred) — callConnectionType
 //       "ivr_human_handoff" (default): Cadence owns the payer Twilio leg and
@@ -33,6 +33,13 @@
 //       follow-up-call gate, both of which key off insurance.callConnectionType
 //       to skip the normal human-handoff side effects for this reason.
 //
+//   (D) DIRECT TO AGENT — callConnectionType "direct_to_agent": the payer's
+//       `phone` field IS the insurance agent's direct line, not a main/IVR
+//       number — there is no IVR to navigate. Whoever answers is already the
+//       live representative, so this entire fragment is skipped (see the very
+//       first check below) and the agent proceeds straight into the base
+//       prompt's normal claim-status conversation from turn one.
+//
 // This is a deliberate operating-mode override: it takes precedence over the
 // base prompt's 100% retrieval gate and the universal transfer-to-human
 // guidance, both of which assume the agent completes a human conversation.
@@ -42,6 +49,22 @@ IMPORTANT: This section OVERRIDES every conflicting instruction below, including
 the "100% retrieval gate", the closing rules in the base prompt, and the
 "WHEN TO TRANSFER TO A HUMAN" guidance. When those conflict with this section,
 follow THIS section.
+
+FIRST — check call_connection_type = "{{call_connection_type}}" before reading
+any further:
+
+  - IF it is EXACTLY "direct_to_agent": this call was dialed straight to the
+    insurance agent's direct line. There is no IVR — whoever answers IS the
+    live representative. IGNORE THE REST OF THIS ENTIRE SECTION, including the
+    CALL ROUTING MODE check and the HAND OFF THE CALL steps further down.
+    Instead, proceed immediately into the base prompt's normal conversation:
+    greet whoever answers and start the claim-status conversation on the very
+    first turn, exactly as you would once "a real human has answered" in a
+    standard call. Do NOT stay silent, do NOT call end_call, do NOT call
+    transfer_to_number, and do NOT wait for an IVR menu that will never come.
+
+  - OTHERWISE: continue reading below as normal — the CALL ROUTING MODE check
+    further down handles the remaining modes.
 
 Your task on this leg is to navigate the payer's automated phone system (IVR)
 until an actual live insurance representative has answered. You must not collect

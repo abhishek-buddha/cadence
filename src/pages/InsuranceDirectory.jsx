@@ -198,6 +198,30 @@ export default function InsuranceDirectory() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  // Switching connection type changes which fields apply — clear the ones
+  // that no longer do rather than leaving stale hidden data behind.
+  function handleConnectionTypeChange(value) {
+    setForm((prev) => {
+      const next = { ...prev, callConnectionType: value };
+      if (value !== 'ivr_human_handoff') {
+        next.humanAgentNumber = '';
+      }
+      if (value === 'direct_to_agent') {
+        next.ivrInstructions = '';
+        next.ivrEnabled = false;
+        next.ivrSteps = [];
+        next.voiceIvrEnabled = false;
+        next.voiceIvrPhrases = [];
+        next.ivrVerifiedAt = null;
+      }
+      return next;
+    });
+    if (value === 'direct_to_agent') {
+      setTranscriptInput('');
+      setGenError(null);
+    }
+  }
+
   async function handleGeneratePlaybook() {
     if (!transcriptInput.trim() || generating) return;
     setGenerating(true);
@@ -267,6 +291,13 @@ export default function InsuranceDirectory() {
       const newIvrKey = ivrConfigKey(form.ivrInstructions, cleanSteps, cleanPhrases);
       const ivrConfigChanged = editing && originalIvrKeyRef.current !== null && newIvrKey !== originalIvrKeyRef.current;
 
+      // Direct to Agent skips IVR navigation entirely, so any previously
+      // saved IVR config is irrelevant — send explicit empty values (not
+      // undefined, which the update mutation treats as "leave alone") so a
+      // switch to this type actually clears it rather than leaving it
+      // dormant in the record.
+      const skipIvr = form.callConnectionType === 'direct_to_agent';
+
       const payload = {
         name: form.name,
         phone: form.phone,
@@ -279,16 +310,16 @@ export default function InsuranceDirectory() {
         payerKind: form.payerKind || undefined,
         callConnectionType: form.callConnectionType || undefined,
         hours: form.hours || undefined,
-        ivrInstructions: form.ivrInstructions || undefined,
+        ivrInstructions: skipIvr ? '' : (form.ivrInstructions || undefined),
         verificationRequirements: form.verificationRequirements || undefined,
         avgHoldTime: form.avgHoldTime ? Number(form.avgHoldTime) : undefined,
         notes: form.notes || undefined,
         ivrEnabled: form.ivrEnabled,
-        ivrSteps: cleanSteps.length ? cleanSteps : undefined,
-        ivrSequence: cleanSteps.length ? stepsToSequence(cleanSteps) : undefined,
+        ivrSteps: skipIvr ? [] : (cleanSteps.length ? cleanSteps : undefined),
+        ivrSequence: skipIvr ? '' : (cleanSteps.length ? stepsToSequence(cleanSteps) : undefined),
         voiceIvrEnabled: form.voiceIvrEnabled,
-        voiceIvrPhrases: cleanPhrases.length ? cleanPhrases : undefined,
-        ivrSourceTranscript: transcriptInput.trim() || undefined,
+        voiceIvrPhrases: skipIvr ? [] : (cleanPhrases.length ? cleanPhrases : undefined),
+        ivrSourceTranscript: skipIvr ? '' : (transcriptInput.trim() || undefined),
         voiceTone: form.voiceTone || undefined,
         voiceModulation: form.voiceModulation || undefined,
       };
@@ -466,15 +497,40 @@ export default function InsuranceDirectory() {
           </div>
 
           <div>
-            <label className={labelClass}>Human Agent Number</label>
-            <input
-              type="tel"
-              value={form.humanAgentNumber}
-              onChange={(e) => setField('humanAgentNumber', e.target.value)}
-              className={inputClass}
-              placeholder="+918309838260 (forwarded after IVR)"
-            />
+            <label className={labelClass}>Call Connection Type</label>
+            <div className="space-y-2">
+              {CALL_CONNECTION_TYPE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleConnectionTypeChange(opt.value)}
+                  className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                    form.callConnectionType === opt.value
+                      ? 'border-accent bg-accent/5'
+                      : 'border-border hover:border-accent/40 bg-white'
+                  }`}
+                >
+                  <span className={`block text-sm font-medium ${form.callConnectionType === opt.value ? 'text-accent' : 'text-gray-700'}`}>
+                    {opt.label}
+                  </span>
+                  <span className="block text-xs text-muted mt-0.5">{opt.description}</span>
+                </button>
+              ))}
+            </div>
           </div>
+
+          {form.callConnectionType === 'ivr_human_handoff' && (
+            <div>
+              <label className={labelClass}>Human Agent Number</label>
+              <input
+                type="tel"
+                value={form.humanAgentNumber}
+                onChange={(e) => setField('humanAgentNumber', e.target.value)}
+                className={inputClass}
+                placeholder="+918309838260 (forwarded after IVR)"
+              />
+            </div>
+          )}
 
           <div>
             <label className={labelClass}>Payer ID</label>
@@ -502,29 +558,6 @@ export default function InsuranceDirectory() {
                   }`}
                 >
                   {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className={labelClass}>Call Connection Type</label>
-            <div className="space-y-2">
-              {CALL_CONNECTION_TYPE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setField('callConnectionType', opt.value)}
-                  className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
-                    form.callConnectionType === opt.value
-                      ? 'border-accent bg-accent/5'
-                      : 'border-border hover:border-accent/40 bg-white'
-                  }`}
-                >
-                  <span className={`block text-sm font-medium ${form.callConnectionType === opt.value ? 'text-accent' : 'text-gray-700'}`}>
-                    {opt.label}
-                  </span>
-                  <span className="block text-xs text-muted mt-0.5">{opt.description}</span>
                 </button>
               ))}
             </div>
@@ -583,6 +616,11 @@ export default function InsuranceDirectory() {
             </div>
           </div>
 
+          {/* IVR navigation config only applies when this call actually goes
+              through the payer's IVR — irrelevant when Direct to Agent skips
+              IVR navigation entirely. */}
+          {form.callConnectionType !== 'direct_to_agent' && (
+          <>
           {/* Authoring aid: generate a playbook from a real call transcript */}
           <div className="border border-border-light rounded-lg p-4 space-y-3 bg-gray-50/50">
             <div>
@@ -765,6 +803,8 @@ export default function InsuranceDirectory() {
               </div>
             )}
           </div>
+          </>
+          )}
 
           <div>
             <label className={labelClass}>Verification Requirements</label>

@@ -167,4 +167,12 @@ When a real human has answered, do the following immediately:
 In short: navigate the menus, wait through transfer/hold audio, and either hand
 off or cut the call — per the CALL ROUTING MODE above — only when a real
 insurance representative has actually picked up.
+
+EVERY end_call in this section — "ivr_cut_before_human_reached",
+"ivr_human_handoff_detected", or any other reason — must be silent. Provide
+only the reason parameter; never populate a spoken-message parameter. If
+end_call carries a message to speak, the system speaks it before hanging up,
+and IVR audio still playing during that speech can abort the tool call
+entirely, leaving the call connected when it should have ended. Silence is
+what makes the hang-up actually happen.
 `;

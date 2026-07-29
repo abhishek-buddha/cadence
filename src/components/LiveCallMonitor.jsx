@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useAction, useQuery } from 'convex/react';
+import { useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Phone, PhoneOff, Clock, CheckCircle2, MessageSquare, Volume2, VolumeX, Loader2 } from 'lucide-react';
 
@@ -145,22 +145,6 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     setLiveTranscript([]);
   }, [call?._id]);
 
-  // Calls placed via the legacy ElevenLabs-native dialer (ivr_only_cut_at_handoff
-  // and direct_to_agent payers — see callActions.initiateCall) never get live
-  // transcript turns over the bridge's own /listen WebSocket (liveTranscript
-  // below); the bridge instead posts them to Convex's callEvents table via
-  // /call-events. Read reactively from there too so those calls aren't blank
-  // in this panel until the ElevenLabs REST poll catches up.
-  const callEvents = useQuery(api.callEvents.listByCall, call?._id ? { callId: call._id } : 'skip');
-  const callEventsTranscript = useMemo(() => {
-    return (callEvents || [])
-      .filter((e) => (e.type === 'user_transcript' || e.type === 'agent_response') && e.message && e.message !== '...')
-      .map((e) => ({
-        role: e.type === 'agent_response' ? 'agent' : 'user',
-        message: e.message,
-      }));
-  }, [callEvents]);
-
   const effectiveTranscript = useMemo(() => {
     const postCallTranscript = (polledData?.transcript || [])
       .filter(t => t.message && t.message !== '...')
@@ -168,10 +152,8 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
         role: t.role === 'agent' ? 'agent' : 'user',
         message: t.message,
       }));
-    if (postCallTranscript.length > 0) return postCallTranscript;
-    if (liveTranscript.length > 0) return liveTranscript;
-    return callEventsTranscript;
-  }, [polledData, liveTranscript, callEventsTranscript]);
+    return postCallTranscript.length > 0 ? postCallTranscript : liveTranscript;
+  }, [polledData, liveTranscript]);
 
   // Use ref-based frozen duration (set synchronously) with fallbacks. The ref is
   // only set when THIS component's own poll detects "done". When completion

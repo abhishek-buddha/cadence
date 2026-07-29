@@ -76,6 +76,8 @@ export const initiateEvCall = action({
         // Live AI→human handoff (see callActions.initiateCall).
         bridge_number: process.env.TWILIO_PHONE_NUMBER || '',
         handoff_token: handoffToken,
+        // Per-payer call routing mode — see ivrOnlyMode.ts "CALL ROUTING MODE".
+        call_connection_type: insurance.callConnectionType || 'ivr_human_handoff',
       };
 
       // Turn on IVR-only / live-handoff mode when this payer has either a live
@@ -103,6 +105,7 @@ export const initiateEvCall = action({
           voice_ivr_phrases: voiceIvrPhrasesJson,
           bridge_number: bridgeNumber,
           human_agent_number: insurance.humanAgentNumber || 'N/A',
+          call_connection_type: insurance.callConnectionType || 'ivr_human_handoff',
         },
       });
 

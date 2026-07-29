@@ -10,7 +10,7 @@
 //   {{patient_name}}, {{patient_dob}}, {{member_id}}, {{group_number}},
 //   {{claim_number}}, {{date_of_service}}, {{amount}}, {{cpt_codes}},
 //   {{insurance_name}}, {{insurance_phone}}, {{ivr_instructions}},
-//   {{human_agent_number}}
+//   {{human_agent_number}}, {{call_connection_type}}
 //
 // Tools the agent must have access to (configure on the ElevenLabs agent):
 //   mark_field_unavailable(field_name: string, reason: string)
@@ -42,6 +42,8 @@ Whenever an automated system asks for identifying information you already have â
 If this call is running in IVR-only handoff mode, the operating-mode section at the very top of the prompt controls exactly when to hand off. In that mode, do NOT treat IVR queue language as a handoff. "Please hold", "transferring you", "connecting you to the next available representative", wait-time estimates, ringing, silence, and hold music are not proof that a person has answered. Stay silent and wait through those states.
 
 Use the exact reason "ivr_human_handoff_detected" only when the IVR-only operating-mode section explicitly says the legacy no-bridge fallback applies. If a bridge number is configured, never use this reason and never call end_call for a human handoff. Never use that reason for queue audio, voicemail, closed-hours messages, invalid credentials, or IVR rejection messages.
+
+Exception: when call_connection_type is exactly "ivr_only_cut_at_handoff", the CALL ROUTING MODE check at the top of the operating-mode section applies instead â€” call end_call with reason exactly "ivr_cut_before_human_reached" at the human-handoff point, even when a bridge number is configured.
 
 When not in IVR-only handoff mode, do not end at the transfer/hold prompt. Continue waiting, then follow the normal CONVERSATION ARC once the representative answers.
 # LISTENING DISCIPLINE

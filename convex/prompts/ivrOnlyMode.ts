@@ -4,20 +4,34 @@
 // human-agent handoff configured. The AI's job is limited to navigating the
 // payer's IVR/phone menu — it must NOT hold for or speak with a live
 // representative itself. The moment the IVR signals a human handoff, the AI
-// hands the live call to one of OUR human agents.
+// either hands the live call to one of OUR human agents, or (for payers
+// configured to cut the call) simply ends it. Which behavior applies is
+// chosen per-payer via insuranceContacts.callConnectionType, passed in as the
+// {{call_connection_type}} dynamic variable.
 //
-// TWO handoff modes are supported (chosen by which is configured):
+// THREE handoff modes are supported (chosen by which is configured):
 //
-//   (A) LIVE UI HANDOFF (cadence_pro_ivr, preferred): Cadence owns the payer
-//       Twilio leg and the bridge watches the payer transcript. After a real
-//       insurance representative answers, the AI stays silent. The bridge fires
-//       Convex /twilio-request-handoff, the UI assigns the call to an available
-//       Cadence agent, and when that user accepts, Convex connects both humans.
+//   (A) LIVE UI HANDOFF (cadence_pro_ivr, preferred) — callConnectionType
+//       "ivr_human_handoff" (default): Cadence owns the payer Twilio leg and
+//       the bridge watches the payer transcript. After a real insurance
+//       representative answers, the AI stays silent. The bridge fires Convex
+//       /twilio-request-handoff, the UI assigns the call to an available
+//       Cadence agent, and when that user accepts, Convex connects both
+//       humans.
 //
 //   (B) LEGACY SEPARATE FOLLOW-UP: the AI calls end_call with the exact reason
 //       "ivr_human_handoff_detected"; the backend then places a SEPARATE
 //       follow-up call to the payer's human-agent number. Use this ONLY when no
 //       {{bridge_number}} is provided (backward compatible).
+//
+//   (C) CUT AT HANDOFF — callConnectionType "ivr_only_cut_at_handoff": the AI
+//       navigates the payer's IVR exactly as in (A)/(B), but the moment the
+//       human-handoff point is reached, it calls end_call with the exact
+//       reason "ivr_cut_before_human_reached" and stops — no bridge broadcast,
+//       no follow-up call, no human is ever engaged. See
+//       callActions.ts:buildMedicalDynamicVars and the analyzeTranscript
+//       follow-up-call gate, both of which key off insurance.callConnectionType
+//       to skip the normal human-handoff side effects for this reason.
 //
 // This is a deliberate operating-mode override: it takes precedence over the
 // base prompt's 100% retrieval gate and the universal transfer-to-human
@@ -54,6 +68,21 @@ Examples that count:
 - "This is Mike with Acme claims"
 - any clear live-person greeting or live-person question directed to the caller
 
+CALL ROUTING MODE — check this FIRST, before anything below:
+Current call_connection_type = "{{call_connection_type}}"
+
+  - IF call_connection_type is EXACTLY "ivr_only_cut_at_handoff": this payer is
+    configured to end the call at the human-handoff point, never to engage a
+    human. The moment a real human representative speaks on the line (per the
+    triggers above), call end_call immediately with reason set to EXACTLY this
+    string and nothing else: "ivr_cut_before_human_reached". Do NOT stay
+    silent, do NOT wait, do NOT call transfer_to_number, and do NOT say
+    anything to the representative — not even a greeting. This applies
+    regardless of whether a bridge number is configured. Skip steps 1-3 below
+    entirely; they do not apply to this mode.
+
+  - OTHERWISE: continue to steps 1-3 below as normal.
+
 When a real human has answered, do the following immediately:
 
   1. Do not start the claim-status conversation yourself. Do not collect fields
@@ -80,6 +109,7 @@ When a real human has answered, do the following immediately:
      back later, rejects credentials, or continues holding, do NOT use the
      handoff reason and do NOT transfer.
 
-In short: navigate the menus, wait through transfer/hold audio, and hand off
-only when a real insurance representative has actually picked up.
+In short: navigate the menus, wait through transfer/hold audio, and either hand
+off or cut the call — per the CALL ROUTING MODE above — only when a real
+insurance representative has actually picked up.
 `;

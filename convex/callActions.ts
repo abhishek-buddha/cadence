@@ -47,6 +47,9 @@ export function buildMedicalDynamicVars(args: {
     // bridge_number → legacy end_call fallback (see ivrOnlyMode.ts).
     bridge_number: process.env.TWILIO_PHONE_NUMBER || '',
     handoff_token: handoffToken || '',
+    // Per-payer call routing mode — see ivrOnlyMode.ts "CALL ROUTING MODE".
+    // Defaults to the current handoff behavior when unset (existing payers).
+    call_connection_type: insurance.callConnectionType || 'ivr_human_handoff',
   };
 
   // Voice-IVR auto-response phrases — only when the payer has voice IVR enabled.
@@ -911,7 +914,11 @@ SPECIAL STATUSES:
     // follow-up call can never spawn another) and the atomic handoffFollowUpAt
     // claim (racing completion paths dial the number only once).
     //
-    if (!callRow?.parentCallId) {
+    // "ivr_only_cut_at_handoff" payers are explicitly configured to end the
+    // call at the handoff point and never engage a human — skip this follow-up
+    // entirely for them, regardless of whether a human-agent number is set.
+    const skipHumanFollowUp = claimData?.insurance?.callConnectionType === 'ivr_only_cut_at_handoff';
+    if (!callRow?.parentCallId && !skipHumanFollowUp) {
       const humanAgentNumber = claimData?.insurance?.humanAgentNumber;
       if (humanAgentNumber && humanAgentNumber.trim()) {
         // Atomically claim the follow-up so concurrent completion paths can't

@@ -42,6 +42,16 @@ export default defineSchema({
       responseText: v.string(),
     }))),
     payerKind: v.optional(v.string()), // "medical" | "dental"
+    // Call handling type: how a call to this payer should be routed once
+    // dialed. Not yet wired to call behavior — stored now so the option
+    // exists on the payer record; call-routing logic reads this later.
+    //   "ivr_human_handoff" — current default: AI navigates the payer's IVR,
+    //     then connects a live Cadence agent with the payer's human rep.
+    //   "ivr_only_end_call" — AI navigates the payer's IVR only; the call
+    //     ends automatically once IVR navigation completes, no human transfer.
+    //   "ivr_direct_to_agent" — skips AI IVR navigation; connects straight to
+    //     a live Cadence agent.
+    callConnectionType: v.optional(v.string()),
     // Raw call transcript the user pasted to auto-generate ivrInstructions.
     // Kept for audit / re-generation; not sent to the agent (only the distilled
     // ivrInstructions playbook is).

@@ -38,6 +38,26 @@ const PAYER_KIND_OPTIONS = [
   { value: 'dental', label: 'Dental' },
 ];
 
+// How a call to this payer should be routed once dialed. Not yet wired to
+// call behavior — this just records the option on the payer record.
+const CALL_CONNECTION_TYPE_OPTIONS = [
+  {
+    value: 'ivr_human_handoff',
+    label: 'IVR → IVR, then Human ↔ Human',
+    description: "Current default. AI navigates the payer's IVR, then connects a live Cadence agent with the payer's human rep.",
+  },
+  {
+    value: 'ivr_only_end_call',
+    label: 'IVR → IVR, then Cut Call',
+    description: "AI navigates the payer's IVR only, then ends the call automatically — no human transfer.",
+  },
+  {
+    value: 'ivr_direct_to_agent',
+    label: 'IVR → Agent Direct',
+    description: 'Skips AI IVR navigation and connects straight to a live Cadence agent.',
+  },
+];
+
 const WAIT_SECONDS_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 // Voice AI agent config — not wired to any call behavior yet, just stored for
@@ -62,6 +82,7 @@ const EMPTY_FORM = {
   humanAgentNumber: '',
   payerId: '',
   payerKind: 'medical',
+  callConnectionType: 'ivr_human_handoff',
   hours: '',
   ivrInstructions: '',
   verificationRequirements: '',
@@ -128,6 +149,7 @@ export default function InsuranceDirectory() {
       humanAgentNumber: contact.humanAgentNumber ?? '',
       payerId: contact.payerId ?? '',
       payerKind: contact.payerKind ?? 'medical',
+      callConnectionType: contact.callConnectionType ?? 'ivr_human_handoff',
       hours: contact.hours ?? '',
       ivrInstructions: contact.ivrInstructions ?? '',
       verificationRequirements: contact.verificationRequirements ?? '',
@@ -255,6 +277,7 @@ export default function InsuranceDirectory() {
         humanAgentNumber: form.humanAgentNumber,
         payerId: form.payerId || undefined,
         payerKind: form.payerKind || undefined,
+        callConnectionType: form.callConnectionType || undefined,
         hours: form.hours || undefined,
         ivrInstructions: form.ivrInstructions || undefined,
         verificationRequirements: form.verificationRequirements || undefined,
@@ -479,6 +502,29 @@ export default function InsuranceDirectory() {
                   }`}
                 >
                   {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Call Connection Type</label>
+            <div className="space-y-2">
+              {CALL_CONNECTION_TYPE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setField('callConnectionType', opt.value)}
+                  className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                    form.callConnectionType === opt.value
+                      ? 'border-accent bg-accent/5'
+                      : 'border-border hover:border-accent/40 bg-white'
+                  }`}
+                >
+                  <span className={`block text-sm font-medium ${form.callConnectionType === opt.value ? 'text-accent' : 'text-gray-700'}`}>
+                    {opt.label}
+                  </span>
+                  <span className="block text-xs text-muted mt-0.5">{opt.description}</span>
                 </button>
               ))}
             </div>

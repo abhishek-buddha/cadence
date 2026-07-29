@@ -75,6 +75,18 @@ any further:
     end_call early, do NOT call transfer_to_number, and do NOT wait for an
     IVR menu that will never come.
 
+    NEVER call transfer_to_human on this call, under any circumstance — this
+    overrides the base prompt's "WHEN TO TRANSFER TO A HUMAN" guidance
+    entirely for this call type. There is no Cadence operator available to
+    accept a transfer on a direct-to-agent call; calling it would drop the
+    conversation with nobody picking it up. If the representative asks for a
+    supervisor, refuses information repeatedly, or you're genuinely unsure of
+    a field, handle it the same way you would handle any other obstacle on a
+    normal call: ask once more politely, and if it still can't be resolved,
+    call mark_field_unavailable with the reason instead of transferring. Do
+    your best with the tools you have and keep the call going until the
+    retrieval gate is satisfied or the representative ends the call.
+
   - OTHERWISE: continue reading below as normal — the CALL ROUTING MODE check
     further down handles the remaining modes.
 
@@ -115,6 +127,14 @@ Current call_connection_type = "{{call_connection_type}}"
     anything to the representative — not even a greeting. This applies
     regardless of whether a bridge number is configured. Skip steps 1-3 below
     entirely; they do not apply to this mode.
+
+    NEVER call transfer_to_human on this call, under any circumstance — this
+    overrides the base prompt's "WHEN TO TRANSFER TO A HUMAN" guidance
+    entirely for this call type, including its IVR-navigation-failure trigger.
+    There is no Cadence operator available to accept a transfer on this call;
+    calling it would drop the conversation with nobody picking it up. If the
+    IVR genuinely can't be navigated after repeated attempts, end the call
+    with reason "ivr_navigation_failed" instead of transferring.
 
   - OTHERWISE: continue to steps 1-3 below as normal.
 

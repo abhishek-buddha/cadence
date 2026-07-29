@@ -319,6 +319,21 @@ export const requestHandoff = internalMutation({
       return { ok: true, alreadySet: true };
     }
 
+    // Payers configured to cut the call at the handoff point, or to dial the
+    // agent directly, never involve a Cadence operator — the AI either ends
+    // the call itself or handles the whole conversation. This is the
+    // canonical enforcement point (the bridge's own auto-handoff detection is
+    // also gated on this, but that lives in a separate service — this check
+    // holds even if that gate is ever wrong, bypassed, or a future caller
+    // invokes requestHandoff some other way).
+    const insurance = await ctx.db.get(call.insuranceContactId);
+    if (
+      insurance &&
+      ['ivr_only_cut_at_handoff', 'direct_to_agent'].includes((insurance as any).callConnectionType)
+    ) {
+      return { ok: false, reason: 'handoff_not_applicable_for_call_connection_type' };
+    }
+
     const assignedAgent = await findAvailableRoutingAgent(ctx);
 
     const handoffPatch: any = {

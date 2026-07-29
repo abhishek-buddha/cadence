@@ -45,12 +45,14 @@ export default defineSchema({
     // Call handling type: how a call to this payer should be routed once
     // dialed. Not yet wired to call behavior — stored now so the option
     // exists on the payer record; call-routing logic reads this later.
-    //   "ivr_human_handoff" — current default: AI navigates the payer's IVR,
-    //     then connects a live Cadence agent with the payer's human rep.
-    //   "ivr_only_end_call" — AI navigates the payer's IVR only; the call
-    //     ends automatically once IVR navigation completes, no human transfer.
-    //   "ivr_direct_to_agent" — skips AI IVR navigation; connects straight to
-    //     a live Cadence agent.
+    //   "ivr_human_handoff" — current default: our agent navigates the
+    //     payer's IVR, then connects the payer's human insurance agent with
+    //     our human agent.
+    //   "ivr_only_cut_at_handoff" — our agent navigates the payer's real IVR,
+    //     then cuts the call right as it's being forwarded to a human — no
+    //     human is ever reached.
+    //   "direct_to_agent" — skips IVR navigation entirely; our agent calls
+    //     the insurance agent's direct number and connects straight to them.
     callConnectionType: v.optional(v.string()),
     // Raw call transcript the user pasted to auto-generate ivrInstructions.
     // Kept for audit / re-generation; not sent to the agent (only the distilled

@@ -44,17 +44,17 @@ const CALL_CONNECTION_TYPE_OPTIONS = [
   {
     value: 'ivr_human_handoff',
     label: 'IVR → IVR, then Human ↔ Human',
-    description: "Current default. AI navigates the payer's IVR, then connects a live Cadence agent with the payer's human rep.",
+    description: "Current default. Our agent navigates the payer's IVR, then connects the payer's human insurance agent with our human agent.",
   },
   {
-    value: 'ivr_only_end_call',
-    label: 'IVR → IVR, then Cut Call',
-    description: "AI navigates the payer's IVR only, then ends the call automatically — no human transfer.",
+    value: 'ivr_only_cut_at_handoff',
+    label: 'IVR → Real IVR, then Cut Call',
+    description: "Our agent navigates the payer's real IVR, then cuts the call right as it's being forwarded to a human — no human is ever reached.",
   },
   {
-    value: 'ivr_direct_to_agent',
-    label: 'IVR → Agent Direct',
-    description: 'Skips AI IVR navigation and connects straight to a live Cadence agent.',
+    value: 'direct_to_agent',
+    label: 'Direct to Agent',
+    description: "Skips IVR navigation entirely — our agent calls the insurance agent's direct number and connects straight to them.",
   },
 ];
 

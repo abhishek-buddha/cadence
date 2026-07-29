@@ -131,13 +131,30 @@ export function extractHandoffDetected(elTranscript: any[]): boolean {
 // dials the payer and owns the CallSid, so the live AI→human handoff can
 // redirect the payer leg into a conference and drop the AI. Set the env var
 // USE_LEGACY_DIALER='true' to fall back to the original ElevenLabs-native
-// outbound path (kept intact as an instant escape hatch).
+// outbound path (kept intact as an instant escape hatch) for ALL calls.
+//
+// Payer-level override: ElevenLabs' play_keypad_touch_tone tool refuses to
+// run ("only available for phone calls powered by Twilio or SIP trunking")
+// on the Cadence-owned dialer, because that path connects to ElevenLabs over
+// a generic relayed WebSocket our bridge opens — ElevenLabs has no native
+// knowledge it's backed by a real Twilio call. The tool only works when
+// ElevenLabs places the call itself via their own outbound-call API, which
+// is exactly what initiateCallLegacyElevenLabs does. "ivr_only_cut_at_handoff"
+// and "direct_to_agent" payers don't need the Cadence-owned dialer's one
+// special ability (redirecting the call into a conference for a live human
+// handoff) — only "ivr_human_handoff" does — so route those two straight to
+// the legacy ElevenLabs-native dialer instead, where DTMF actually works.
 export const initiateCall = action({
   args: {
     claimId: v.id('claims'),
   },
   handler: async (ctx, args): Promise<{ success: boolean; callId: string; twilioCallSid?: string; conversationId?: string }> => {
-    if (process.env.USE_LEGACY_DIALER === 'true') {
+    const data: any = await ctx.runQuery(api.claims.getWithDetails, { id: args.claimId });
+    const callConnectionType = data?.insurance?.callConnectionType;
+    const needsNativeDtmf =
+      callConnectionType === 'ivr_only_cut_at_handoff' || callConnectionType === 'direct_to_agent';
+
+    if (process.env.USE_LEGACY_DIALER === 'true' || needsNativeDtmf) {
       return await ctx.runAction(api.callActions.initiateCallLegacyElevenLabs, { claimId: args.claimId });
     }
     return await ctx.runAction(api.callActions.initiateCallViaTwilio, { claimId: args.claimId });

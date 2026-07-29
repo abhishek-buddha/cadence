@@ -127,10 +127,15 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
             }
           }
         } catch (err) { console.warn('Call status poll error:', err); }
-        if (!cancelled) pollRef.current = setTimeout(poll, 3000);
+        if (!cancelled) pollRef.current = setTimeout(poll, 2000);
       }
       poll();
-    }, 8000);
+      // 2s (was 8s): legacy-dialer calls (ivr_only_cut_at_handoff /
+      // direct_to_agent) don't get live transcript over the bridge WS at
+      // all — this ElevenLabs REST poll is their ONLY live source, and
+      // those calls can end in well under 8s, so the old delay meant the
+      // poll barely ever fired before the call was already over.
+    }, 2000);
 
     return () => {
       cancelled = true;

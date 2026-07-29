@@ -903,10 +903,15 @@ http.route({
 
     try {
       const call = await ctx.runQuery(api.calls.getById, { id: callId as any });
+      // conferenceName/handoffToken are pre-provisioned on EVERY Twilio-dialer
+      // call at creation time, whether or not a handoff ever happens — they
+      // are not evidence a handoff is actually in progress. handoffState is:
+      // it's only set once handoff.requestHandoff has actually run. Without
+      // this, every call's own end_call would be misread as "handoff in
+      // progress" and left stuck at in_progress forever in the UI.
       const isLiveHandoffCall =
         call &&
-        call.conferenceName &&
-        call.handoffToken &&
+        ['awaiting_human', 'accepting', 'connected'].includes(call.handoffState || '') &&
         (call.status === 'in_progress' || call.status === 'initiating');
 
       if (isLiveHandoffCall) {

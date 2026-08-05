@@ -119,8 +119,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/proxy_params.conf:/etc/nginx/proxy_params.conf:ro
       - ./nginx/proxy_ws_params.conf:/etc/nginx/proxy_ws_params.conf:ro
-      - ./frontend/dist:/usr/share/nginx/html:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
+      - ../Ace-Cadence-Ui/dist:/usr/share/nginx/html:ro
     depends_on:
       - login-svc
       - user-management-svc

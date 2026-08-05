@@ -1,0 +1,2 @@
+# All dependencies come from the ace-cadence-base image (see base-image/requirements.txt).
+# httpx (service-to-service calls) is already in the base image's requirements.txt.

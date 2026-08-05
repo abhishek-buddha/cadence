@@ -1,0 +1,5 @@
+# Base image (see base-image/requirements.txt) covers fastapi/uvicorn/httpx/etc.
+# `websockets` is pulled in transitively by uvicorn[standard], but this service
+# also uses it directly as a WS *client* (to ElevenLabs' monitor socket), so
+# it's pinned explicitly here rather than relying on an indirect dependency.
+websockets>=13,<14

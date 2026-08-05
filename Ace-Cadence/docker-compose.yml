@@ -1,0 +1,120 @@
+x-common-env: &common-env
+  DATABASE_URL: ${DATABASE_URL:-mysql+asyncmy://cadence:changeme@host.docker.internal:3306/cadence}
+  REDIS_URL: redis://redis:6379/0
+  REDIS_PUBSUB_URL: redis://redis:6379/1
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+  login-svc:
+    build: ./services/login-svc
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: login-svc
+      ACCESS_CODE: ${ACCESS_CODE:-472394}
+    depends_on: [redis]
+
+  user-management-svc:
+    build: ./services/user-management-svc
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: user-management-svc
+    depends_on: [redis]
+
+  master-data-svc:
+    build: ./services/master-data-svc
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: master-data-svc
+    depends_on: [redis]
+
+  call-handling-svc:
+    build: ./services/call-handling-svc
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: call-handling-svc
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+    depends_on: [redis]
+    volumes:
+      - call-recordings:/data/recordings
+
+  scheduler-svc:
+    build: ./services/scheduler-svc
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: scheduler-svc
+      CALL_HANDLING_SVC_URL: http://call-handling-svc:8004
+    depends_on: [redis, call-handling-svc]
+
+  ui-data-loading-svc:
+    build: ./services/ui-data-loading-svc
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: ui-data-loading-svc
+      MASTER_DATA_SVC_URL: http://master-data-svc:8003
+      USER_MANAGEMENT_SVC_URL: http://user-management-svc:8002
+      CALL_HANDLING_SVC_URL: http://call-handling-svc:8004
+    depends_on: [redis, master-data-svc, user-management-svc, call-handling-svc]
+
+  reports-dashboards-svc:
+    build: ./services/reports-dashboards-svc
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: reports-dashboards-svc
+      MASTER_DATA_SVC_URL: http://master-data-svc:8003
+      USER_MANAGEMENT_SVC_URL: http://user-management-svc:8002
+      CALL_HANDLING_SVC_URL: http://call-handling-svc:8004
+    depends_on: [redis, master-data-svc, user-management-svc, call-handling-svc]
+
+  telephony-bridge-svc:
+    build: ./services/telephony-bridge-svc
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: telephony-bridge-svc
+      CALL_HANDLING_SVC_URL: http://call-handling-svc:8004
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+    depends_on: [redis, call-handling-svc]
+    volumes:
+      - call-recordings:/data/recordings
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/proxy_params.conf:/etc/nginx/proxy_params.conf:ro
+      - ./nginx/proxy_ws_params.conf:/etc/nginx/proxy_ws_params.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - login-svc
+      - user-management-svc
+      - master-data-svc
+      - call-handling-svc
+      - scheduler-svc
+      - ui-data-loading-svc
+      - reports-dashboards-svc
+      - telephony-bridge-svc
+
+volumes:
+  redis-data:
+  call-recordings:

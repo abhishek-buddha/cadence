@@ -1,0 +1,498 @@
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useAction } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import { Phone, PhoneOff, Clock, CheckCircle2, MessageSquare, Volume2, VolumeX, Loader2 } from 'lucide-react';
+
+// ---------------------------------------------------------------------------
+// Standard ITU-T G.711 mu-law decode table
+// ---------------------------------------------------------------------------
+const MULAW_TABLE = new Float32Array(256);
+for (let i = 0; i < 256; i++) {
+  let mulaw = ~i & 0xFF;
+  const sign = mulaw & 0x80;
+  const exponent = (mulaw >> 4) & 0x07;
+  const mantissa = mulaw & 0x0F;
+  let magnitude = ((2 * mantissa + 33) << exponent) - 33;
+  MULAW_TABLE[i] = (sign ? -magnitude : magnitude) / 32768.0;
+}
+
+// ---------------------------------------------------------------------------
+// Linear interpolation upsample from 8kHz to target rate (avoids browser
+// resampling artifacts that cause static/crackling)
+// ---------------------------------------------------------------------------
+function upsample8kTo(samples8k, targetRate) {
+  const ratio = targetRate / 8000;
+  const out = new Float32Array(Math.ceil(samples8k.length * ratio));
+  for (let i = 0; i < out.length; i++) {
+    const srcIdx = i / ratio;
+    const lo = Math.floor(srcIdx);
+    const hi = Math.min(lo + 1, samples8k.length - 1);
+    const frac = srcIdx - lo;
+    out[i] = samples8k[lo] * (1 - frac) + samples8k[hi] * frac;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Elapsed timer
+// ---------------------------------------------------------------------------
+function useElapsedTimer(startIso, frozenDuration) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (frozenDuration != null) {
+      setElapsed(frozenDuration);
+      return;
+    }
+    if (!startIso) return;
+    const start = new Date(startIso).getTime();
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startIso, frozenDuration]);
+
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+// ---------------------------------------------------------------------------
+// LiveCallMonitor
+// ---------------------------------------------------------------------------
+export default function LiveCallMonitor({ call, insurance, onComplete }) {
+  const getCallStatus = useAction(api.callActions.getCallStatus);
+  const endCallAction = useAction(api.callActions.endCall);
+  const [ending, setEnding] = useState(false);
+  const transcriptScrollerRef = useRef(null);
+  const completionTriggeredRef = useRef(false);
+
+  // Ref-based timer freeze — set synchronously when "done" detected
+  const callDoneDurationRef = useRef(null);
+
+  // Audio state
+  const [muted, setMuted] = useState(true);
+  const [audioConnected, setAudioConnected] = useState(false);
+  const mutedRef = useRef(false);
+  const audioCtxRef = useRef(null);
+  const inboundQueueRef = useRef([]);
+  const outboundQueueRef = useRef([]);
+  const audioQueueRef = useRef([]); // mixed output queue
+  const nextPlayTimeRef = useRef(0);
+  const playIntervalRef = useRef(null);
+  const wsRef = useRef(null);
+
+  useEffect(() => {
+    mutedRef.current = muted;
+    if (muted) {
+      audioQueueRef.current = [];
+      inboundQueueRef.current = [];
+      outboundQueueRef.current = [];
+      nextPlayTimeRef.current = 0;
+    }
+  }, [muted]);
+
+  // Polling for call status + transcript
+  const [polledData, setPolledData] = useState(null);
+  const [liveTranscript, setLiveTranscript] = useState([]);
+  const pollRef = useRef(null);
+
+  useEffect(() => {
+    if (!call?.elevenLabsConversationId) return;
+    let cancelled = false;
+
+    const startDelay = setTimeout(async () => {
+      if (cancelled) return;
+      async function poll() {
+        if (cancelled) return;
+        try {
+          const data = await getCallStatus({
+            conversationId: call.elevenLabsConversationId,
+            callId: call._id,
+            claimId: call.claimId,
+          });
+          if (data && !cancelled) {
+            // Freeze timer SYNCHRONOUSLY before async state update
+            const isTerminal = data.status === 'done' || data.status === 'failed';
+            if (isTerminal && callDoneDurationRef.current == null) {
+              callDoneDurationRef.current = data.duration ||
+                (call?.startedAt ? Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000) : 0);
+              completionTriggeredRef.current = true;
+              if (onComplete) onComplete(call._id);
+            }
+            setPolledData(data);
+            if (isTerminal) {
+              cancelled = true;
+              return;
+            }
+          }
+        } catch (err) { console.warn('Call status poll error:', err); }
+        if (!cancelled) pollRef.current = setTimeout(poll, 3000);
+      }
+      poll();
+    }, 8000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(startDelay);
+      clearTimeout(pollRef.current);
+    };
+  }, [call?.elevenLabsConversationId, call?._id, call?.claimId, getCallStatus, onComplete]);
+
+  const isCompleted = polledData?.status === 'done' || polledData?.status === 'failed' || call?.status === 'completed' || call?.status === 'failed';
+
+  useEffect(() => {
+    setLiveTranscript([]);
+  }, [call?._id]);
+
+  const effectiveTranscript = useMemo(() => {
+    const postCallTranscript = (polledData?.transcript || [])
+      .filter(t => t.message && t.message !== '...')
+      .map(t => ({
+        role: t.role === 'agent' ? 'agent' : 'user',
+        message: t.message,
+      }));
+    return postCallTranscript.length > 0 ? postCallTranscript : liveTranscript;
+  }, [polledData, liveTranscript]);
+
+  // Use ref-based frozen duration (set synchronously) with fallbacks. The ref is
+  // only set when THIS component's own poll detects "done". When completion
+  // instead arrives via the call doc (post-call webhook or a prior update flips
+  // call.status to completed/failed), freeze on the best duration we can derive
+  // — the polled duration, the persisted call.duration, or completedAt−startedAt
+  // — so the timer stops instead of ticking forever behind a "Completed" banner.
+  const derivedDbDuration = call?.duration != null
+    ? call.duration
+    : (call?.completedAt && call?.startedAt
+        ? Math.max(0, Math.floor((new Date(call.completedAt).getTime() - new Date(call.startedAt).getTime()) / 1000))
+        : null);
+  const frozenDuration = callDoneDurationRef.current != null
+    ? callDoneDurationRef.current
+    : (isCompleted ? (polledData?.duration ?? derivedDbDuration) : null);
+  const elapsed = useElapsedTimer(call?.startedAt, frozenDuration);
+
+  useEffect(() => {
+    const scroller = transcriptScrollerRef.current;
+    if (!scroller) return;
+    const distanceFromBottom = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+    if (distanceFromBottom > 120 && effectiveTranscript.length > 2) return;
+    requestAnimationFrame(() => {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
+    });
+  }, [effectiveTranscript.length]);
+
+  // Audio player: live monitoring, not archival playback. Keep the scheduled
+  // audio close to now; if packets arrive in bursts, drop stale buffered audio
+  // instead of playing an increasingly delayed backlog.
+  useEffect(() => {
+    const FRAME = 320; // 40ms @ 8kHz
+    const MAX_QUEUE = 8000; // 1s hard live buffer cap
+    const MAX_LEAD_SECONDS = 0.3;
+
+    playIntervalRef.current = setInterval(() => {
+      if (mutedRef.current) return;
+      const ctx = audioCtxRef.current;
+      if (!ctx || ctx.state !== 'running') return;
+      const queue = audioQueueRef.current;
+
+      if (queue.length > MAX_QUEUE) {
+        queue.splice(0, queue.length - MAX_QUEUE);
+        nextPlayTimeRef.current = 0;
+      }
+      if (queue.length < FRAME) return;
+
+      const now = ctx.currentTime;
+      if (nextPlayTimeRef.current < now || nextPlayTimeRef.current > now + MAX_LEAD_SECONDS) {
+        nextPlayTimeRef.current = now + 0.005;
+        if (queue.length > FRAME * 4) {
+          queue.splice(0, queue.length - FRAME * 4);
+        }
+      }
+
+      const raw = new Float32Array(queue.splice(0, FRAME));
+      const upsampled = upsample8kTo(raw, ctx.sampleRate);
+      const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
+      buffer.getChannelData(0).set(upsampled);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(nextPlayTimeRef.current);
+      nextPlayTimeRef.current += buffer.duration;
+    }, 20);
+
+    return () => {
+      clearInterval(playIntervalRef.current);
+      audioQueueRef.current = [];
+      inboundQueueRef.current = [];
+      outboundQueueRef.current = [];
+      nextPlayTimeRef.current = 0;
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+    };
+  }, []);
+  // WebSocket for audio from bridge monitor
+  useEffect(() => {
+    if (!call?._id) return;
+    const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'wss://cadence-bridge.onrender.com';
+    let ws;
+    let retryTimeout;
+
+    function connect() {
+      ws = new WebSocket(`${BRIDGE_URL}/listen/${call._id}`);
+      wsRef.current = ws;
+
+      ws.onopen = () => setAudioConnected(true);
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event === 'transcript' && data.text) {
+            const message = String(data.text).trim();
+            if (message && message !== '...') {
+              setLiveTranscript((prev) => {
+                const next = [...prev, { role: data.role === 'agent' ? 'agent' : 'user', message }];
+                return next.slice(-80);
+              });
+            }
+            return;
+          }
+
+          if (data.event === 'audio' && data.media?.payload) {
+            if (mutedRef.current) return;
+            const binary = atob(data.media.payload);
+            const samples = new Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+              samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xFF];
+            }
+            // Live monitor audio is already time-ordered by the bridge. Playing
+            // chunks in arrival order avoids choppy gaps from waiting for a
+            // matching opposite track that may never arrive.
+            audioQueueRef.current.push(...samples);
+
+            if (audioQueueRef.current.length > 12000) {
+              audioQueueRef.current.splice(0, audioQueueRef.current.length - 4000);
+              nextPlayTimeRef.current = 0;
+            }
+          }
+        } catch (err) { console.warn('Audio WS parse error:', err); }
+      };
+
+      ws.onclose = () => {
+        setAudioConnected(false);
+        retryTimeout = setTimeout(() => {
+          if (wsRef.current === ws && !isCompleted) connect();
+        }, 3000);
+      };
+
+      ws.onerror = () => ws.close();
+    }
+
+    connect();
+
+    return () => {
+      clearTimeout(retryTimeout);
+      if (ws) ws.close();
+      wsRef.current = null;
+      audioQueueRef.current = [];
+      inboundQueueRef.current = [];
+      outboundQueueRef.current = [];
+    };
+  }, [call?._id, isCompleted]);
+
+  function ensureAudioContext() {
+    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+      audioCtxRef.current = new AudioContext();
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume();
+    }
+  }
+
+  async function handleEndCall() {
+    if (ending || isCompleted) return;
+    setEnding(true);
+    try {
+      await endCallAction({ callId: call._id });
+      if (onComplete) onComplete(call._id);
+    } catch (err) {
+      console.error('Failed to end call:', err);
+    } finally {
+      setEnding(false);
+    }
+  }
+
+  function handleUnmute() {
+    audioQueueRef.current = [];
+    inboundQueueRef.current = [];
+    outboundQueueRef.current = [];
+    nextPlayTimeRef.current = 0;
+    setMuted(false);
+    ensureAudioContext();
+  }
+
+  function formatEntry(entry) {
+    if (entry.message === null) return '[pressed key]';
+    return entry.message;
+  }
+
+  function getLabel(entry) {
+    return entry.role === 'agent' ? 'Thomas' : 'Phone';
+  }
+
+  return (
+    <div className="bg-gradient-to-r from-accent/5 to-cyan/5 border border-accent/15 rounded-xl p-6 glow-border-strong space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-accent/10 border-2 border-accent flex items-center justify-center">
+            <Phone className={`w-5 h-5 text-accent ${!isCompleted ? 'animate-pulse' : ''}`} />
+          </div>
+          <div>
+            <p className="text-sm font-display font-semibold text-gray-900">
+              {isCompleted
+                ? 'Call Completed'
+                : call?.parentCallId
+                  ? 'Human Agent Call in Progress'
+                  : 'Call in Progress'}
+            </p>
+            <p className="text-xs text-muted">
+              {call?.parentCallId
+                ? `${insurance?.name || 'Insurance'} — connected to human agent`
+                : `${insurance?.name || 'Insurance'} — AI agent handling the call`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-white/80 border border-border rounded-lg px-3 py-2">
+            <Clock className="w-3.5 h-3.5 text-muted" />
+            <span className="font-data text-sm text-gray-900">{elapsed}</span>
+          </div>
+          {!isCompleted && (
+            <button
+              onClick={handleEndCall}
+              disabled={ending}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-danger/10 border border-danger/20 text-danger hover:bg-danger/20 transition-colors text-sm font-medium disabled:opacity-50"
+              title="End call"
+            >
+              <PhoneOff className="w-3.5 h-3.5" />
+              {ending ? 'Ending...' : 'End Call'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* B: IVR human-handoff detected — connecting to the live-agent follow-up call */}
+      {isCompleted && call?.handoffFollowUpAt && !call?.parentCallId && (
+        <div className="bg-accent/5 border border-accent/20 rounded-lg px-4 py-3 flex items-center gap-3">
+          <Loader2 className="w-4 h-4 text-accent animate-spin" />
+          <div>
+            <p className="text-sm font-medium text-gray-900">Handoff detected — connecting you to a human agent…</p>
+            <p className="text-xs text-muted">Placing a call to {insurance?.humanAgentNumber || 'the human-agent number'}.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Audio player */}
+      {!isCompleted && (
+        <div className="bg-white/60 border border-border rounded-lg px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {audioConnected ? (
+              <>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success" />
+                </span>
+                <span className="text-sm text-gray-900 font-medium">{muted ? 'Click speaker to listen' : 'Live Audio'}</span>
+              </>
+            ) : (
+              <>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warn opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-warn" />
+                </span>
+                <span className="text-sm text-warn font-medium">Connecting audio...</span>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (muted) {
+                handleUnmute();
+              } else {
+                setMuted(true);
+              }
+              ensureAudioContext();
+            }}
+            className={`p-2 rounded-lg transition-colors ${muted ? 'text-muted hover:text-gray-900 hover:bg-gray-100' : 'text-accent hover:bg-accent/10'}`}
+            title={muted ? 'Click to listen' : 'Mute'}
+          >
+            {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+        </div>
+      )}
+
+      {/* Live Transcript — shown during AND after call */}
+      {effectiveTranscript.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 px-1">
+            <MessageSquare className="w-3.5 h-3.5 text-muted" />
+            <span className="text-xs font-medium text-muted uppercase tracking-wider">
+              {isCompleted ? 'Call Transcript' : 'Live Transcript'}
+            </span>
+            {!isCompleted && (
+              <span className="flex items-center gap-1 ml-2">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-accent" />
+                </span>
+                <span className="text-xs text-accent font-medium">Live</span>
+              </span>
+            )}
+          </div>
+          <div
+            ref={transcriptScrollerRef}
+            className="bg-white/60 border border-border rounded-lg p-3 max-h-56 overflow-y-auto space-y-1.5"
+          >
+            {effectiveTranscript.map((t, i) => (
+              <div key={i} className={`text-xs ${t.role === 'agent' ? 'text-accent' : 'text-gray-600'}`}>
+                <span className="font-data font-medium">{getLabel(t)}:</span>
+                <span className="ml-1.5">{formatEntry(t)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Waiting for transcript — during call before transcript arrives */}
+      {!isCompleted && effectiveTranscript.length === 0 && (
+        <div className="bg-white/60 border border-border rounded-lg p-4 flex items-center gap-3">
+          <Loader2 className="w-4 h-4 text-accent animate-spin" />
+          <span className="text-sm text-muted">Waiting for transcript data...</span>
+        </div>
+      )}
+
+      {/* Completed summary */}
+      {isCompleted && (
+        <div className="bg-white/80 border border-success/20 rounded-lg p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-success" />
+            <span className="text-sm font-medium text-gray-900">Call Completed</span>
+          </div>
+          <p className="text-xs text-gray-600 leading-relaxed">
+            Transcript analysis is processing. Results will appear in the claim details shortly.
+          </p>
+        </div>
+      )}
+
+      {/* Status message during call */}
+      {!isCompleted && (
+        <p className="text-xs text-muted text-center">
+          Thomas is navigating the IVR, waiting on hold, and will speak with the insurance rep automatically.
+        </p>
+      )}
+    </div>
+  );
+}

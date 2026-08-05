@@ -1,0 +1,287 @@
+import { useState } from 'react';
+import { Stethoscope, Plus, Pencil, Trash2 } from 'lucide-react';
+import Modal from '../components/Modal';
+import EmptyState from '../components/EmptyState';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
+import { listProviders, createProvider as apiCreateProvider, updateProvider as apiUpdateProvider, deleteProvider as apiDeleteProvider } from '../api/masterData';
+import { useLiveQuery } from '../hooks/useLiveQuery';
+
+const EMPTY_FORM = {
+  practiceName: '',
+  npi: '',
+  taxId: '',
+  address: '',
+  phone: '',
+  specialty: '',
+};
+
+export default function ProvidersPage() {
+  const { data: providers, loading: isLoading, refetch } = useLiveQuery(listProviders, [], 'provider');
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredProviders = (providers ?? []).filter((provider) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return [provider.practice_name, provider.npi, provider.phone, provider.specialty]
+      .some((v) => v && String(v).toLowerCase().includes(q));
+  });
+
+  function openCreate() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setModalOpen(true);
+  }
+
+  function openEdit(provider) {
+    setEditing(provider);
+    setForm({
+      practiceName: provider.practice_name,
+      npi: provider.npi,
+      taxId: provider.tax_id,
+      address: provider.address,
+      phone: provider.phone,
+      specialty: provider.specialty ?? '',
+    });
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    setModalOpen(false);
+    setEditing(null);
+    setForm(EMPTY_FORM);
+  }
+
+  function setField(field, value) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const payload = {
+        practice_name: form.practiceName,
+        npi: form.npi,
+        tax_id: form.taxId,
+        address: form.address,
+        phone: form.phone,
+        specialty: form.specialty || null,
+      };
+
+      if (editing) {
+        await apiUpdateProvider(editing.id, payload);
+      } else {
+        await apiCreateProvider(payload);
+      }
+      await refetch();
+      closeModal();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm('Delete this provider? This cannot be undone.')) return;
+    await apiDeleteProvider(id);
+    await refetch();
+  }
+
+  const inputClass =
+    'w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
+  const labelClass = 'block text-xs uppercase tracking-wider text-muted font-medium mb-1.5';
+
+  return (
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
+      {/* Action toolbar */}
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton icon={Plus} label="Add Provider" onClick={openCreate} />
+      </ListToolbar>
+
+      {/* Table */}
+      {isLoading ? (
+        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="p-8 space-y-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-10 shimmer rounded-lg" />
+            ))}
+          </div>
+        </div>
+      ) : filteredProviders.length === 0 ? (
+        <div className="bg-white border border-border rounded-xl shadow-sm">
+          <EmptyState
+            icon={Stethoscope}
+            title={searchQuery ? 'No matching providers' : 'No providers yet'}
+            description={
+              searchQuery
+                ? 'Try adjusting your search to find what you are looking for.'
+                : 'Add provider information for insurance verification calls.'
+            }
+            action={
+              !searchQuery ? (
+                <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Provider
+                </button>
+              ) : undefined
+            }
+          />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="flex-1 min-h-0 overflow-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="sticky top-0 z-10 bg-table-header">
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Practice Name</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">NPI</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Tax ID</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Address</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Phone</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Specialty</th>
+                  <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-table-header-text font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {filteredProviders.map((provider) => (
+                  <tr key={provider.id} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <span className="font-medium text-gray-900">{provider.practice_name}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <span className="font-data text-accent">{provider.npi}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <span className="font-data">{provider.tax_id}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 max-w-[200px] truncate" title={provider.address}>{provider.address || '--'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 font-data">{provider.phone}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{provider.specialty ?? '--'}</td>
+                    <td className="px-4 py-3 text-sm text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => openEdit(provider)}
+                          className="p-1.5 text-muted hover:text-accent hover:bg-accent/10 rounded-lg transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(provider.id)}
+                          className="px-3 py-1.5 text-danger hover:bg-danger/10 rounded-lg text-sm transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Provider' : 'Add Provider'}>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className={labelClass}>Practice Name</label>
+            <input
+              type="text"
+              value={form.practiceName}
+              onChange={(e) => setField('practiceName', e.target.value)}
+              className={inputClass}
+              placeholder="Springfield Medical Group"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>NPI</label>
+              <input
+                type="text"
+                value={form.npi}
+                onChange={(e) => setField('npi', e.target.value)}
+                className={inputClass}
+                placeholder="1234567890"
+                required
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Tax ID</label>
+              <input
+                type="text"
+                value={form.taxId}
+                onChange={(e) => setField('taxId', e.target.value)}
+                className={inputClass}
+                placeholder="12-3456789"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Address</label>
+            <input
+              type="text"
+              value={form.address}
+              onChange={(e) => setField('address', e.target.value)}
+              className={inputClass}
+              placeholder="123 Medical Pkwy, Suite 200, City, ST 12345"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Phone</label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={(e) => setField('phone', e.target.value)}
+                className={inputClass}
+                placeholder="(555) 123-4567"
+                required
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Specialty</label>
+              <input
+                type="text"
+                value={form.specialty}
+                onChange={(e) => setField('specialty', e.target.value)}
+                className={inputClass}
+                placeholder="Family Medicine"
+              />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+            <button
+              type="button"
+              onClick={closeModal}
+              className="px-4 py-2.5 text-sm text-muted hover:text-gray-900 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : editing ? 'Update Provider' : 'Add Provider'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}

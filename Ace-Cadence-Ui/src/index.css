@@ -1,0 +1,167 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Neutral light-gray theme — blue reserved as the accent color only
+     (buttons, links, active states, toolbar), not the page background. */
+  :root {
+    --surface: #f5f6f8;
+    --panel: #ffffff;
+    --panel-light: #eef0f2;
+    --border: #dde0e4;
+    --border-light: #e8eaed;
+    --accent: #2c93d8;
+    --accent-hover: #1f7cbb;
+    --accent-grad-start: #63b8e8;
+    --accent-cyan: #0891b2;
+    --toolbar-bg: #1c4f73;
+    --glow: rgba(44, 147, 216, 0.08);
+    --glow-strong: rgba(44, 147, 216, 0.15);
+  }
+
+  body {
+    background: var(--surface);
+    background-image: linear-gradient(160deg, #f7f8fa 0%, #f2f3f5 100%);
+    min-height: 100vh;
+  }
+
+  /* Primary CTA gradient — matches the mockup's light-blue→accent buttons */
+  .bg-accent-gradient {
+    background-image: linear-gradient(135deg, var(--accent-grad-start), var(--accent));
+  }
+  .bg-accent-gradient:hover {
+    background-image: linear-gradient(135deg, var(--accent-grad-start), var(--accent-hover));
+  }
+}
+
+/* Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+*::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Grid background pattern */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Glow effects */
+.glow-border {
+  box-shadow: inset 0 0 0 1px rgba(44, 147, 216, 0.1), 0 1px 3px rgba(44, 147, 216, 0.06);
+}
+.glow-border-strong {
+  box-shadow: inset 0 0 0 1px rgba(44, 147, 216, 0.2), 0 4px 20px rgba(44, 147, 216, 0.08);
+}
+
+/* Pulse ring animation for Call button */
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+.pulse-ring::before,
+.pulse-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid currentColor;
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.pulse-ring::after {
+  animation-delay: 0.5s;
+}
+
+/* Sidebar active indicator */
+@keyframes sidebar-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+/* Staggered children */
+.stagger-children > * {
+  animation: fade-in 0.4s ease-out forwards;
+  opacity: 0;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
+.stagger-children > *:nth-child(7) { animation-delay: 0.35s; }
+.stagger-children > *:nth-child(8) { animation-delay: 0.4s; }
+
+/* Shimmer loading */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Table hover row */
+.table-row-hover {
+  transition: background-color 0.15s ease;
+}
+.table-row-hover:hover {
+  background-color: rgba(44, 147, 216, 0.03);
+}
+
+/* Data font */
+.font-data {
+  font-family: 'Roboto Mono', monospace;
+}
+
+/* Kill native select appearance across all browsers */
+select.custom-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: none;
+}
+select.custom-select::-ms-expand {
+  display: none;
+}
+
+/* Status dot pulse */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.status-dot-pulse {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+/* Shake animation for invalid code */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  30% { transform: translateX(6px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+  90% { transform: translateX(2px); }
+}
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}

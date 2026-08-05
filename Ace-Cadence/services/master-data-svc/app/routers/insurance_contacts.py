@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -116,6 +118,25 @@ async def update_insurance_contact(contact_id: int, body: dict, db: AsyncSession
 
     await write_audit_event(
         db, action="update", resource_type="insurance_contact", resource_id=str(contact_id)
+    )
+    await db.commit()
+    return await get_insurance_contact(contact_id, db)
+
+
+@router.post("/{contact_id}/mark-ivr-verified")
+async def mark_ivr_verified(contact_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    """Records that a human confirmed this payer's IVR playbook still
+    matches the real payer's live IVR (see UI's VerificationBanner)."""
+    existing = await db.execute(text("SELECT id FROM insurance_contacts WHERE id = :id"), {"id": contact_id})
+    if existing.first() is None:
+        raise HTTPException(status_code=404, detail="Insurance contact not found")
+    await db.execute(
+        text("UPDATE insurance_contacts SET ivr_verified_at = :now WHERE id = :id"),
+        {"now": datetime.now(timezone.utc), "id": contact_id},
+    )
+    await write_audit_event(
+        db, action="update", resource_type="insurance_contact", resource_id=str(contact_id),
+        payload_summary="ivr_verified_at set",
     )
     await db.commit()
     return await get_insurance_contact(contact_id, db)

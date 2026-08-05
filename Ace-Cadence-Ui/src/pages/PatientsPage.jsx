@@ -1,0 +1,353 @@
+import { useState } from 'react';
+import { Users, Plus, Pencil, Trash2, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import Modal from '../components/Modal';
+import EmptyState from '../components/EmptyState';
+import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
+import { useProviderFilter } from '../context/ProviderFilterContext';
+import { listPatients, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient } from '../api/masterData';
+import { listClaims } from '../api/claims';
+import { useLiveQuery } from '../hooks/useLiveQuery';
+
+const EMPTY_FORM = {
+  firstName: '',
+  lastName: '',
+  dateOfBirth: '',
+  memberId: '',
+  groupNumber: '',
+  policyNumber: '',
+  subscriberName: '',
+  relationship: 'self',
+};
+
+export default function PatientsPage() {
+  const { selectedProviderId } = useProviderFilter();
+  const { data: allPatients, loading: isLoading, refetch } = useLiveQuery(listPatients, [], 'patient');
+  const { data: allClaims } = useLiveQuery(listClaims, [], 'claim');
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [piiVisible, setPiiVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter patients by provider: show patients who have claims at the selected hospital
+  const providerPatientIds = selectedProviderId && allClaims
+    ? new Set(allClaims.filter((c) => String(c.provider_id) === String(selectedProviderId)).map((c) => c.patient_id))
+    : null;
+  const patients = selectedProviderId
+    ? (allPatients ?? []).filter((p) => providerPatientIds?.has(p.id))
+    : allPatients;
+
+  const filteredPatients = (patients ?? []).filter((patient) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return [patient.first_name, patient.last_name, patient.member_id, patient.group_number]
+      .some((v) => v && String(v).toLowerCase().includes(q));
+  });
+
+  function openCreate() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setModalOpen(true);
+  }
+
+  function openEdit(patient) {
+    setEditing(patient);
+    setForm({
+      firstName: patient.first_name,
+      lastName: patient.last_name,
+      dateOfBirth: patient.date_of_birth,
+      memberId: patient.member_id,
+      groupNumber: patient.group_number ?? '',
+      policyNumber: patient.policy_number ?? '',
+      subscriberName: patient.subscriber_name ?? '',
+      relationship: patient.relationship ?? 'self',
+    });
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    setModalOpen(false);
+    setEditing(null);
+    setForm(EMPTY_FORM);
+  }
+
+  function setField(field, value) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const payload = {
+        first_name: form.firstName,
+        last_name: form.lastName,
+        date_of_birth: form.dateOfBirth,
+        member_id: form.memberId,
+        group_number: form.groupNumber || null,
+        policy_number: form.policyNumber || null,
+        subscriber_name: form.subscriberName || null,
+        relationship: form.relationship || null,
+      };
+
+      if (editing) {
+        await apiUpdatePatient(editing.id, payload);
+      } else {
+        await apiCreatePatient(payload);
+      }
+      await refetch();
+      closeModal();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm('Delete this patient record? This cannot be undone.')) return;
+    await apiDeletePatient(id);
+    await refetch();
+  }
+
+  function formatDOB(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function mask(value) {
+    if (piiVisible || !value) return value;
+    if (value.length <= 2) return '***';
+    return value[0] + '*'.repeat(Math.min(value.length - 2, 8)) + value[value.length - 1];
+  }
+
+  function maskDOB(dateStr) {
+    if (piiVisible) return formatDOB(dateStr);
+    return '*** **, ****';
+  }
+
+  const inputClass =
+    'w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
+  const labelClass = 'block text-xs uppercase tracking-wider text-muted font-medium mb-1.5';
+
+  return (
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
+      {/* Action toolbar */}
+      <ListToolbar searchValue={searchQuery} onSearchChange={setSearchQuery}>
+        <ListToolbarButton
+          icon={piiVisible ? Eye : EyeOff}
+          label={piiVisible ? 'Hide PII' : 'Reveal PII'}
+          onClick={() => setPiiVisible((v) => !v)}
+          variant="white"
+        />
+        <ListToolbarButton icon={Plus} label="Add Patient" onClick={openCreate} />
+      </ListToolbar>
+
+      {/* Table */}
+      {isLoading ? (
+        <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="p-8 space-y-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-10 shimmer rounded-lg" />
+            ))}
+          </div>
+        </div>
+      ) : filteredPatients.length === 0 ? (
+        <div className="bg-white border border-border rounded-xl shadow-sm">
+          <EmptyState
+            icon={Users}
+            title={searchQuery ? 'No matching patients' : 'No patients yet'}
+            description={
+              searchQuery
+                ? 'Try adjusting your search to find what you are looking for.'
+                : 'Add your first patient record to get started with claims management.'
+            }
+            action={
+              !searchQuery ? (
+                <button onClick={openCreate} className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Patient
+                </button>
+              ) : undefined
+            }
+          />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="flex-1 min-h-0 overflow-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="sticky top-0 z-10 bg-table-header">
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Name</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">DOB</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Member ID</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Group #</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Relationship</th>
+                  <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-table-header-text font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {filteredPatients.map((patient) => (
+                  <tr key={patient.id} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <span className="font-medium text-gray-900">{mask(patient.first_name)} {mask(patient.last_name)}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{maskDOB(patient.date_of_birth)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      <span className="font-data text-accent">{mask(patient.member_id)}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{mask(patient.group_number) ?? '--'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 capitalize">{patient.relationship ?? '--'}</td>
+                    <td className="px-4 py-3 text-sm text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => openEdit(patient)}
+                          className="p-1.5 text-muted hover:text-accent hover:bg-accent/10 rounded-lg transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(patient.id)}
+                          className="px-3 py-1.5 text-danger hover:bg-danger/10 rounded-lg text-sm transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Patient' : 'Add Patient'} wide>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>First Name</label>
+              <input
+                type="text"
+                value={form.firstName}
+                onChange={(e) => setField('firstName', e.target.value)}
+                className={inputClass}
+                placeholder="Jane"
+                required
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Last Name</label>
+              <input
+                type="text"
+                value={form.lastName}
+                onChange={(e) => setField('lastName', e.target.value)}
+                className={inputClass}
+                placeholder="Doe"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Date of Birth</label>
+              <input
+                type="date"
+                value={form.dateOfBirth}
+                onChange={(e) => setField('dateOfBirth', e.target.value)}
+                className={inputClass}
+                required
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Relationship</label>
+              <div className="relative">
+                <select
+                  value={form.relationship}
+                  onChange={(e) => setField('relationship', e.target.value)}
+                  className={`${inputClass} custom-select appearance-none pr-8 cursor-pointer`}
+                >
+                  <option value="self">Self</option>
+                  <option value="spouse">Spouse</option>
+                  <option value="child">Child</option>
+                  <option value="other">Other</option>
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Member ID</label>
+              <input
+                type="text"
+                value={form.memberId}
+                onChange={(e) => setField('memberId', e.target.value)}
+                className={inputClass}
+                placeholder="MBR-000000"
+                required
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Group Number</label>
+              <input
+                type="text"
+                value={form.groupNumber}
+                onChange={(e) => setField('groupNumber', e.target.value)}
+                className={inputClass}
+                placeholder="GRP-0000"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Policy Number</label>
+              <input
+                type="text"
+                value={form.policyNumber}
+                onChange={(e) => setField('policyNumber', e.target.value)}
+                className={inputClass}
+                placeholder="POL-000000"
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Subscriber Name</label>
+              <input
+                type="text"
+                value={form.subscriberName}
+                onChange={(e) => setField('subscriberName', e.target.value)}
+                className={inputClass}
+                placeholder="Primary subscriber"
+              />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+            <button
+              type="button"
+              onClick={closeModal}
+              className="px-4 py-2.5 text-sm text-muted hover:text-gray-900 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : editing ? 'Update Patient' : 'Add Patient'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}

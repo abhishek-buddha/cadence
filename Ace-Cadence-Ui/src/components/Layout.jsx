@@ -1,0 +1,126 @@
+import { useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import Sidebar from './Sidebar';
+import HandoffNotifier from './HandoffNotifier';
+import ClaimUserRoutingDrawer from './ClaimUserRoutingDrawer';
+import { Database, UserCog, LogOut, Route } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { getPageTitle } from '../utils/pageTitles';
+
+function HeaderIconLink({ to, icon: Icon, label }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors shadow-sm ${
+          isActive
+            ? 'border-accent/40 bg-accent/5 text-accent'
+            : 'border-border-light bg-white text-gray-600 hover:border-accent/40 hover:text-gray-900'
+        }`
+      }
+    >
+      <Icon className="w-4 h-4" />
+      <span className="hidden sm:inline">{label}</span>
+    </NavLink>
+  );
+}
+
+const ROLE_LABELS = { admin: 'Admin', operator: 'Operator' };
+
+function getInitials(emailOrName) {
+  if (!emailOrName) return '?';
+  const trimmed = emailOrName.trim();
+  if (trimmed.includes(' ')) {
+    const parts = trimmed.split(' ').filter(Boolean);
+    return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+  }
+  return trimmed.slice(0, 2).toUpperCase();
+}
+
+function UserMenu({ onLogout }) {
+  const auth = useAuth();
+  const label = auth?.name || auth?.email || 'Signed in';
+
+  return (
+    <div className="flex items-center gap-2.5 pl-3 ml-1 border-l border-border">
+      <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-xs font-display font-semibold text-accent shrink-0">
+        {getInitials(label)}
+      </div>
+      <div className="hidden sm:block leading-tight">
+        <p className="text-sm font-medium text-gray-900">{label}</p>
+        <p className="text-[11px] uppercase tracking-wider text-muted">{ROLE_LABELS[auth?.role] ?? auth?.role ?? '--'}</p>
+      </div>
+      <button
+        onClick={onLogout}
+        title="Log out"
+        className="p-2 rounded-lg text-muted hover:text-danger hover:bg-danger/5 transition-colors"
+      >
+        <LogOut className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+// Small icon-only tab on the right edge of the screen, independent of the
+// scrollable Sidebar nav list — opening Claim User Routing shouldn't depend
+// on where the sidebar happens to be scrolled to. Fixed positioning + a
+// z-index below the header keeps it reachable without ever covering it.
+function ClaimRoutingNotch({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Claim User Routing"
+      className="fixed right-0 top-20 z-30 flex items-center justify-center w-9 h-9 bg-toolbar text-white rounded-l-lg shadow-lg shadow-gray-400/40 hover:bg-accent-hover transition-colors duration-150"
+    >
+      <Route className="w-4 h-4" />
+    </button>
+  );
+}
+
+export default function Layout({ onLogout }) {
+  const location = useLocation();
+  const pageTitle = getPageTitle(location.pathname, 'Dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebarCollapsed') === 'true'; } catch { return false; }
+  });
+  const [routingDrawerOpen, setRoutingDrawerOpen] = useState(false);
+
+  function handleToggleSidebar() {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem('sidebarCollapsed', String(next)); } catch {}
+      return next;
+    });
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} />
+      <ClaimRoutingNotch onClick={() => setRoutingDrawerOpen(true)} />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-between px-6 lg:px-8 gap-3 relative z-20">
+          <h1 className="font-display font-bold text-[16px] text-gray-900 truncate">{pageTitle}</h1>
+          <div className="flex items-center gap-3 shrink-0">
+            <HeaderIconLink to="/users" icon={UserCog} label="User Management" />
+            <HeaderIconLink to="/master-data" icon={Database} label="Master Data" />
+            <UserMenu onLogout={onLogout} />
+          </div>
+        </header>
+
+        {/* Main content */}
+        <main className="flex-1 overflow-y-auto grid-bg">
+          <div className="h-full flex flex-col p-4 lg:p-6">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+
+      {/* App-wide broadcast toast for incoming AI→human handoffs */}
+      <HandoffNotifier />
+
+      <ClaimUserRoutingDrawer open={routingDrawerOpen} onClose={() => setRoutingDrawerOpen(false)} />
+    </div>
+  );
+}

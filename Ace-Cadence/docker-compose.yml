@@ -19,6 +19,8 @@ services:
       SERVICE_NAME: login-svc
       ACCESS_CODE: ${ACCESS_CODE:-472394}
     depends_on: [redis]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   user-management-svc:
     build: ./services/user-management-svc
@@ -27,6 +29,8 @@ services:
       <<: *common-env
       SERVICE_NAME: user-management-svc
     depends_on: [redis]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   master-data-svc:
     build: ./services/master-data-svc
@@ -35,6 +39,8 @@ services:
       <<: *common-env
       SERVICE_NAME: master-data-svc
     depends_on: [redis]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   call-handling-svc:
     build: ./services/call-handling-svc
@@ -47,6 +53,8 @@ services:
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
     depends_on: [redis]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - call-recordings:/data/recordings
 
@@ -58,6 +66,8 @@ services:
       SERVICE_NAME: scheduler-svc
       CALL_HANDLING_SVC_URL: http://call-handling-svc:8004
     depends_on: [redis, call-handling-svc]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   ui-data-loading-svc:
     build: ./services/ui-data-loading-svc
@@ -69,6 +79,8 @@ services:
       USER_MANAGEMENT_SVC_URL: http://user-management-svc:8002
       CALL_HANDLING_SVC_URL: http://call-handling-svc:8004
     depends_on: [redis, master-data-svc, user-management-svc, call-handling-svc]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   reports-dashboards-svc:
     build: ./services/reports-dashboards-svc
@@ -80,6 +92,8 @@ services:
       USER_MANAGEMENT_SVC_URL: http://user-management-svc:8002
       CALL_HANDLING_SVC_URL: http://call-handling-svc:8004
     depends_on: [redis, master-data-svc, user-management-svc, call-handling-svc]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   telephony-bridge-svc:
     build: ./services/telephony-bridge-svc
@@ -90,6 +104,8 @@ services:
       CALL_HANDLING_SVC_URL: http://call-handling-svc:8004
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
     depends_on: [redis, call-handling-svc]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - call-recordings:/data/recordings
 

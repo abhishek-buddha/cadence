@@ -17,20 +17,55 @@ for (let i = 0; i < 256; i++) {
 }
 
 // ---------------------------------------------------------------------------
-// Linear interpolation upsample from 8kHz to target rate (avoids browser
-// resampling artifacts that cause static/crackling)
+// Linear interpolation resample between the relay's source format and the
+// browser output rate. Twilio frames are mu-law 8k; ElevenLabs monitor fallback
+// frames are PCM at the agent output rate.
 // ---------------------------------------------------------------------------
-function upsample8kTo(samples8k, targetRate) {
-  const ratio = targetRate / 8000;
-  const out = new Float32Array(Math.ceil(samples8k.length * ratio));
+function resampleTo(samples, sourceRate, targetRate) {
+  if (sourceRate === targetRate) return samples;
+  const ratio = targetRate / sourceRate;
+  const out = new Float32Array(Math.ceil(samples.length * ratio));
   for (let i = 0; i < out.length; i++) {
     const srcIdx = i / ratio;
     const lo = Math.floor(srcIdx);
-    const hi = Math.min(lo + 1, samples8k.length - 1);
+    const hi = Math.min(lo + 1, samples.length - 1);
     const frac = srcIdx - lo;
-    out[i] = samples8k[lo] * (1 - frac) + samples8k[hi] * frac;
+    out[i] = samples[lo] * (1 - frac) + samples[hi] * frac;
   }
   return out;
+}
+
+function parseAudioCodec(codec) {
+  const value = String(codec || 'mulaw_8000').toLowerCase();
+  const rate = Number(value.match(/_(\d+)$/)?.[1]) || 8000;
+  if (value.includes('pcm')) return { encoding: 'pcm16', sampleRate: rate };
+  if (value.includes('ulaw') || value.includes('mulaw') || value.includes('mu-law')) {
+    return { encoding: 'mulaw', sampleRate: rate };
+  }
+  return { encoding: 'mulaw', sampleRate: 8000 };
+}
+
+function decodeAudioPayload(payload, codec) {
+  const binary = atob(payload);
+  const { encoding, sampleRate } = parseAudioCodec(codec);
+
+  if (encoding === 'pcm16') {
+    const samples = new Float32Array(Math.floor(binary.length / 2));
+    for (let i = 0; i < samples.length; i++) {
+      const lo = binary.charCodeAt(i * 2) & 0xFF;
+      const hi = binary.charCodeAt(i * 2 + 1) & 0xFF;
+      let sample = lo | (hi << 8);
+      if (sample & 0x8000) sample -= 0x10000;
+      samples[i] = sample / 32768;
+    }
+    return resampleTo(samples, sampleRate, 8000);
+  }
+
+  const samples = new Float32Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xFF];
+  }
+  return sampleRate === 8000 ? samples : resampleTo(samples, sampleRate, 8000);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +268,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       }
 
       const raw = new Float32Array(queue.splice(0, FRAME));
-      const upsampled = upsample8kTo(raw, ctx.sampleRate);
+      const upsampled = resampleTo(raw, 8000, ctx.sampleRate);
       const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
       buffer.getChannelData(0).set(upsampled);
       const source = ctx.createBufferSource();
@@ -284,11 +319,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
 
           if (data.event === 'audio' && data.media?.payload) {
             if (mutedRef.current) return;
-            const binary = atob(data.media.payload);
-            const samples = new Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-              samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xFF];
-            }
+            const samples = decodeAudioPayload(data.media.payload, data.media.codec);
             // Live monitor audio is already time-ordered by the bridge. Playing
             // chunks in arrival order avoids choppy gaps from waiting for a
             // matching opposite track that may never arrive.

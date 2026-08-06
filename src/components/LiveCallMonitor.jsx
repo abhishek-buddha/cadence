@@ -68,6 +68,22 @@ function decodeAudioPayload(payload, codec) {
   return sampleRate === 8000 ? samples : resampleTo(samples, sampleRate, 8000);
 }
 
+function appendSamples(queue, samples) {
+  for (let i = 0; i < samples.length; i++) queue.push(samples[i]);
+}
+
+function mixSamples(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const len = Math.max(a.length, b.length);
+  const mixed = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const value = (a[i] || 0) + (b[i] || 0);
+    mixed[i] = Math.max(-1, Math.min(1, value));
+  }
+  return mixed;
+}
+
 // ---------------------------------------------------------------------------
 // Elapsed timer
 // ---------------------------------------------------------------------------
@@ -113,6 +129,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const inboundQueueRef = useRef([]);
   const outboundQueueRef = useRef([]);
   const audioQueueRef = useRef([]); // mixed output queue
+  const twilioFrameBufferRef = useRef(new Map());
   const nextPlayTimeRef = useRef(0);
   const playIntervalRef = useRef(null);
   const wsRef = useRef(null);
@@ -123,6 +140,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       audioQueueRef.current = [];
       inboundQueueRef.current = [];
       outboundQueueRef.current = [];
+      twilioFrameBufferRef.current.clear();
       nextPlayTimeRef.current = 0;
     }
   }, [muted]);
@@ -251,6 +269,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       if (mutedRef.current) return;
       const ctx = audioCtxRef.current;
       if (!ctx || ctx.state !== 'running') return;
+      flushTwilioFrames(false);
       const queue = audioQueueRef.current;
 
       if (queue.length > MAX_QUEUE) {
@@ -283,6 +302,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       audioQueueRef.current = [];
       inboundQueueRef.current = [];
       outboundQueueRef.current = [];
+      twilioFrameBufferRef.current.clear();
       nextPlayTimeRef.current = 0;
       if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
         audioCtxRef.current.close().catch(() => {});
@@ -320,10 +340,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
           if (data.event === 'audio' && data.media?.payload) {
             if (mutedRef.current) return;
             const samples = decodeAudioPayload(data.media.payload, data.media.codec);
-            // Live monitor audio is already time-ordered by the bridge. Playing
-            // chunks in arrival order avoids choppy gaps from waiting for a
-            // matching opposite track that may never arrive.
-            audioQueueRef.current.push(...samples);
+            enqueueAudioFrame(data.media, samples);
 
             if (audioQueueRef.current.length > 12000) {
               audioQueueRef.current.splice(0, audioQueueRef.current.length - 4000);
@@ -352,8 +369,50 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       audioQueueRef.current = [];
       inboundQueueRef.current = [];
       outboundQueueRef.current = [];
+      twilioFrameBufferRef.current.clear();
     };
   }, [call?._id, isCompleted]);
+
+  function enqueueAudioFrame(media, samples) {
+    const source = media.source;
+    const track = String(media.track || '').replace('_track', '');
+    const timestamp = Number(media.timestamp);
+    const shouldMixTwilioTracks =
+      source === 'twilio_monitor' &&
+      Number.isFinite(timestamp) &&
+      (track === 'inbound' || track === 'outbound');
+
+    if (!shouldMixTwilioTracks) {
+      appendSamples(audioQueueRef.current, samples);
+      return;
+    }
+
+    const frames = twilioFrameBufferRef.current;
+    const key = timestamp;
+    const frame = frames.get(key) || { inbound: null, outbound: null, firstSeen: performance.now() };
+    frame[track] = samples;
+    frames.set(key, frame);
+    flushTwilioFrames(false);
+  }
+
+  function flushTwilioFrames(force) {
+    const frames = twilioFrameBufferRef.current;
+    if (frames.size === 0) return;
+    const now = performance.now();
+    const keys = Array.from(frames.keys()).sort((a, b) => a - b);
+
+    for (const key of keys) {
+      const frame = frames.get(key);
+      if (!frame) continue;
+      const hasBothTracks = frame.inbound && frame.outbound;
+      const waitedForPair = now - frame.firstSeen > 60;
+      const bufferTooDeep = frames.size > 25;
+      if (!force && !hasBothTracks && !waitedForPair && !bufferTooDeep) break;
+
+      appendSamples(audioQueueRef.current, mixSamples(frame.inbound, frame.outbound));
+      frames.delete(key);
+    }
+  }
 
   function ensureAudioContext() {
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
@@ -381,6 +440,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     audioQueueRef.current = [];
     inboundQueueRef.current = [];
     outboundQueueRef.current = [];
+    twilioFrameBufferRef.current.clear();
     nextPlayTimeRef.current = 0;
     setMuted(false);
     ensureAudioContext();

@@ -8,6 +8,10 @@ import OperatorLayout from './components/OperatorLayout';
 import AccessCodePage from './pages/AccessCodePage';
 import LoginSelectPage from './pages/LoginSelectPage';
 import NotYetMigrated from './pages/NotYetMigrated';
+import Dashboard from './pages/Dashboard';
+import ClaimsPage from './pages/ClaimsPage';
+import CallHistory from './pages/CallHistory';
+import UsersPage from './pages/UsersPage';
 
 // Converted to the new REST/WebSocket backend (see Ace-Cadence-Ui/README.md).
 import PatientsPage from './pages/PatientsPage';
@@ -15,7 +19,7 @@ import InsuranceDirectory from './pages/InsuranceDirectory';
 import ProvidersPage from './pages/ProvidersPage';
 import MasterDataPage from './pages/MasterDataPage';
 
-// Static — no backend wiring in the pre-rewrite app either, work as-is.
+// Static - no backend wiring in the pre-rewrite app either, work as-is.
 import AppointmentsPage from './pages/AppointmentsPage';
 import AppointmentSchedulingDetailPage from './pages/AppointmentSchedulingDetailPage';
 import AppointmentReminderDetailPage from './pages/AppointmentReminderDetailPage';
@@ -51,7 +55,7 @@ export default function App() {
   }
 
   async function handleLogin(user) {
-    // Mint a real session via login-svc — falls back to local-only state if
+    // Mint a real session via login-svc - falls back to local-only state if
     // it's unreachable (e.g. backend not deployed yet in dev) so the demo
     // flow still works, same tolerance as AccessCodePage's PIN check.
     try {
@@ -97,7 +101,7 @@ export default function App() {
                   <Route path="eligibility-verification/:id" element={<EligibilityVerificationDetailPage />} />
                   <Route path="prior-authorization" element={<PriorAuthorizationPage />} />
                   <Route path="prior-authorization/:id" element={<PriorAuthorizationDetailPage />} />
-                  <Route path="claims" element={<NotYetMigrated label="Claim Management" />} />
+                  <Route path="claims" element={<ClaimsPage />} />
                   <Route path="claims/:id" element={<NotYetMigrated label="Claim detail" />} />
                   <Route path="patient-balance-reminder" element={<PatientBalanceReminderPage />} />
                   <Route path="patient-balance-reminder/:id" element={<PatientBalanceReminderDetailPage />} />
@@ -109,8 +113,8 @@ export default function App() {
             ) : (
               <>
                 <Route path="/" element={<Layout onLogout={handleLogout} />}>
-                  <Route index element={<NotYetMigrated label="Dashboard" />} />
-                  <Route path="claims" element={<NotYetMigrated label="Claim Management" />} />
+                  <Route index element={<Dashboard />} />
+                  <Route path="claims" element={<ClaimsPage />} />
                   <Route path="claims/:id" element={<NotYetMigrated label="Claim detail" />} />
 
                   <Route path="patients" element={<PatientsPage />} />
@@ -118,9 +122,9 @@ export default function App() {
                   <Route path="providers" element={<ProvidersPage />} />
                   <Route path="master-data" element={<MasterDataPage />} />
                   <Route path="call-audit" element={<Navigate to="/call-audit/history" replace />} />
-                  <Route path="call-audit/history" element={<NotYetMigrated label="Call History" />} />
+                  <Route path="call-audit/history" element={<CallHistory />} />
                   <Route path="call-audit/live" element={<NotYetMigrated label="Live Sessions" />} />
-                  <Route path="calls" element={<NotYetMigrated label="Call History" />} />
+                  <Route path="calls" element={<CallHistory />} />
                   <Route path="live" element={<NotYetMigrated label="Live Calls" />} />
                   <Route path="settings" element={<NotYetMigrated label="Settings" />} />
 
@@ -129,10 +133,10 @@ export default function App() {
                   <Route path="sessions" element={<NotYetMigrated label="Sessions" />} />
                   <Route path="reports" element={<NotYetMigrated label="Reports" />} />
                   <Route path="audit" element={<NotYetMigrated label="Audit Log" />} />
-                  <Route path="users" element={<NotYetMigrated label="User Management" />} />
+                  <Route path="users" element={<UsersPage />} />
                   <Route path="transfers" element={<NotYetMigrated label="Transfer Destinations" />} />
 
-                  {/* Static placeholder modules — list + case view, no backend wiring by design */}
+                  {/* Static placeholder modules - list + case view, no backend wiring by design */}
                   <Route path="appointments" element={<AppointmentsPage />} />
                   <Route path="appointments/scheduling/:id" element={<AppointmentSchedulingDetailPage />} />
                   <Route path="appointments/reminder/:id" element={<AppointmentReminderDetailPage />} />

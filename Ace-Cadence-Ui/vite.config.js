@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -9,6 +10,11 @@ const apiTarget = process.env.VITE_API_PROXY_TARGET || 'http://localhost:80';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      'convex/react': fileURLToPath(new URL('./src/convexCompat/react.js', import.meta.url)),
+    },
+  },
   base: '/',
   build: {
     outDir: 'dist',

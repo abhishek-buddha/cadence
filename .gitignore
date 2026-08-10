@@ -31,6 +31,7 @@ test-results/
 Claims_Upload_IVR_Test.xlsx
 Claims_Upload_Test_Payers.xlsx
 Insurance_Payer_Directory.xlsx
+.claude/
 
 # Editor directories and files
 .vscode/*
@@ -42,3 +43,4 @@ Insurance_Payer_Directory.xlsx
 *.njsproj
 *.sln
 *.sw?
+CODEX_REPO_MEMORY.md

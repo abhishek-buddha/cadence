@@ -602,7 +602,7 @@ export default function CallHistory() {
 
   // Build set of claim IDs belonging to the selected provider
   const providerClaimIds = selectedProviderId && allClaims
-    ? new Set(allClaims.filter((c) => c.providerId === selectedProviderId).map((c) => c._id))
+    ? new Set(allClaims.filter((c) => String(c.providerId) === String(selectedProviderId)).map((c) => c._id))
     : null;
 
   // Filter calls by provider (through claims) and status

@@ -95,7 +95,7 @@ export default function Dashboard() {
 
   // Filter recent calls by provider
   const providerClaimIds = selectedProviderId && allClaims
-    ? new Set(allClaims.filter((c) => c.providerId === selectedProviderId).map((c) => c._id))
+    ? new Set(allClaims.filter((c) => String(c.providerId) === String(selectedProviderId)).map((c) => c._id))
     : null;
   const recentCalls = (allRecentCalls ?? [])
     .filter((c) => !selectedProviderId || providerClaimIds?.has(c.claimId))

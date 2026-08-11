@@ -557,7 +557,7 @@ export default function ClaimsPage() {
   const { selectedProviderId } = useProviderFilter();
   const allClaims = useQuery(api.claims.list);
   const claims = selectedProviderId
-    ? (allClaims ?? []).filter((c) => c.providerId === selectedProviderId)
+    ? (allClaims ?? []).filter((c) => String(c.providerId) === String(selectedProviderId))
     : allClaims;
   const patients = useQuery(api.patients.list);
   const insuranceContacts = useQuery(api.insuranceContacts.list);

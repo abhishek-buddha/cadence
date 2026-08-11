@@ -255,23 +255,27 @@ function reportParams(args = {}) {
 
 function reportSuccessRate(row) {
   return {
-    total: row.total_completed || 0,
+    total: row.total || row.total_completed || 0,
     successful: row.successful || 0,
+    partial: row.partial || 0,
+    failed: row.failed || 0,
+    transferred: row.transferred || 0,
     successRatePct: row.success_rate_pct || 0,
   };
 }
 
 function reportDataAccuracy(row) {
-  const total = row.total_completed || 0;
-  const captured = row.fully_retrieved || 0;
   return {
-    overall: {
-      captureRate: total ? captured / total : 0,
-      avgConfidence: null,
-    },
-    byField: [
-      { field: 'Required fields', totalCalls: total, capturedCount: captured, captureRate: total ? captured / total : 0, avgConfidence: null },
-    ],
+    overall: row.overall
+      ? { captureRate: row.overall.capture_rate || 0, avgConfidence: row.overall.avg_confidence ?? null }
+      : { captureRate: 0, avgConfidence: null },
+    byField: toArray(row.by_field).map((field) => ({
+      field: field.field,
+      totalCalls: field.total_calls || 0,
+      capturedCount: field.captured_count || 0,
+      captureRate: field.capture_rate || 0,
+      avgConfidence: field.avg_confidence ?? null,
+    })),
   };
 }
 
@@ -298,7 +302,7 @@ function reportOperationalKpis(row) {
   const total = row.total_calls || 0;
   const transferred = row.transferred_to_human || 0;
   const failed = row.failed_calls || 0;
-  const completed = Math.max(0, total - failed);
+  const completed = row.completed_calls ?? Math.max(0, total - failed);
   return {
     totalCalls: total,
     completedCalls: completed,
@@ -309,8 +313,8 @@ function reportOperationalKpis(row) {
     transferRate: total ? Math.round((transferred / total) * 100) : 0,
     automationRate: completed ? Math.round(((completed - transferred) / completed) * 100) : 0,
     callsPerHour: 0,
-    estimatedMinutesSaved: 0,
-    estimatedCostSavings: 0,
+    estimatedMinutesSaved: row.estimated_minutes_saved || 0,
+    estimatedCostSavings: row.estimated_cost_savings || 0,
   };
 }
 
@@ -332,6 +336,28 @@ function reportVolumeByTier(row) {
     count,
   }));
 }
+
+function reportSuccessRateByPayer(rows) {
+  return toArray(rows).map((row) => ({
+    payer: String(row.payer),
+    payerName: row.payer_name || 'Unknown',
+    successful: row.successful || 0,
+    partial: row.partial || 0,
+    failed: row.failed || 0,
+    total: row.total || 0,
+    pct: row.pct || 0,
+  }));
+}
+
+function reportSuccessRateByWeek(rows) {
+  return toArray(rows).map((row) => ({
+    weekStart: row.week_start,
+    successful: row.successful || 0,
+    partial: row.partial || 0,
+    failed: row.failed || 0,
+    total: row.total || 0,
+  }));
+}
 async function executeQuery(name, args) {
   if (name === 'claims.list') return (await request('/claims')).map(claimToLegacy);
   if (name === 'claims.getById') return claimToLegacy(await request(`/claims/${Number(args.id)}`));
@@ -350,8 +376,8 @@ async function executeQuery(name, args) {
   if (name === 'users.list') return (await request('/users')).map(userToLegacy);
   if (name === 'userGroups.list') return (await request('/user-groups')).map(groupToLegacy);
   if (name === 'reports.successRate') return reportSuccessRate(await request('/reports/success-rate', { params: reportParams(args) }));
-  if (name === 'reports.successRateByPayer') return [];
-  if (name === 'reports.successRateByWeek') return [];
+  if (name === 'reports.successRateByPayer') return reportSuccessRateByPayer(await request('/reports/success-rate-by-payer', { params: reportParams(args) }));
+  if (name === 'reports.successRateByWeek') return reportSuccessRateByWeek(await request('/reports/success-rate-by-week', { params: reportParams(args) }));
   if (name === 'reports.dataAccuracy') return reportDataAccuracy(await request('/reports/data-accuracy', { params: reportParams(args) }));
   if (name === 'reports.turnaroundTime') return reportTurnaroundTime(await request('/reports/turnaround-time', { params: reportParams(args) }), args?.useCase);
   if (name === 'reports.holdMetrics') return reportHoldMetrics(await request('/reports/hold-metrics', { params: reportParams(args) }));

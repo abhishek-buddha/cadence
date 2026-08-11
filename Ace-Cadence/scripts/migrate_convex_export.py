@@ -65,6 +65,10 @@ def call_api(method, path, body=None):
         raise
 
 
+def has_table(zf, name):
+    return f"{name}/documents.jsonl" in zf.namelist()
+
+
 def read_table(zf, name):
     with zf.open(f"{name}/documents.jsonl") as f:
         return [json.loads(line) for line in f.read().decode().splitlines() if line.strip()]
@@ -119,6 +123,54 @@ def migrate_patients(zf):
         id_map[p["_id"]] = created["id"]
     print(f"patients migrated: {len(id_map)}")
     return id_map
+
+
+def migrate_user_groups(zf, insurance_map, provider_map):
+    id_map = {}
+    if not has_table(zf, "userGroups"):
+        print("user groups migrated: 0 (table not present in export)")
+        return id_map
+    for group in read_table(zf, "userGroups"):
+        created = call_api("POST", "/user-groups", {
+            "name": group["name"],
+            "insurance_contact_ids": [insurance_map[x] for x in group.get("insuranceContactIds", []) if x in insurance_map],
+            "provider_ids": [provider_map[x] for x in group.get("providerIds", []) if x in provider_map],
+            "specializations": group.get("specializations"),
+        })
+        id_map[group["_id"]] = created["id"]
+    print(f"user groups migrated: {len(id_map)}")
+    return id_map
+
+
+def migrate_users(zf, insurance_map, provider_map, user_group_map):
+    if not has_table(zf, "users"):
+        print("users migrated: 0 (table not present in export)")
+        return
+    existing = {u["email"] for u in call_api("GET", "/users")}
+    count = skipped = duplicates = 0
+    for user in read_table(zf, "users"):
+        role = user.get("role")
+        if role not in {"admin", "operator"}:
+            skipped += 1
+            continue
+        if user["email"] in existing:
+            duplicates += 1
+            continue
+        body = {
+            "email": user["email"],
+            "name": user.get("name"),
+            "role": role,
+            "status": user.get("status", "active"),
+            "insurance_contact_ids": [insurance_map[x] for x in user.get("insuranceContactIds", []) if x in insurance_map],
+            "provider_ids": [provider_map[x] for x in user.get("providerIds", []) if x in provider_map],
+            "specializations": user.get("specializations"),
+            "team_lead_name": user.get("teamLeadName"),
+            "user_group_id": user_group_map.get(user.get("userGroupId")),
+        }
+        call_api("POST", "/users", body)
+        existing.add(user["email"])
+        count += 1
+    print(f"users migrated: {count} (skipped {skipped} unsupported roles, {duplicates} duplicates)")
 
 
 def migrate_claims(zf, patient_map, insurance_map, provider_map):
@@ -233,6 +285,8 @@ def main():
         provider_map = migrate_providers(zf)
         insurance_map = migrate_insurance_contacts(zf)
         patient_map = migrate_patients(zf)
+        user_group_map = migrate_user_groups(zf, insurance_map, provider_map)
+        migrate_users(zf, insurance_map, provider_map, user_group_map)
         claim_map = migrate_claims(zf, patient_map, insurance_map, provider_map)
         call_map = migrate_calls(zf, claim_map, insurance_map)
         migrate_call_results(zf, call_map, claim_map)

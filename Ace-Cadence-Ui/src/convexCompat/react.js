@@ -313,7 +313,7 @@ export function useQuery(fn, args) {
     return () => {
       alive.current = false;
     };
-  }, [name, key, refreshTick]);
+  }, [name, key]);
 
   return data;
 }

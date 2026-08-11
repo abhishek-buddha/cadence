@@ -247,6 +247,91 @@ async function dashboardStats(args = {}) {
   };
 }
 
+function reportParams(args = {}) {
+  return {
+    use_case: args.useCase,
+  };
+}
+
+function reportSuccessRate(row) {
+  return {
+    total: row.total_completed || 0,
+    successful: row.successful || 0,
+    successRatePct: row.success_rate_pct || 0,
+  };
+}
+
+function reportDataAccuracy(row) {
+  const total = row.total_completed || 0;
+  const captured = row.fully_retrieved || 0;
+  return {
+    overall: {
+      captureRate: total ? captured / total : 0,
+      avgConfidence: null,
+    },
+    byField: [
+      { field: 'Required fields', totalCalls: total, capturedCount: captured, captureRate: total ? captured / total : 0, avgConfidence: null },
+    ],
+  };
+}
+
+function reportTurnaroundTime(row, useCase) {
+  return row.sample_size
+    ? [{ useCase: useCase || 'all', count: row.sample_size, p50: row.avg_call_duration_seconds || 0, p95: row.avg_call_duration_seconds || 0, p99: row.avg_call_duration_seconds || 0 }]
+    : [];
+}
+
+function reportHoldMetrics(row) {
+  return {
+    totalCalls: row.sample_size || 0,
+    callsWithHold: row.sample_size || 0,
+    avgHoldSeconds: row.avg_hold_seconds || 0,
+    p95HoldSeconds: row.avg_hold_seconds || 0,
+    maxHoldSeconds: row.max_hold_seconds || 0,
+    longHoldCount: 0,
+    over30MinCount: 0,
+    byPayer: [],
+  };
+}
+
+function reportOperationalKpis(row) {
+  const total = row.total_calls || 0;
+  const transferred = row.transferred_to_human || 0;
+  const failed = row.failed_calls || 0;
+  const completed = Math.max(0, total - failed);
+  return {
+    totalCalls: total,
+    completedCalls: completed,
+    ivrAttempted: total,
+    ivrTraversed: completed,
+    ivrTraversalRate: total ? Math.round((completed / total) * 100) : 0,
+    transferredCalls: transferred,
+    transferRate: total ? Math.round((transferred / total) * 100) : 0,
+    automationRate: completed ? Math.round(((completed - transferred) / completed) * 100) : 0,
+    callsPerHour: 0,
+    estimatedMinutesSaved: 0,
+    estimatedCostSavings: 0,
+  };
+}
+
+function reportExceptions(row) {
+  return toArray(row.calls).map((call) => ({
+    exception: call.error_message || call.outcome || call.status,
+    payer: call.insurance_contact_id,
+    payerName: call.insurance_contact_id ? `Payer ${call.insurance_contact_id}` : '--',
+    count: 1,
+    lastSeenAt: call.completed_at || call.started_at,
+  }));
+}
+
+function reportVolumeByTier(row) {
+  return Object.entries(row.by_priority || {}).map(([tier, count]) => ({
+    payer: tier,
+    payerName: tier,
+    tier,
+    count,
+  }));
+}
 async function executeQuery(name, args) {
   if (name === 'claims.list') return (await request('/claims')).map(claimToLegacy);
   if (name === 'claims.getById') return claimToLegacy(await request(`/claims/${Number(args.id)}`));
@@ -264,6 +349,15 @@ async function executeQuery(name, args) {
   if (name === 'dashboard.getStats') return dashboardStats(args || {});
   if (name === 'users.list') return (await request('/users')).map(userToLegacy);
   if (name === 'userGroups.list') return (await request('/user-groups')).map(groupToLegacy);
+  if (name === 'reports.successRate') return reportSuccessRate(await request('/reports/success-rate', { params: reportParams(args) }));
+  if (name === 'reports.successRateByPayer') return [];
+  if (name === 'reports.successRateByWeek') return [];
+  if (name === 'reports.dataAccuracy') return reportDataAccuracy(await request('/reports/data-accuracy', { params: reportParams(args) }));
+  if (name === 'reports.turnaroundTime') return reportTurnaroundTime(await request('/reports/turnaround-time', { params: reportParams(args) }), args?.useCase);
+  if (name === 'reports.holdMetrics') return reportHoldMetrics(await request('/reports/hold-metrics', { params: reportParams(args) }));
+  if (name === 'reports.operationalKpis') return reportOperationalKpis(await request('/reports/operational-kpis', { params: reportParams(args) }));
+  if (name === 'reports.exceptionReport') return reportExceptions(await request('/reports/exceptions', { params: reportParams(args) }));
+  if (name === 'reports.volumeByTier') return reportVolumeByTier(await request('/reports/volume-by-tier', { params: reportParams(args) }));
   return undefined;
 }
 

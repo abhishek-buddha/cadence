@@ -12,6 +12,7 @@ import Dashboard from './pages/Dashboard';
 import ClaimsPage from './pages/ClaimsPage';
 import CallHistory from './pages/CallHistory';
 import UsersPage from './pages/UsersPage';
+import ReportsPage from './pages/ReportsPage';
 
 // Converted to the new REST/WebSocket backend (see Ace-Cadence-Ui/README.md).
 import PatientsPage from './pages/PatientsPage';
@@ -131,7 +132,7 @@ export default function App() {
                   <Route path="eligibility" element={<NotYetMigrated label="Dental Eligibility Verification" />} />
                   <Route path="eligibility/:id" element={<NotYetMigrated label="Eligibility case detail" />} />
                   <Route path="sessions" element={<NotYetMigrated label="Sessions" />} />
-                  <Route path="reports" element={<NotYetMigrated label="Reports" />} />
+                  <Route path="reports" element={<ReportsPage />} />
                   <Route path="audit" element={<NotYetMigrated label="Audit Log" />} />
                   <Route path="users" element={<UsersPage />} />
                   <Route path="transfers" element={<NotYetMigrated label="Transfer Destinations" />} />

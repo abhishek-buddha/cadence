@@ -35,7 +35,17 @@ export const api = {
     list: marker('userGroups.list'),
     remove: marker('userGroups.remove'),
   },
-  claimImport: {
+  reports: {
+    successRate: marker('reports.successRate'),
+    successRateByPayer: marker('reports.successRateByPayer'),
+    successRateByWeek: marker('reports.successRateByWeek'),
+    dataAccuracy: marker('reports.dataAccuracy'),
+    turnaroundTime: marker('reports.turnaroundTime'),
+    holdMetrics: marker('reports.holdMetrics'),
+    operationalKpis: marker('reports.operationalKpis'),
+    exceptionReport: marker('reports.exceptionReport'),
+    volumeByTier: marker('reports.volumeByTier'),
+  },  claimImport: {
     processExcelData: marker('claimImport.processExcelData'),
     bulkImportClaims: marker('claimImport.bulkImportClaims'),
     aiAutofillClaim: marker('claimImport.aiAutofillClaim'),

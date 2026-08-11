@@ -18,6 +18,7 @@ creates new rows, it doesn't check for existing ones.
 """
 
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -26,7 +27,10 @@ from datetime import datetime
 from pathlib import Path
 
 BASE = "http://localhost/api"
-EXPORT_ZIP = Path(__file__).resolve().parent.parent.parent / "Ace-Cadence-old" / "convex-export.zip"
+EXPORT_ZIP = Path(os.environ.get(
+    "CONVEX_EXPORT_ZIP",
+    Path(__file__).resolve().parent.parent.parent / "Ace-Cadence-old" / "convex-export.zip",
+))
 
 
 def to_mysql_datetime(value):

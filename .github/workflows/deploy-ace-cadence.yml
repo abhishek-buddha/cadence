@@ -1,4 +1,5 @@
 name: Deploy Ace Cadence
+# Smart EC2 deploy
 
 on:
   push:

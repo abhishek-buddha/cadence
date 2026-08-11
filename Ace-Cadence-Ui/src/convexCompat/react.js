@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+// Compatibility shim for legacy Convex-shaped screens during REST migration.
+
 async function request(path, { method = 'GET', body, params } = {}) {
   const url = new URL(`/api${path}`, window.location.origin);
   if (params) {

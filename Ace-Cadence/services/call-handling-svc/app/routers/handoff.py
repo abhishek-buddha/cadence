@@ -3,7 +3,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -38,7 +38,12 @@ def _is_active_call(call: dict) -> bool:
         return not call.get("completed_at")
     if state in _WRAP_UP_HANDOFF and not call.get("wrap_up_completed_at"):
         return True
-    return call.get("status") in {"initiating", "in_progress"} and not call.get("completed_at")
+    if call.get("status") not in {"initiating", "in_progress"} or call.get("completed_at"):
+        return False
+    started_at = call.get("started_at")
+    if isinstance(started_at, str):
+        started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00")).replace(tzinfo=None)
+    return bool(started_at and started_at >= _now() - timedelta(hours=6))
 
 
 async def _log_event(db: AsyncSession, call_id: int, event_type: str, message: str | None = None) -> None:
@@ -119,7 +124,14 @@ async def list_awaiting_handoff(db: AsyncSession = Depends(get_db)) -> list[dict
 async def list_live(db: AsyncSession = Depends(get_db)) -> list[dict]:
     rows = await _list_calls(
         db,
-        "c.status IN ('initiating', 'in_progress') OR c.handoff_state IN ('awaiting_human', 'accepting', 'connected')",
+        """
+        c.handoff_state IN ('awaiting_human', 'accepting', 'connected')
+        OR (
+          c.status IN ('initiating', 'in_progress')
+          AND c.completed_at IS NULL
+          AND c.started_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 6 HOUR)
+        )
+        """,
         limit=100,
     )
     return [row for row in rows if _is_active_call(row)]

@@ -44,6 +44,12 @@ const PAYER_KIND_OPTIONS = [
   { value: 'dental', label: 'Dental' },
 ];
 
+const CALL_CONNECTION_OPTIONS = [
+  { value: 'ivr_human_handoff', label: 'IVR -> IVR, then Human <-> Human' },
+  { value: 'ivr_only_cut_at_handoff', label: 'IVR -> Real IVR, then Cut Call' },
+  { value: 'direct_to_agent', label: 'Direct to Agent' },
+];
+
 const WAIT_SECONDS_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 // Voice AI agent config — not wired to any call behavior yet, just stored for
@@ -66,6 +72,7 @@ const EMPTY_FORM = {
   name: '',
   phone: '',
   humanAgentNumber: '',
+  callConnectionType: 'ivr_human_handoff',
   payerId: '',
   payerKind: 'medical',
   hours: '',
@@ -125,6 +132,7 @@ export default function InsuranceDirectory() {
       name: contact.name,
       phone: contact.phone,
       humanAgentNumber: contact.human_agent_number ?? '',
+      callConnectionType: contact.call_connection_type ?? 'ivr_human_handoff',
       payerId: contact.payer_id ?? '',
       payerKind: contact.payer_kind ?? 'medical',
       hours: contact.hours ?? '',
@@ -250,6 +258,7 @@ export default function InsuranceDirectory() {
         // written and reads as "no number" everywhere (follow-up guard and
         // prompt both treat it as unset).
         human_agent_number: form.humanAgentNumber,
+        call_connection_type: form.callConnectionType || 'ivr_human_handoff',
         payer_id: form.payerId || null,
         payer_kind: form.payerKind || null,
         hours: form.hours || null,
@@ -450,6 +459,19 @@ export default function InsuranceDirectory() {
               className={inputClass}
               placeholder="+918309838260 (forwarded after IVR)"
             />
+          </div>
+
+          <div>
+            <label className={labelClass}>Call Connection Type</label>
+            <select
+              value={form.callConnectionType}
+              onChange={(e) => setField('callConnectionType', e.target.value)}
+              className={inputClass}
+            >
+              {CALL_CONNECTION_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
 
           <div>

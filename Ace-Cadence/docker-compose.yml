@@ -51,7 +51,12 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://13.202.152.89}
+      BRIDGE_SERVER_URL: ${BRIDGE_SERVER_URL:-wss://cadence-bridge.onrender.com}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      ELEVENLABS_AGENT_ID: ${ELEVENLABS_AGENT_ID}
+      ELEVENLABS_AGENT_PHONE_NUMBER_ID: ${ELEVENLABS_AGENT_PHONE_NUMBER_ID}
     depends_on: [redis]
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -103,6 +108,7 @@ services:
       SERVICE_NAME: telephony-bridge-svc
       CALL_HANDLING_SVC_URL: http://call-handling-svc:8004
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      BRIDGE_SERVER_URL: ${BRIDGE_SERVER_URL:-wss://cadence-bridge.onrender.com}
     depends_on: [redis, call-handling-svc]
     extra_hosts:
       - "host.docker.internal:host-gateway"

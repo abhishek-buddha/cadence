@@ -81,6 +81,7 @@ function insuranceToLegacy(row) {
     avgHoldTime: row.avg_hold_time,
     verificationRequirements: row.verification_requirements,
     humanAgentNumber: row.human_agent_number,
+    callConnectionType: row.call_connection_type,
     warmTransferNumber: row.warm_transfer_number,
   };
 }
@@ -483,6 +484,7 @@ async function executeMutation(name, args) {
 }
 
 async function executeAction(name, args = {}) {
+  if (name === 'callActions.initiateCall') return request('/calls/initiate', { method: 'POST', body: { claim_id: Number(args.claimId) } });
   if (name === 'handoff.redirectPayerToConference') return request(`/handoff/${Number(args.callId)}/redirect-payer`, { method: 'POST' });
   if (name === 'callActions.endCall') return request(`/handoff/${Number(args.callId)}/ended`, { method: 'POST' });
   if (name.startsWith('claimImport.')) throw new Error('AI claim import is not wired to the new backend yet.');

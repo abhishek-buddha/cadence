@@ -34,6 +34,7 @@ export const api = {
     redirectPayerToConference: marker('handoff.redirectPayerToConference'),
   },
   callActions: {
+    initiateCall: marker('callActions.initiateCall'),
     endCall: marker('callActions.endCall'),
   },
   operatorStats: {

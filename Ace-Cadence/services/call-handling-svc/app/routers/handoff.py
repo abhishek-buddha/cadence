@@ -35,10 +35,10 @@ def _decode(row: dict | None) -> dict | None:
 def _is_active_call(call: dict) -> bool:
     state = call.get("handoff_state")
     if state in _LIVE_HANDOFF:
-        return True
+        return not call.get("completed_at")
     if state in _WRAP_UP_HANDOFF and not call.get("wrap_up_completed_at"):
         return True
-    return call.get("status") in {"initiating", "in_progress"}
+    return call.get("status") in {"initiating", "in_progress"} and not call.get("completed_at")
 
 
 async def _log_event(db: AsyncSession, call_id: int, event_type: str, message: str | None = None) -> None:

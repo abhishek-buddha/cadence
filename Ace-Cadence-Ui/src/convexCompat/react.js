@@ -125,6 +125,45 @@ function callToLegacy(row) {
   };
 }
 
+function handoffCallToLegacy(row) {
+  const call = callToLegacy(row);
+  if (!call) return call;
+  return {
+    ...call,
+    assignedAgentUserId: row.assigned_agent_user_id == null ? undefined : String(row.assigned_agent_user_id),
+    handoffRequestedAt: row.handoff_requested_at,
+    handoffReason: row.handoff_reason,
+    handoffAcceptedByUserId: row.handoff_accepted_by_user_id == null ? undefined : String(row.handoff_accepted_by_user_id),
+    handoffAcceptedByEmail: row.handoff_accepted_by_email,
+    handoffAcceptedAt: row.handoff_accepted_at,
+    conferenceName: row.conference_name,
+    humanParticipantCallSid: row.human_participant_call_sid,
+    handoffToken: row.handoff_token,
+    aiRecordingPath: row.ai_recording_path,
+    humanRecordingPath: row.human_recording_path,
+    wrapUpCompletedAt: row.wrap_up_completed_at,
+    insuranceCompany: row.insurance_company,
+    claimNumber: row.claim_number,
+    patientName: row.patient_first_name || row.patient_last_name ? `${row.patient_first_name || ''} ${row.patient_last_name || ''}`.trim() : null,
+    patientDob: row.patient_dob,
+    memberId: row.member_id,
+    providerName: row.provider_name,
+    providerNpi: row.provider_npi,
+    claimAmount: row.claim_amount,
+    dateOfService: row.claim_date_of_service,
+    cptCodes: toArray(row.cpt_codes),
+    diagnosisCodes: toArray(row.diagnosis_codes),
+    claimStatus: row.claim_status,
+    claimPriority: row.claim_priority,
+    humanAgentNumber: row.human_agent_number,
+  };
+}
+
+function eventToLegacy(row) {
+  if (!row) return row;
+  return { ...row, _id: String(row.id), callId: row.call_id == null ? undefined : String(row.call_id) };
+}
+
 function resultToLegacy(row) {
   if (!row) return row;
   return {
@@ -181,6 +220,36 @@ function userPayload(body) {
     specializations: toArray(body.specializations),
     team_lead_name: body.teamLeadName,
     user_group_id: body.userGroupId ? Number(body.userGroupId) : null,
+  };
+}
+
+async function handoffDetail(callId) {
+  const detail = await request(`/handoff/${Number(callId)}`);
+  return {
+    call: handoffCallToLegacy(detail.call),
+    events: toArray(detail.events).map(eventToLegacy),
+  };
+}
+
+async function routingAgents() {
+  const rows = await request('/handoff/routing/agents');
+  return toArray(rows).map((row) => ({
+    user: userToLegacy(row.user),
+    availability: row.availability,
+    activeCall: handoffCallToLegacy(row.activeCall),
+  }));
+}
+
+async function operatorStats(args = {}) {
+  const status = args.userId ? await request('/handoff/routing/status', { params: { user_id: Number(args.userId) } }) : null;
+  const calls = (await request('/calls', { params: { assigned_agent_user_id: Number(args.userId) } })).map(callToLegacy);
+  const completed = calls.filter((call) => call.handoffState === 'handoff_ended' || call.status === 'completed');
+  return {
+    availability: status?.availability || 'available',
+    isCurrentlyOnCall: ['assigned', 'in_call'].includes(status?.availability),
+    activeCall: handoffCallToLegacy(status?.activeCall),
+    completedToday: completed.filter((call) => String(call.completedAt || call.startedAt || '').slice(0, 10) === new Date().toISOString().slice(0, 10)).length,
+    recentCalls: completed.slice(0, 5),
   };
 }
 
@@ -368,6 +437,12 @@ async function executeQuery(name, args) {
   if (name === 'calls.listRecent') return (await request('/calls')).map(callToLegacy).slice(0, args?.limit || 50);
   if (name === 'calls.getRecordingUrls') return null;
   if (name === 'callResults.listLatestByUser') return listLatestResultsByClaim();
+  if (name === 'handoff.listAwaitingHandoff') return (await request('/handoff/awaiting')).map(handoffCallToLegacy);
+  if (name === 'handoff.listLive') return (await request('/handoff/live')).map(handoffCallToLegacy);
+  if (name === 'handoff.getHandoff') return handoffDetail(args.callId);
+  if (name === 'handoff.getMyRoutingStatus') { const row = await request('/handoff/routing/status', { params: { user_id: Number(args.userId) } }); return row ? { user: userToLegacy(row.user), availability: row.availability, activeCall: handoffCallToLegacy(row.activeCall) } : null; }
+  if (name === 'handoff.listRoutingAgents') return routingAgents();
+  if (name === 'operatorStats.getStats') return operatorStats(args || {});
   if (name === 'callResults.getByCall') {
     const rows = await request('/call-results', { params: { call_id: Number(args.callId) } });
     return resultToLegacy(rows[0]);
@@ -398,11 +473,18 @@ async function executeMutation(name, args) {
   if (name === 'users.setStatus') return userToLegacy(await request(`/users/${Number(args.id)}`, { method: 'PATCH', body: { status: args.status } }));
   if (name === 'users.updateRoutingProfile') return userToLegacy(await request(`/users/${Number(args.id)}`, { method: 'PATCH', body: userPayload(args) }));
   if (name === 'userGroups.remove') return request(`/user-groups/${Number(args.id)}`, { method: 'DELETE' });
+  if (name === 'handoff.acceptHandoff') return request(`/handoff/${Number(args.callId)}/accept`, { method: 'POST', body: { agent_user_id: args.agentUserId ? Number(args.agentUserId) : undefined } });
+  if (name === 'handoff.declineHandoff') return request(`/handoff/${Number(args.callId)}/decline`, { method: 'POST', body: {} });
+  if (name === 'handoff.markConnectedFromClient') return request(`/handoff/${Number(args.callId)}/connected`, { method: 'POST' });
+  if (name === 'handoff.endHandoffFromClient') return request(`/handoff/${Number(args.callId)}/ended`, { method: 'POST' });
+  if (name === 'handoff.completeWrapUp') return request(`/handoff/${Number(args.callId)}/complete-wrap-up`, { method: 'POST' });
   if (name === 'claimImport.bulkImportClaims') throw new Error('Claims bulk import is not wired to the new backend yet.');
   return undefined;
 }
 
-async function executeAction(name) {
+async function executeAction(name, args = {}) {
+  if (name === 'handoff.redirectPayerToConference') return request(`/handoff/${Number(args.callId)}/redirect-payer`, { method: 'POST' });
+  if (name === 'callActions.endCall') return request(`/handoff/${Number(args.callId)}/ended`, { method: 'POST' });
   if (name.startsWith('claimImport.')) throw new Error('AI claim import is not wired to the new backend yet.');
   return undefined;
 }
@@ -415,7 +497,16 @@ export function useQuery(fn, args) {
   const name = functionName(fn);
   const key = useMemo(() => JSON.stringify(args ?? null), [args]);
   const [data, setData] = useState(undefined);
+  const [refreshTick, setRefreshTick] = useState(0);
   const alive = useRef(true);
+  const previousRequestRef = useRef(null);
+  const shouldPoll = name?.startsWith('handoff.') || name?.startsWith('operatorStats.');
+
+  useEffect(() => {
+    if (!shouldPoll || args === 'skip') return undefined;
+    const timer = setInterval(() => setRefreshTick((value) => value + 1), 3000);
+    return () => clearInterval(timer);
+  }, [shouldPoll, key]);
 
   useEffect(() => {
     alive.current = true;
@@ -423,7 +514,11 @@ export function useQuery(fn, args) {
       setData(undefined);
       return undefined;
     }
-    setData(undefined);
+    const requestKey = `${name}:${key}`;
+    if (previousRequestRef.current !== requestKey) {
+      previousRequestRef.current = requestKey;
+      setData(undefined);
+    }
     executeQuery(name, args || {})
       .then((result) => {
         if (alive.current) setData(result);
@@ -435,7 +530,7 @@ export function useQuery(fn, args) {
     return () => {
       alive.current = false;
     };
-  }, [name, key]);
+  }, [name, key, refreshTick]);
 
   return data;
 }

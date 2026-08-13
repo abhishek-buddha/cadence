@@ -20,6 +20,25 @@ export const api = {
     listRecent: marker('calls.listRecent'),
     getRecordingUrls: marker('calls.getRecordingUrls'),
   },
+  handoff: {
+    listAwaitingHandoff: marker('handoff.listAwaitingHandoff'),
+    listLive: marker('handoff.listLive'),
+    getHandoff: marker('handoff.getHandoff'),
+    getMyRoutingStatus: marker('handoff.getMyRoutingStatus'),
+    listRoutingAgents: marker('handoff.listRoutingAgents'),
+    acceptHandoff: marker('handoff.acceptHandoff'),
+    declineHandoff: marker('handoff.declineHandoff'),
+    markConnectedFromClient: marker('handoff.markConnectedFromClient'),
+    endHandoffFromClient: marker('handoff.endHandoffFromClient'),
+    completeWrapUp: marker('handoff.completeWrapUp'),
+    redirectPayerToConference: marker('handoff.redirectPayerToConference'),
+  },
+  callActions: {
+    endCall: marker('callActions.endCall'),
+  },
+  operatorStats: {
+    getStats: marker('operatorStats.getStats'),
+  },
   callResults: {
     listLatestByUser: marker('callResults.listLatestByUser'),
     getByCall: marker('callResults.getByCall'),

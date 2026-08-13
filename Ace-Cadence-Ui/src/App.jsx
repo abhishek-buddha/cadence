@@ -13,6 +13,9 @@ import ClaimsPage from './pages/ClaimsPage';
 import CallHistory from './pages/CallHistory';
 import UsersPage from './pages/UsersPage';
 import ReportsPage from './pages/ReportsPage';
+import LiveCallsPage from './pages/LiveCallsPage';
+import OperatorQueuePage from './pages/OperatorQueuePage';
+import OperatorDashboardPage from './pages/OperatorDashboardPage';
 
 // Converted to the new REST/WebSocket backend (see Ace-Cadence-Ui/README.md).
 import PatientsPage from './pages/PatientsPage';
@@ -91,8 +94,8 @@ export default function App() {
             ) : currentUser.role === 'operator' ? (
               <>
                 <Route path="/" element={<OperatorLayout onLogout={handleLogout} />}>
-                  <Route index element={<NotYetMigrated label="My Queue" />} />
-                  <Route path="dashboard" element={<NotYetMigrated label="My Dashboard" />} />
+                  <Route index element={<OperatorQueuePage />} />
+                  <Route path="dashboard" element={<OperatorDashboardPage />} />
                   <Route path="appointments" element={<AppointmentsPage />} />
                   <Route path="appointments/scheduling/:id" element={<AppointmentSchedulingDetailPage />} />
                   <Route path="appointments/reminder/:id" element={<AppointmentReminderDetailPage />} />
@@ -124,9 +127,9 @@ export default function App() {
                   <Route path="master-data" element={<MasterDataPage />} />
                   <Route path="call-audit" element={<Navigate to="/call-audit/history" replace />} />
                   <Route path="call-audit/history" element={<CallHistory />} />
-                  <Route path="call-audit/live" element={<NotYetMigrated label="Live Sessions" />} />
+                  <Route path="call-audit/live" element={<LiveCallsPage />} />
                   <Route path="calls" element={<CallHistory />} />
-                  <Route path="live" element={<NotYetMigrated label="Live Calls" />} />
+                  <Route path="live" element={<LiveCallsPage />} />
                   <Route path="settings" element={<NotYetMigrated label="Settings" />} />
 
                   <Route path="eligibility" element={<NotYetMigrated label="Dental Eligibility Verification" />} />

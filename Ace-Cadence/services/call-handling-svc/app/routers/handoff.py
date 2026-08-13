@@ -1,6 +1,12 @@
+import base64
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
+from html import escape
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -76,6 +82,28 @@ async def _get_call(db: AsyncSession, call_id: int) -> dict | None:
 async def _list_calls(db: AsyncSession, where: str, params: dict | None = None, limit: int = 100) -> list[dict]:
     result = await db.execute(text(_CALL_SELECT + f" WHERE {where} ORDER BY c.started_at DESC LIMIT {limit}"), params or {})
     return [_decode(r) for r in rows_to_dicts(result)]
+
+
+def _public_base_url(request: Request) -> str:
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}".rstrip("/")
+
+
+def _twilio_post(account_sid: str, auth_token: str, path: str, body: dict[str, str]) -> dict:
+    data = urllib.parse.urlencode(body).encode()
+    req = urllib.request.Request(
+        f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}{path}",
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": "Basic " + base64.b64encode(f"{account_sid}:{auth_token}".encode()).decode(),
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=15) as response:
+        raw = response.read().decode()
+        return {"status": response.status, "body": raw}
 
 
 @router.get("/awaiting")
@@ -234,16 +262,59 @@ async def complete_wrap_up(call_id: int, db: AsyncSession = Depends(get_db)) -> 
     return {"ok": True}
 
 
+@router.post("/{call_id}/payer-conference-twiml")
+async def payer_conference_twiml(call_id: int, db: AsyncSession = Depends(get_db)) -> Response:
+    call = await _get_call(db, call_id)
+    if call is None:
+        raise HTTPException(status_code=404, detail="Call not found")
+    conference_name = call.get("conference_name") or f"cadence-{call_id}"
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial>
+    <Conference startConferenceOnEnter="true" endConferenceOnExit="false">{escape(conference_name)}</Conference>
+  </Dial>
+</Response>"""
+    return Response(content=xml, media_type="application/xml")
+
+
 @router.post("/{call_id}/redirect-payer")
-async def redirect_payer_to_conference(call_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+async def redirect_payer_to_conference(call_id: int, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     call = await _get_call(db, call_id)
     if call is None:
         return {"ok": False, "error": "call_not_found"}
-    if not call.get("twilio_call_sid"):
+    payer_sid = call.get("twilio_call_sid")
+    if not payer_sid:
         await _log_event(db, call_id, "handoff_failed", "no_payer_call_sid")
         await db.commit()
         return {"ok": False, "error": "no_payer_call_sid"}
-    # ponytail: state-only placeholder; wire telephony-bridge Twilio redirect here when AWS call handoff is exercised end-to-end.
-    await _log_event(db, call_id, "handoff_redirect_requested", "payer redirect pending telephony bridge wiring")
+
+    account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+    if not account_sid or not auth_token:
+        await _log_event(db, call_id, "handoff_failed", "twilio_not_configured")
+        await db.commit()
+        return {"ok": False, "error": "twilio_not_configured"}
+
+    twiml_url = f"{_public_base_url(request)}/api/handoff/{call_id}/payer-conference-twiml"
+    try:
+        _twilio_post(account_sid, auth_token, f"/Calls/{urllib.parse.quote(payer_sid)}.json", {
+            "Url": twiml_url,
+            "Method": "POST",
+        })
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")
+        await _log_event(db, call_id, "handoff_failed", f"twilio_redirect_{exc.code}: {detail[:500]}")
+        await db.commit()
+        return {"ok": False, "error": f"twilio_redirect_{exc.code}"}
+    except Exception as exc:
+        await _log_event(db, call_id, "handoff_failed", str(exc))
+        await db.commit()
+        return {"ok": False, "error": str(exc)}
+
+    await db.execute(
+        text("UPDATE calls SET conference_name = COALESCE(conference_name, :conference_name) WHERE id = :call_id"),
+        {"call_id": call_id, "conference_name": f"cadence-{call_id}"},
+    )
+    await _log_event(db, call_id, "ai_dropped", "payer leg redirected into conference; AI stream closed")
     await db.commit()
-    return {"ok": False, "error": "redirect_not_wired_in_aws"}
+    return {"ok": True}

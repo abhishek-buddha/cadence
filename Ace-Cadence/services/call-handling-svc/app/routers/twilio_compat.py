@@ -46,6 +46,9 @@ async def request_handoff(request: Request, db: AsyncSession = Depends(get_db)) 
     reason = params.get("reason") or "ivr_human_handoff_detected"
     if not call_id:
         return {"ok": False, "error": "could_not_correlate_call"}
+    existing = await db.execute(text("SELECT id FROM calls WHERE id = :id"), {"id": int(call_id)})
+    if row_to_dict(existing.first()) is None:
+        return {"ok": False, "error": "call_not_found", "callId": call_id}
     await db.execute(
         text("""
         UPDATE calls

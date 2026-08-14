@@ -7,6 +7,7 @@ export const api = {
   claims: {
     list: marker('claims.list'),
     getById: marker('claims.getById'),
+    getWithDetails: marker('claims.getWithDetails'),
     updateStatus: marker('claims.updateStatus'),
     bulkRemove: marker('claims.bulkRemove'),
   },

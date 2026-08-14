@@ -241,6 +241,27 @@ async function routingAgents() {
   }));
 }
 
+async function getClaimWithDetails(id) {
+  const detail = await request(`/ui-data/claims/${Number(id)}/full`);
+  const results = await request('/call-results', { params: { claim_id: Number(id) } });
+  const claim = claimToLegacy({
+    ...detail.claim,
+    last_called_at: detail.followup?.last_called_at,
+    next_follow_up_date: detail.followup?.next_follow_up_date,
+    follow_up_disposition: detail.followup?.follow_up_disposition,
+    follow_up_comment: detail.followup?.follow_up_comment,
+    follow_up_by: detail.followup?.follow_up_by,
+    follow_up_at: detail.followup?.follow_up_at,
+  });
+  return {
+    claim,
+    patient: patientToLegacy(detail.patient),
+    insurance: insuranceToLegacy(detail.insurance_contact),
+    provider: providerToLegacy(detail.provider),
+    calls: toArray(detail.calls).map(callToLegacy),
+    latestResult: resultToLegacy(toArray(results)[0]),
+  };
+}
 async function operatorStats(args = {}) {
   const status = args.userId ? await request('/handoff/routing/status', { params: { user_id: Number(args.userId) } }) : null;
   const calls = (await request('/calls', { params: { assigned_agent_user_id: Number(args.userId) } })).map(callToLegacy);
@@ -431,6 +452,7 @@ function reportSuccessRateByWeek(rows) {
 async function executeQuery(name, args) {
   if (name === 'claims.list') return (await request('/claims')).map(claimToLegacy);
   if (name === 'claims.getById') return claimToLegacy(await request(`/claims/${Number(args.id)}`));
+  if (name === 'claims.getWithDetails') return getClaimWithDetails(args.id);
   if (name === 'patients.list') return (await request('/master-data/patients')).map(patientToLegacy);
   if (name === 'insuranceContacts.list') return (await request('/master-data/insurance-contacts')).map(insuranceToLegacy);
   if (name === 'insuranceContacts.getById') return insuranceToLegacy(await request(`/master-data/insurance-contacts/${Number(args.id)}`));

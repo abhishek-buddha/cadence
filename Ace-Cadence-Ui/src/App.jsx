@@ -10,6 +10,7 @@ import LoginSelectPage from './pages/LoginSelectPage';
 import NotYetMigrated from './pages/NotYetMigrated';
 import Dashboard from './pages/Dashboard';
 import ClaimsPage from './pages/ClaimsPage';
+import ClaimDetailPage from './pages/ClaimDetailPage';
 import CallHistory from './pages/CallHistory';
 import UsersPage from './pages/UsersPage';
 import ReportsPage from './pages/ReportsPage';
@@ -106,7 +107,7 @@ export default function App() {
                   <Route path="prior-authorization" element={<PriorAuthorizationPage />} />
                   <Route path="prior-authorization/:id" element={<PriorAuthorizationDetailPage />} />
                   <Route path="claims" element={<ClaimsPage />} />
-                  <Route path="claims/:id" element={<NotYetMigrated label="Claim detail" />} />
+                  <Route path="claims/:id" element={<ClaimDetailPage />} />
                   <Route path="patient-balance-reminder" element={<PatientBalanceReminderPage />} />
                   <Route path="patient-balance-reminder/:id" element={<PatientBalanceReminderDetailPage />} />
                   <Route path="inbound-billing" element={<InboundBillingPage />} />
@@ -119,7 +120,7 @@ export default function App() {
                 <Route path="/" element={<Layout onLogout={handleLogout} />}>
                   <Route index element={<Dashboard />} />
                   <Route path="claims" element={<ClaimsPage />} />
-                  <Route path="claims/:id" element={<NotYetMigrated label="Claim detail" />} />
+                  <Route path="claims/:id" element={<ClaimDetailPage />} />
 
                   <Route path="patients" element={<PatientsPage />} />
                   <Route path="insurance" element={<InsuranceDirectory />} />

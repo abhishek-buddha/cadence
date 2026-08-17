@@ -1,13 +1,20 @@
+import base64
+import hashlib
+import hmac
+import json
+import time
 import urllib.parse
 from datetime import datetime, timezone
+from html import escape
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db import get_db
 from common.serialize import row_to_dict
 
+from ..config import settings
 from .calls import _claim_context, _dynamic_vars
 
 router = APIRouter(tags=["twilio-compat"])
@@ -21,6 +28,86 @@ async def _form(request: Request) -> dict[str, str]:
     raw = (await request.body()).decode(errors="ignore")
     parsed = urllib.parse.parse_qs(raw)
     return {k: v[-1] for k, v in parsed.items() if v}
+
+
+def _base64url(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode().rstrip("=")
+
+
+def _sign_twilio_access_token(identity: str, ttl_seconds: int = 3600) -> str:
+    now = int(time.time())
+    header = {"typ": "JWT", "alg": "HS256", "cty": "twilio-fpa;v=1"}
+    payload = {
+        "jti": f"{settings.twilio_api_key}-{now}",
+        "iss": settings.twilio_api_key,
+        "sub": settings.twilio_account_sid,
+        "iat": now,
+        "exp": now + ttl_seconds,
+        "grants": {
+            "identity": identity,
+            "voice": {
+                "outgoing": {"application_sid": settings.twilio_twiml_app_sid},
+                "incoming": {"allow": True},
+            },
+        },
+    }
+    signing_input = (
+        _base64url(json.dumps(header, separators=(",", ":")).encode())
+        + "."
+        + _base64url(json.dumps(payload, separators=(",", ":")).encode())
+    )
+    signature = hmac.new(
+        settings.twilio_api_secret.encode(),
+        signing_input.encode(),
+        hashlib.sha256,
+    ).digest()
+    return f"{signing_input}.{_base64url(signature)}"
+
+
+@router.get("/twilio-voice-token")
+@router.post("/twilio-voice-token")
+async def twilio_voice_token(request: Request) -> Response:
+    if not (
+        settings.twilio_account_sid
+        and settings.twilio_api_key
+        and settings.twilio_api_secret
+        and settings.twilio_twiml_app_sid
+    ):
+        return Response(
+            content=json.dumps(
+                {
+                    "error": {
+                        "code": "softphone_not_configured",
+                        "message": "Browser softphone not configured. Set TWILIO_API_KEY, TWILIO_API_SECRET, and TWILIO_TWIML_APP_SID in AWS env.",
+                    }
+                }
+            ),
+            status_code=503,
+            media_type="application/json",
+        )
+
+    identity = request.query_params.get("identity") or f"agent-{int(time.time())}"
+    token = _sign_twilio_access_token(identity)
+    return Response(
+        content=json.dumps({"token": token, "identity": identity}),
+        media_type="application/json",
+    )
+
+
+@router.api_route("/twiml-softphone-outgoing", methods=["GET", "POST"])
+async def twiml_softphone_outgoing(request: Request) -> Response:
+    call_id = request.query_params.get("callId") or ""
+    if not call_id:
+        form = await _form(request)
+        call_id = form.get("callId") or ""
+    conference_name = f"cadence-{call_id}"
+    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial>
+    <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false">{escape(conference_name)}</Conference>
+  </Dial>
+</Response>'''
+    return Response(content=xml, media_type="application/xml")
 
 
 @router.get("/call-metadata")

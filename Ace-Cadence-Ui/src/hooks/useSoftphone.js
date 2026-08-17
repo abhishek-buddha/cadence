@@ -1,4 +1,4 @@
-// useSoftphone — browser softphone lifecycle for the live AI→human handoff.
+// useSoftphone Ã¢â‚¬â€ browser softphone lifecycle for the live AIÃ¢â€ â€™human handoff.
 //
 // Wraps the Twilio Voice JS SDK (@twilio/voice-sdk). It lazily fetches a Voice
 // access token from Convex (/twilio-voice-token), registers a Device, and
@@ -13,13 +13,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Convex HTTP Actions base — the ...convex.site origin. Prefer an explicit env
-// var; otherwise derive from VITE_CONVEX_URL (…convex.cloud → …convex.site).
-function convexSiteUrl() {
-  const explicit = import.meta.env.VITE_CONVEX_SITE_URL;
-  if (explicit) return explicit.replace(/\/$/, '');
-  const cloud = import.meta.env.VITE_CONVEX_URL || '';
-  return cloud.replace('.convex.cloud', '.convex.site').replace(/\/$/, '');
+function softphoneBaseUrl() {
+  return window.location.origin.replace(/\/$/, '');
 }
 
 export function useSoftphone() {
@@ -57,7 +52,7 @@ export function useSoftphone() {
     setStatus('loading');
     setError(null);
     try {
-      const res = await fetch(`${convexSiteUrl()}/twilio-voice-token`, { method: 'GET' });
+      const res = await fetch(`${softphoneBaseUrl()}/twilio-voice-token`, { method: 'GET' });
       if (res.status === 503) {
         setStatus('unconfigured');
         return null;
@@ -87,7 +82,7 @@ export function useSoftphone() {
       });
       device.on('tokenWillExpire', async () => {
         try {
-          const r = await fetch(`${convexSiteUrl()}/twilio-voice-token`, { method: 'GET' });
+          const r = await fetch(`${softphoneBaseUrl()}/twilio-voice-token`, { method: 'GET' });
           if (r.ok) {
             const { token: fresh } = await r.json();
             device.updateToken(fresh);

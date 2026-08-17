@@ -126,6 +126,7 @@ services:
       - ./nginx/proxy_params.conf:/etc/nginx/proxy_params.conf:ro
       - ./nginx/proxy_ws_params.conf:/etc/nginx/proxy_ws_params.conf:ro
       - ../Ace-Cadence-Ui/dist:/usr/share/nginx/html:ro
+      - /etc/nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       - login-svc
       - user-management-svc

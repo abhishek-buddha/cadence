@@ -96,6 +96,11 @@ function providerToLegacy(row) {
   };
 }
 
+function timestampToLegacy(value) {
+  if (!value || typeof value !== 'string' || !value.includes('T')) return value;
+  return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : value + 'Z';
+}
+
 function callToLegacy(row) {
   if (!row) return row;
   return {
@@ -105,17 +110,17 @@ function callToLegacy(row) {
     insuranceContactId: row.insurance_contact_id == null ? undefined : String(row.insurance_contact_id),
     elevenLabsConversationId: row.eleven_labs_conversation_id,
     twilioCallSid: row.twilio_call_sid,
-    startedAt: row.started_at,
-    completedAt: row.completed_at,
+    startedAt: timestampToLegacy(row.started_at),
+    completedAt: timestampToLegacy(row.completed_at),
     errorMessage: row.error_message,
     callPhase: row.call_phase,
-    holdStartedAt: row.hold_started_at,
+    holdStartedAt: timestampToLegacy(row.hold_started_at),
     holdDuration: row.hold_duration,
-    humanDetectedAt: row.human_detected_at,
+    humanDetectedAt: timestampToLegacy(row.human_detected_at),
     outcomeReason: row.outcome_reason,
     requiredFieldsRetrieved: toArray(row.required_fields_retrieved),
     missingFields: toArray(row.missing_fields),
-    transferredAt: row.transferred_at,
+    transferredAt: timestampToLegacy(row.transferred_at),
     transferType: row.transfer_type,
     transferDestination: row.transfer_destination,
     handoffState: row.handoff_state,

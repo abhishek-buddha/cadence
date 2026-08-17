@@ -62,7 +62,7 @@ function UserMenu({ onLogout }) {
 }
 
 // Small icon-only tab on the right edge of the screen, independent of the
-// scrollable Sidebar nav list — opening Claim User Routing shouldn't depend
+// scrollable Sidebar nav list â€” opening Claim User Routing shouldn't depend
 // on where the sidebar happens to be scrolled to. Fixed positioning + a
 // z-index below the header keeps it reachable without ever covering it.
 function ClaimRoutingNotch({ onClick }) {
@@ -116,9 +116,6 @@ export default function Layout({ onLogout }) {
           </div>
         </main>
       </div>
-
-      {/* App-wide broadcast toast for incoming AI→human handoffs */}
-      <HandoffNotifier />
 
       <ClaimUserRoutingDrawer open={routingDrawerOpen} onClose={() => setRoutingDrawerOpen(false)} />
     </div>

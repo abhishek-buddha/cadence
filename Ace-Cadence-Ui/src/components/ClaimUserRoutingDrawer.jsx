@@ -20,7 +20,7 @@ function label(value) {
 }
 
 export default function ClaimUserRoutingDrawer({ open, onClose }) {
-  const agents = useQuery(api.handoff?.listRoutingAgents) ?? [];
+  const agents = useQuery(api.handoff?.listRoutingAgents, open ? {} : 'skip') ?? [];
   if (!open) return null;
 
   return (

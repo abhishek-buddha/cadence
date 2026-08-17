@@ -524,7 +524,10 @@ export function useQuery(fn, args) {
   const [refreshTick, setRefreshTick] = useState(0);
   const alive = useRef(true);
   const previousRequestRef = useRef(null);
-  const shouldPoll = name?.startsWith('handoff.') || name?.startsWith('operatorStats.');
+  const shouldPoll =
+    name?.startsWith('handoff.') ||
+    name?.startsWith('operatorStats.') ||
+    name === 'claims.getWithDetails';
 
   useEffect(() => {
     if (!shouldPoll || args === 'skip') return undefined;

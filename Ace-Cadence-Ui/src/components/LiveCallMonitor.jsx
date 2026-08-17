@@ -235,7 +235,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   // WebSocket for audio from bridge monitor
   useEffect(() => {
     if (!call?._id) return;
-    const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'wss://cadence-bridge.onrender.com';
+    const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host;
     let ws;
     let retryTimeout;
 

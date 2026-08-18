@@ -1,37 +1,49 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+// HandoffNotifier — app-wide broadcast toast for incoming AI→human handoffs.
+//
+// Mounted once in Layout. Subscribes to api.handoff.listAwaitingHandoff (the
+// same polled query the Live Calls page uses), so a toast appears as soon as a
+// call is waiting for an operator. Clicking it routes to /live. Clears itself
+// when the list empties (someone accepted / the call ended). Suppressed while
+// already on a live view to avoid redundancy.
+
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { PhoneIncoming, X } from 'lucide-react';
+import { PhoneIncoming, ArrowRight } from 'lucide-react';
 
 export default function HandoffNotifier() {
-  const calls = useQuery(api.handoff?.listAwaitingHandoff) ?? [];
-  const [dismissed, setDismissed] = useState({});
-  const call = calls.find((row) => !dismissed[row._id]);
-  if (!call) return null;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const awaiting = useQuery(api.handoff.listAwaitingHandoff);
+
+  const list = awaiting ?? [];
+  if (list.length === 0) return null;
+  if (location.pathname === '/live' || location.pathname === '/call-audit/live') return null;
+
+  const first = list[0];
+  const payer = first.insuranceCompany || 'A payer';
+  const extra = list.length > 1 ? ` (+${list.length - 1} more)` : '';
+  const assigned = first.assignedAgentName || 'an available agent';
 
   return (
-    <div className="fixed right-4 top-20 z-50 w-[min(420px,calc(100vw-2rem))] rounded-xl border border-accent/30 bg-white shadow-xl shadow-gray-300/50 p-4">
-      <div className="flex items-start gap-3">
-        <div className="w-11 h-11 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+    <div className="fixed bottom-6 right-6 z-50 max-w-sm">
+      <button
+        onClick={() => navigate('/live')}
+        className="w-full text-left rounded-xl border border-accent/40 bg-white shadow-lg shadow-accent/10 p-4 flex items-start gap-3 hover:border-accent/60 transition-colors"
+      >
+        <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 animate-pulse">
           <PhoneIncoming className="w-5 h-5 text-accent" />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="font-display font-semibold text-gray-900">Insurance rep on the line</p>
-          <p className="text-sm text-gray-600 truncate">{call.insuranceCompany || 'Payer'} is waiting for an agent</p>
-          <Link to="/live" className="inline-flex items-center gap-1 mt-2 text-sm text-accent font-medium hover:text-accent-hover">
-            Take the call <span aria-hidden>?</span>
-          </Link>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-gray-900 text-sm">Insurance rep on the line</p>
+          <p className="text-sm text-gray-600 truncate">
+            {payer} is waiting for {assigned}{extra}
+          </p>
+          <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent">
+            Take the call <ArrowRight className="w-3 h-3" />
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={() => setDismissed((prev) => ({ ...prev, [call._id]: true }))}
-          className="p-1 rounded-md text-muted hover:text-gray-900 hover:bg-gray-50"
-          aria-label="Dismiss"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+      </button>
     </div>
   );
 }

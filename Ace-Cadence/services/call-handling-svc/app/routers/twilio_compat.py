@@ -174,13 +174,64 @@ async def call_ended(request: Request, db: AsyncSession = Depends(get_db)) -> di
 
 _FINAL_TWILIO_STATUSES = {"completed", "failed", "busy", "no-answer", "canceled"}
 
+# Handoff states that mean "this call is still live with an operator". A call
+# that ends while in one of these must be moved out of them, or the operator UI
+# (which keys off handoff_state, not status) stays parked on a dead call.
+_LIVE_HANDOFF_STATES = ("awaiting_human", "accepting", "connected")
+# Inlined rather than a bound param: SQLAlchemy needs expanding=True to expand a
+# sequence into an IN list, and these are fixed internal constants (no user input).
+_LIVE_HANDOFF_STATES_SQL = ", ".join(f"'{state}'" for state in _LIVE_HANDOFF_STATES)
 
-async def _apply_final_status(db: AsyncSession, sid: str, twilio_status_value: str, duration: str | None) -> None:
+
+async def _close_call(
+    db: AsyncSession,
+    *,
+    sid: str | None = None,
+    call_id: int | None = None,
+    twilio_status_value: str = "completed",
+    duration: str | None = None,
+) -> bool:
+    """The single path every call-end signal routes through — the payer leg's
+    StatusCallback, the conference status callback, and the reconcile loop.
+
+    Mirrors the Render/Convex `closeHandoffCall()`: finalize status AND release
+    a live handoff. Doing only the former (the previous behavior here) left
+    handoff_state stuck at connected/awaiting_human, so the operator queue and
+    handoff timeline never noticed the call was over.
+    """
+    if call_id is None:
+        if not sid:
+            return False
+        result = await db.execute(text("SELECT id FROM calls WHERE twilio_call_sid = :sid"), {"sid": sid})
+        row = row_to_dict(result.first())
+        if row is None:
+            return False
+        call_id = row["id"]
+
     final = "completed" if twilio_status_value == "completed" else "failed"
     await db.execute(
-        text("UPDATE calls SET status = :final, completed_at = COALESCE(completed_at, :now), duration = COALESCE(duration, :duration) WHERE twilio_call_sid = :sid"),
-        {"sid": sid, "final": final, "now": _now(), "duration": duration},
+        text(
+            "UPDATE calls SET status = :final, completed_at = COALESCE(completed_at, :now), "
+            "duration = COALESCE(duration, :duration) WHERE id = :id AND completed_at IS NULL"
+        ),
+        {"id": call_id, "final": final, "now": _now(), "duration": duration},
     )
+    released = await db.execute(
+        text(
+            "UPDATE calls SET handoff_state = 'handoff_ended' "
+            f"WHERE id = :id AND handoff_state IN ({_LIVE_HANDOFF_STATES_SQL})"
+        ),
+        {"id": call_id},
+    )
+    if released.rowcount:
+        await db.execute(
+            text(
+                "INSERT INTO call_events (call_id, type, message, timestamp) "
+                "VALUES (:id, 'handoff_ended', :message, :now)"
+            ),
+            {"id": call_id, "message": f"call ended ({twilio_status_value})", "now": _now()},
+        )
+    return True
 
 
 @router.post("/twilio-status")
@@ -189,8 +240,53 @@ async def twilio_status(request: Request, db: AsyncSession = Depends(get_db)) ->
     sid = data.get("CallSid")
     status = data.get("CallStatus")
     if sid and status in _FINAL_TWILIO_STATUSES:
-        await _apply_final_status(db, sid, status, data.get("CallDuration"))
+        await _close_call(db, sid=sid, twilio_status_value=status, duration=data.get("CallDuration"))
         await db.commit()
+    return {"success": True}
+
+
+@router.api_route("/twilio-conference-status", methods=["GET", "POST"])
+async def twilio_conference_status(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """Conference participant/lifecycle events — the *immediate* end signal once
+    the payer has been redirected into the conference for a human handoff.
+
+    Post-handoff the AI stream is gone and the payer leg lives inside the
+    conference, so a phone-side hangup surfaces here as participant-leave /
+    conference-end. Without this route the app had to wait for the payer leg's
+    own StatusCallback (and the bridge's /call-ended deliberately no-ops during
+    a handoff), which is why the UI looked stuck as in-progress.
+    """
+    data = await _form(request)
+    call_id = request.query_params.get("callId") or data.get("callId")
+    if not call_id:
+        return {"success": False, "error": "missing_call_id"}
+    call_id = int(call_id)
+    event = data.get("StatusCallbackEvent") or ""
+
+    if event == "conference-end":
+        await _close_call(db, call_id=call_id)
+        await db.commit()
+        return {"success": True, "closed": True}
+
+    if event == "participant-leave":
+        result = await db.execute(
+            text("SELECT twilio_call_sid, human_participant_call_sid, handoff_state FROM calls WHERE id = :id"),
+            {"id": call_id},
+        )
+        call = row_to_dict(result.first())
+        if call is None:
+            return {"success": False, "error": "call_not_found"}
+        left_sid = data.get("CallSid") or data.get("ParticipantCallSid") or data.get("ParticipantSid") or ""
+        # Either real participant leaving ends the human<->human conversation.
+        is_principal = left_sid and left_sid in {
+            call.get("twilio_call_sid"),
+            call.get("human_participant_call_sid"),
+        }
+        if is_principal and call.get("handoff_state") in _LIVE_HANDOFF_STATES:
+            await _close_call(db, call_id=call_id)
+            await db.commit()
+            return {"success": True, "closed": True}
+
     return {"success": True}
 
 
@@ -234,6 +330,6 @@ async def reconcile_stale_calls() -> None:
                 continue
             status = twilio_call.get("status")
             if status in _FINAL_TWILIO_STATUSES:
-                await _apply_final_status(db, sid, status, twilio_call.get("duration"))
+                await _close_call(db, call_id=row["id"], twilio_status_value=status, duration=twilio_call.get("duration"))
         if rows:
             await db.commit()

@@ -275,15 +275,23 @@ async def complete_wrap_up(call_id: int, db: AsyncSession = Depends(get_db)) -> 
 
 
 @router.post("/{call_id}/payer-conference-twiml")
-async def payer_conference_twiml(call_id: int, db: AsyncSession = Depends(get_db)) -> Response:
+async def payer_conference_twiml(call_id: int, request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     call = await _get_call(db, call_id)
     if call is None:
         raise HTTPException(status_code=404, detail="Call not found")
     conference_name = call.get("conference_name") or f"cadence-{call_id}"
+    # statusCallback is what makes a phone-side hangup visible immediately:
+    # post-handoff the payer lives in this conference, so leave/end events here
+    # are the end signal. Declared on the payer leg (first in, longest-lived) —
+    # Twilio fires conference events once regardless of participant count.
+    status_callback = f"{_public_base_url(request)}/twilio-conference-status?callId={call_id}"
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Dial>
-    <Conference startConferenceOnEnter="true" endConferenceOnExit="false">{escape(conference_name)}</Conference>
+    <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
+                statusCallback="{escape(status_callback)}"
+                statusCallbackEvent="start end join leave"
+                statusCallbackMethod="POST">{escape(conference_name)}</Conference>
   </Dial>
 </Response>"""
     return Response(content=xml, media_type="application/xml")

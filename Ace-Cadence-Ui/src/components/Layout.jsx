@@ -117,6 +117,7 @@ export default function Layout({ onLogout }) {
         </main>
       </div>
 
+      <HandoffNotifier />
       <ClaimUserRoutingDrawer open={routingDrawerOpen} onClose={() => setRoutingDrawerOpen(false)} />
     </div>
   );

@@ -3,16 +3,18 @@ import hashlib
 import hmac
 import json
 import time
+import urllib.error
 import urllib.parse
-from datetime import datetime, timezone
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from html import escape
 
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.db import get_db
-from common.serialize import row_to_dict
+from common.db import get_db, AsyncSessionLocal
+from common.serialize import row_to_dict, rows_to_dicts
 
 from ..config import settings
 from .calls import _claim_context, _dynamic_vars
@@ -170,16 +172,68 @@ async def call_ended(request: Request, db: AsyncSession = Depends(get_db)) -> di
     return {"success": True}
 
 
+_FINAL_TWILIO_STATUSES = {"completed", "failed", "busy", "no-answer", "canceled"}
+
+
+async def _apply_final_status(db: AsyncSession, sid: str, twilio_status_value: str, duration: str | None) -> None:
+    final = "completed" if twilio_status_value == "completed" else "failed"
+    await db.execute(
+        text("UPDATE calls SET status = :final, completed_at = COALESCE(completed_at, :now), duration = COALESCE(duration, :duration) WHERE twilio_call_sid = :sid"),
+        {"sid": sid, "final": final, "now": _now(), "duration": duration},
+    )
+
+
 @router.post("/twilio-status")
 async def twilio_status(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     data = await _form(request)
     sid = data.get("CallSid")
     status = data.get("CallStatus")
-    if sid and status in {"completed", "failed", "busy", "no-answer", "canceled"}:
-        final = "completed" if status == "completed" else "failed"
-        await db.execute(
-            text("UPDATE calls SET status = :final, completed_at = COALESCE(completed_at, :now), duration = COALESCE(duration, :duration) WHERE twilio_call_sid = :sid"),
-            {"sid": sid, "final": final, "now": _now(), "duration": data.get("CallDuration")},
-        )
+    if sid and status in _FINAL_TWILIO_STATUSES:
+        await _apply_final_status(db, sid, status, data.get("CallDuration"))
         await db.commit()
     return {"success": True}
+
+
+def _twilio_get_call_status(sid: str) -> dict:
+    """GET the live Twilio Call resource. Used only as a reconcile fallback —
+    the StatusCallback webhook above is the primary path."""
+    req = urllib.request.Request(
+        f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Calls/{urllib.parse.quote(sid)}.json",
+        headers={"Authorization": "Basic " + base64.b64encode(f"{settings.twilio_account_sid}:{settings.twilio_auth_token}".encode()).decode()},
+    )
+    with urllib.request.urlopen(req, timeout=15) as response:
+        return json.loads(response.read().decode())
+
+
+async def reconcile_stale_calls() -> None:
+    """Self-healing safety net for calls stuck as 'initiating'/'in_progress'
+    when a Twilio StatusCallback was missed (nginx blip, network drop, call
+    killed manually). Twilio is the source of truth here, not our webhook
+    delivery. Runs on a timer from main.py's startup task, well inside the
+    30-minute staleness window the UI otherwise falls back to."""
+    if not (settings.twilio_account_sid and settings.twilio_auth_token):
+        return
+    async with AsyncSessionLocal() as db:
+        cutoff = _now() - timedelta(minutes=3)
+        result = await db.execute(
+            text(
+                "SELECT id, twilio_call_sid FROM calls "
+                "WHERE status IN ('initiating', 'in_progress') AND twilio_call_sid IS NOT NULL "
+                "AND started_at <= :cutoff"
+            ),
+            {"cutoff": cutoff},
+        )
+        rows = rows_to_dicts(result)
+        for row in rows:
+            sid = row["twilio_call_sid"]
+            try:
+                twilio_call = _twilio_get_call_status(sid)
+            except urllib.error.HTTPError:
+                continue
+            except Exception:
+                continue
+            status = twilio_call.get("status")
+            if status in _FINAL_TWILIO_STATUSES:
+                await _apply_final_status(db, sid, status, twilio_call.get("duration"))
+        if rows:
+            await db.commit()

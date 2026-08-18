@@ -106,16 +106,11 @@ export const listRecent = query({
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject || 'default';
     const limit = args.limit ?? 20;
-    const calls = (await ctx.db
+    const calls = await ctx.db
       .query('calls')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
-      .collect())
-      .sort((a, b) => {
-        const aTime = new Date(a.startedAt || a.completedAt || a._creationTime).getTime();
-        const bTime = new Date(b.startedAt || b.completedAt || b._creationTime).getTime();
-        return bTime - aTime;
-      })
-      .slice(0, limit);
+      .order('desc')
+      .take(limit);
 
     const enriched = await Promise.all(
       calls.map(async (call) => {

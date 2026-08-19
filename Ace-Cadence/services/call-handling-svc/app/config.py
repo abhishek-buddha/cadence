@@ -14,6 +14,10 @@ class Settings(CommonSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_agent_id: str = ""
     elevenlabs_agent_phone_number_id: str = ""
+    # Shared secret for verifying ElevenLabs post-call webhooks. Already present
+    # in the AWS env (ELEVENLABS_WEBHOOK_SECRET); nothing consumed it until the
+    # /elevenlabs-webhook route was ported.
+    elevenlabs_webhook_secret: str = ""
 
 
 settings = Settings()

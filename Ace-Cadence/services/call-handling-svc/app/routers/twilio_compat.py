@@ -103,11 +103,31 @@ async def twiml_softphone_outgoing(request: Request) -> Response:
         form = await _form(request)
         call_id = form.get("callId") or ""
     conference_name = f"cadence-{call_id}"
+    # statusCallback here as well as on the payer leg — Render declares it on
+    # both, so a conference still reports leave/end if the operator's leg is the
+    # one that survives (e.g. payer redirect raced or failed).
+    status_callback = f"{settings.public_base_url.rstrip('/')}/twilio-conference-status?callId={call_id}"
     xml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Dial>
-    <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false">{escape(conference_name)}</Conference>
+    <Conference startConferenceOnEnter="true" endConferenceOnExit="true" beep="false"
+                statusCallback="{escape(status_callback)}"
+                statusCallbackEvent="start end join leave"
+                statusCallbackMethod="POST">{escape(conference_name)}</Conference>
   </Dial>
+</Response>'''
+    return Response(content=xml, media_type="application/xml")
+
+
+@router.api_route("/twiml-conference-hold", methods=["GET", "POST"])
+async def twiml_conference_hold() -> Response:
+    """Hold audio (the conference waitUrl) played to the payer's rep while they
+    wait for a Cadence operator to accept. Without this Twilio falls back to its
+    default hold music, which sounds nothing like a billing office."""
+    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Please hold. Connecting you to a specialist now.</Say>
+  <Play loop="0">https://sdk.twilio.com/js/client/sounds/releases/1.0.0/ringtone.mp3</Play>
 </Response>'''
     return Response(content=xml, media_type="application/xml")
 

@@ -284,14 +284,24 @@ async def payer_conference_twiml(call_id: int, request: Request, db: AsyncSessio
     # post-handoff the payer lives in this conference, so leave/end events here
     # are the end signal. Declared on the payer leg (first in, longest-lived) —
     # Twilio fires conference events once regardless of participant count.
-    status_callback = f"{_public_base_url(request)}/twilio-conference-status?callId={call_id}"
+    base = _public_base_url(request)
+    status_callback = f"{base}/twilio-conference-status?callId={call_id}"
+    # record-from-start captures the human<->human portion for QA/audit. Twilio
+    # records the conference once no matter how many participants ask for it, so
+    # it is declared here (payer leg) only. recordingStatusCallback fires once
+    # when the file is ready — see routers/recordings.py.
+    recording_callback = f"{base}/twilio-recording-status?callId={call_id}"
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Dial>
     <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
+                waitUrl="{escape(base)}/twiml-conference-hold" beep="false"
                 statusCallback="{escape(status_callback)}"
                 statusCallbackEvent="start end join leave"
-                statusCallbackMethod="POST">{escape(conference_name)}</Conference>
+                statusCallbackMethod="POST"
+                record="record-from-start"
+                recordingStatusCallback="{escape(recording_callback)}"
+                recordingStatusCallbackEvent="completed">{escape(conference_name)}</Conference>
   </Dial>
 </Response>"""
     return Response(content=xml, media_type="application/xml")

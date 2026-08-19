@@ -147,6 +147,9 @@ function handoffCallToLegacy(row) {
     handoffToken: row.handoff_token,
     aiRecordingPath: row.ai_recording_path,
     humanRecordingPath: row.human_recording_path,
+    // The recording players gate on `recordingUrl`; without this mapping the
+    // Twilio conference recording existed in the DB but never rendered.
+    recordingUrl: row.recording_path,
     wrapUpCompletedAt: row.wrap_up_completed_at,
     insuranceCompany: row.insurance_company,
     claimNumber: row.claim_number,
@@ -244,6 +247,19 @@ async function routingAgents() {
     availability: row.availability,
     activeCall: handoffCallToLegacy(row.activeCall),
   }));
+}
+
+// Recording playback URLs. Both providers' media URLs need a secret to fetch
+// (Twilio Basic auth / ElevenLabs xi-api-key), so playback goes through our own
+// same-origin proxy endpoints rather than linking upstream directly.
+async function getRecordingUrls(callId) {
+  if (!callId) return null;
+  const id = Number(callId);
+  const call = callToLegacy(await request(`/calls/${id}`));
+  return {
+    aiUrl: call?.elevenLabsConversationId ? `/elevenlabs-recording-media?callId=${id}` : null,
+    humanUrl: call?.humanRecordingPath || call?.recordingUrl ? `/twilio-recording-media?callId=${id}` : null,
+  };
 }
 
 async function getClaimWithDetails(id) {
@@ -463,7 +479,7 @@ async function executeQuery(name, args) {
   if (name === 'insuranceContacts.getById') return insuranceToLegacy(await request(`/master-data/insurance-contacts/${Number(args.id)}`));
   if (name === 'providers.list') return (await request('/master-data/providers')).map(providerToLegacy);
   if (name === 'calls.listRecent') return (await request('/calls')).map(callToLegacy).slice(0, args?.limit || 50);
-  if (name === 'calls.getRecordingUrls') return null;
+  if (name === 'calls.getRecordingUrls') return getRecordingUrls(args?.callId);
   if (name === 'callResults.listLatestByUser') return listLatestResultsByClaim();
   if (name === 'handoff.listAwaitingHandoff') return (await request('/handoff/awaiting')).map(handoffCallToLegacy);
   if (name === 'handoff.listLive') return (await request('/handoff/live')).map(handoffCallToLegacy);

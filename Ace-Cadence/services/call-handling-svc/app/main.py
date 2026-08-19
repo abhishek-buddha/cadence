@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from common.health import router as health_router
 
-from .routers import call_events, call_results, call_sessions, call_settings, calls, claims, handoff, twilio_compat
+from .routers import call_events, call_results, call_sessions, call_settings, calls, claims, elevenlabs_webhook, handoff, recordings, twilio_compat
 from .routers.twilio_compat import reconcile_stale_calls
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,8 @@ app.include_router(call_events.router)
 app.include_router(call_settings.router)
 app.include_router(handoff.router)
 app.include_router(twilio_compat.router)
+app.include_router(recordings.router)
+app.include_router(elevenlabs_webhook.router)
 
 
 @app.on_event("startup")

@@ -18,6 +18,13 @@ class Settings(CommonSettings):
     # in the AWS env (ELEVENLABS_WEBHOOK_SECRET); nothing consumed it until the
     # /elevenlabs-webhook route was ported.
     elevenlabs_webhook_secret: str = ""
+    # Post-call transcript extraction. Already in the AWS env (OPENAI_API_KEY);
+    # unused until the analysis pipeline was ported.
+    openai_api_key: str = ""
+    # Kept identical to the Render baseline's model by default. Overridable via
+    # OPENAI_MODEL so a wrong/retired model id can be corrected in env without a
+    # redeploy — a bad id fails every extraction with a 400.
+    openai_model: str = "gpt-5.2"
 
 
 settings = Settings()

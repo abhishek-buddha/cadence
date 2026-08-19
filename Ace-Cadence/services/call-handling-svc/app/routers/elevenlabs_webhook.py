@@ -30,6 +30,7 @@ from common.db import get_db
 from common.serialize import row_to_dict
 
 from ..config import settings
+from .analysis import analyze_call
 from .twilio_compat import _close_call
 
 logger = logging.getLogger(__name__)
@@ -177,7 +178,18 @@ async def elevenlabs_webhook(request: Request, db: AsyncSession = Depends(get_db
     await _close_call(db, call_id=call_id, twilio_status_value="completed", duration=duration)
     await db.commit()
 
+    # Extraction + outcome classification. Best-effort: the transcript is already
+    # committed above, so a bad OpenAI response must not cost us the transcript
+    # or make ElevenLabs retry the webhook. Re-runnable via
+    # POST /calls/{id}/analyze.
+    analyzed = None
+    if transcript:
+        try:
+            analyzed = (await analyze_call(db, call_id))["outcome"]
+        except Exception as exc:
+            logger.warning("post-call analysis failed for call %s: %s", call_id, exc)
+
     return Response(
-        content=json.dumps({"success": True, "callId": call_id}),
+        content=json.dumps({"success": True, "callId": call_id, "outcome": analyzed}),
         media_type="application/json",
     )

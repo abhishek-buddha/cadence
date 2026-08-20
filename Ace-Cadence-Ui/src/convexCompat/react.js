@@ -199,6 +199,14 @@ function callToLegacy(row) {
     assignedAgentEmail: row.assigned_agent_email,
     humanTranscript: row.human_transcript,
     linkedClaimIds: toArray(row.linked_claim_ids).map(String),
+    // Recording paths belong here as well as in handoffCallToLegacy. They were
+    // only added to the handoff mapper, so the operator screen (fed by
+    // /handoff/*) played the Twilio recording while Claim History (fed by
+    // /calls through getClaimWithDetails) reported it as still processing —
+    // same call, same DB row, two mappers disagreeing.
+    recordingUrl: row.recording_path,
+    aiRecordingPath: row.ai_recording_path,
+    humanRecordingPath: row.human_recording_path,
   };
 }
 

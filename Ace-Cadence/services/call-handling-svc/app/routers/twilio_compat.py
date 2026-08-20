@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import time
 import urllib.error
 import urllib.parse
@@ -18,8 +19,11 @@ from common.serialize import row_to_dict, rows_to_dicts
 
 from ..config import settings
 from ..invalidate import publish_invalidation
+from .analysis import analyze_call
 from .calls import _claim_context, _dynamic_vars
 from .handoff import find_available_operator
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["twilio-compat"])
 
@@ -145,7 +149,15 @@ async def call_metadata(callId: int, db: AsyncSession = Depends(get_db)) -> dict
         "callId": callId,
         "claimId": call["claim_id"],
         "dynamic_variables": _dynamic_vars(row, callId, call.get("handoff_token") or ""),
-        "conversation_config_override": {"turn": {"silence_end_call_timeout": -1}},
+        # turn_timeout is why the agent talks into silence ("Are you still
+        # there?") and appears to speak before the IVR: ElevenLabs waits this
+        # long for caller speech and then makes the agent generate a turn
+        # regardless of what the prompt says. On this agent it is 10s, which is
+        # shorter than an IVR greeting and far shorter than a hold queue.
+        # Raised per-call here rather than by editing the shared agent config.
+        "conversation_config_override": {
+            "turn": {"silence_end_call_timeout": -1, "turn_timeout": 300},
+        },
     }
 
 
@@ -233,7 +245,25 @@ async def call_artifacts(request: Request, db: AsyncSession = Depends(get_db)) -
     await db.commit()
     if result.rowcount:
         await publish_invalidation("call", call_id)
-    return {"ok": True, "callId": call_id}
+
+    # Run the extraction here, not only from /elevenlabs-webhook.
+    #
+    # The webhook fires only if the ElevenLabs agent is configured to POST to
+    # us, which it is not — so nothing ever populated call_results and the UI
+    # sat on "No call results yet. Initiate a call to get AI-extracted claim
+    # data." even after a completed call. This is the reliable trigger on AWS:
+    # the bridge reports the transcript at cleanup, which is the moment we first
+    # have something to analyse.
+    #
+    # Best-effort and idempotence-guarded: the transcript is already committed
+    # above, and analyze_call is safe to skip if another path got there first.
+    analyzed = None
+    if transcript:
+        try:
+            analyzed = (await analyze_call(db, int(call_id)))["outcome"]
+        except Exception as exc:
+            logger.warning("post-call analysis failed for call %s: %s", call_id, exc)
+    return {"ok": True, "callId": call_id, "outcome": analyzed}
 
 
 @router.api_route("/call-hold-start", methods=["GET", "POST"])

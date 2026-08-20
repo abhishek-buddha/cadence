@@ -17,6 +17,7 @@ from common.db import get_db, AsyncSessionLocal
 from common.serialize import row_to_dict, rows_to_dicts
 
 from ..config import settings
+from ..invalidate import publish_invalidation
 from .calls import _claim_context, _dynamic_vars
 
 router = APIRouter(tags=["twilio-compat"])
@@ -147,6 +148,44 @@ async def call_metadata(callId: int, db: AsyncSession = Depends(get_db)) -> dict
     }
 
 
+async def _find_available_operator(db: AsyncSession) -> dict | None:
+    """Pick the operator a new handoff should be offered to.
+
+    Port of Render's `findAvailableRoutingAgent`: the earliest-created operator
+    who isn't already on a live call. AWS never assigned anyone, which is why
+    every operator showed as "available" in Claim User Routing and no toast ever
+    named an assignee. `accept_handoff` already refuses a mismatched agent, so
+    stamping the assignment here is what actually routes the call.
+
+    "Busy" mirrors Render's isRoutingCallActive: not completed/failed, started
+    within the same 6h staleness window used by /handoff/live, and either a live
+    call status or a live handoff state.
+    """
+    result = await db.execute(
+        text(
+            """
+            SELECT u.id, u.email, COALESCE(u.name, u.email) AS display_name
+            FROM users u
+            WHERE u.role = 'operator' AND u.status <> 'disabled'
+              AND NOT EXISTS (
+                SELECT 1 FROM calls c
+                WHERE c.assigned_agent_user_id = u.id
+                  AND c.status NOT IN ('completed', 'failed')
+                  AND c.completed_at IS NULL
+                  AND c.started_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 6 HOUR)
+                  AND (
+                    c.status IN ('initiating', 'in_progress')
+                    OR c.handoff_state IN ('awaiting_human', 'accepting', 'connected')
+                  )
+              )
+            ORDER BY u.id
+            LIMIT 1
+            """
+        )
+    )
+    return row_to_dict(result.first())
+
+
 @router.post("/twilio-request-handoff")
 @router.get("/twilio-request-handoff")
 async def request_handoff(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
@@ -158,22 +197,73 @@ async def request_handoff(request: Request, db: AsyncSession = Depends(get_db)) 
     existing = await db.execute(text("SELECT id FROM calls WHERE id = :id"), {"id": int(call_id)})
     if row_to_dict(existing.first()) is None:
         return {"ok": False, "error": "call_not_found", "callId": call_id}
+    agent = await _find_available_operator(db)
+    # A human answering ends the hold. hold_duration is derived here rather than
+    # sent by the bridge so the clock is always the DB's, and TIMESTAMPDIFF
+    # leaves it NULL when no hold was ever recorded.
     await db.execute(
         text("""
         UPDATE calls
         SET handoff_state = 'awaiting_human', handoff_requested_at = :now,
             human_detected_at = COALESCE(human_detected_at, :now), handoff_reason = :reason,
-            conference_name = COALESCE(conference_name, :conference)
+            conference_name = COALESCE(conference_name, :conference),
+            call_phase = 'connecting',
+            hold_duration = COALESCE(hold_duration, TIMESTAMPDIFF(SECOND, hold_started_at, :now)),
+            assigned_agent_user_id = COALESCE(assigned_agent_user_id, :agent_id),
+            assigned_agent_email = COALESCE(assigned_agent_email, :agent_email),
+            assigned_agent_name = COALESCE(assigned_agent_name, :agent_name)
         WHERE id = :id AND (handoff_state IS NULL OR handoff_state NOT IN ('awaiting_human', 'accepting', 'connected', 'handoff_ended'))
         """),
-        {"id": int(call_id), "now": _now(), "reason": reason, "conference": f"cadence-{call_id}"},
+        {
+            "id": int(call_id), "now": _now(), "reason": reason,
+            "conference": f"cadence-{call_id}",
+            "agent_id": agent["id"] if agent else None,
+            "agent_email": agent["email"] if agent else None,
+            "agent_name": agent["display_name"] if agent else None,
+        },
+    )
+    detail = (
+        f"{reason}; assigned to {agent['display_name']}" if agent else f"{reason}; no available agent"
     )
     await db.execute(
         text("INSERT INTO call_events (call_id, type, message, timestamp) VALUES (:id, 'handoff_requested', :reason, :now)"),
-        {"id": int(call_id), "reason": reason, "now": _now()},
+        {"id": int(call_id), "reason": detail, "now": _now()},
     )
     await db.commit()
-    return {"ok": True, "callId": call_id}
+    await publish_invalidation("call", call_id)
+    return {"ok": True, "callId": call_id, "assignedTo": agent["display_name"] if agent else None}
+
+
+@router.api_route("/call-hold-start", methods=["GET", "POST"])
+async def call_hold_start(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """Bridge reports that the payer IVR announced a transfer/hold.
+
+    This is the only way hold metrics can be captured on AWS: Render measured
+    hold via its `/twiml-hold-loop` TwiML, which cannot exist here because
+    `<Connect><Stream>` is terminal (see the notes' parity section). The bridge
+    is watching the transcript anyway, so it is the one component that knows
+    when hold started. Without this, /reports/hold-metrics has no data at all.
+    """
+    call_id = request.query_params.get("callId") or request.query_params.get("call_id")
+    if not call_id:
+        return {"ok": False, "error": "missing_call_id"}
+    result = await db.execute(
+        text(
+            "UPDATE calls SET call_phase = 'hold', hold_started_at = COALESCE(hold_started_at, :now) "
+            "WHERE id = :id AND hold_started_at IS NULL"
+        ),
+        {"id": int(call_id), "now": _now()},
+    )
+    if result.rowcount:
+        await db.execute(
+            text(
+                "INSERT INTO call_events (call_id, type, message, timestamp) "
+                "VALUES (:id, 'hold_started', 'payer IVR announced transfer/hold', :now)"
+            ),
+            {"id": int(call_id), "now": _now()},
+        )
+    await db.commit()
+    return {"ok": True, "callId": call_id, "recorded": bool(result.rowcount)}
 
 
 @router.post("/call-ended")
@@ -210,7 +300,7 @@ async def _close_call(
     call_id: int | None = None,
     twilio_status_value: str = "completed",
     duration: str | None = None,
-) -> bool:
+) -> int | None:
     """The single path every call-end signal routes through — the payer leg's
     StatusCallback, the conference status callback, and the reconcile loop.
 
@@ -218,14 +308,17 @@ async def _close_call(
     a live handoff. Doing only the former (the previous behavior here) left
     handoff_state stuck at connected/awaiting_human, so the operator queue and
     handoff timeline never noticed the call was over.
+
+    Returns the affected call id, or None when no call matched — callers use it
+    to publish a UI invalidation for the right call.
     """
     if call_id is None:
         if not sid:
-            return False
+            return None
         result = await db.execute(text("SELECT id FROM calls WHERE twilio_call_sid = :sid"), {"sid": sid})
         row = row_to_dict(result.first())
         if row is None:
-            return False
+            return None
         call_id = row["id"]
 
     final = "completed" if twilio_status_value == "completed" else "failed"
@@ -251,7 +344,7 @@ async def _close_call(
             ),
             {"id": call_id, "message": f"call ended ({twilio_status_value})", "now": _now()},
         )
-    return True
+    return call_id
 
 
 @router.post("/twilio-status")
@@ -260,8 +353,10 @@ async def twilio_status(request: Request, db: AsyncSession = Depends(get_db)) ->
     sid = data.get("CallSid")
     status = data.get("CallStatus")
     if sid and status in _FINAL_TWILIO_STATUSES:
-        await _close_call(db, sid=sid, twilio_status_value=status, duration=data.get("CallDuration"))
+        closed_id = await _close_call(db, sid=sid, twilio_status_value=status, duration=data.get("CallDuration"))
         await db.commit()
+        if closed_id:
+            await publish_invalidation("call", closed_id)
     return {"success": True}
 
 
@@ -286,6 +381,7 @@ async def twilio_conference_status(request: Request, db: AsyncSession = Depends(
     if event == "conference-end":
         await _close_call(db, call_id=call_id)
         await db.commit()
+        await publish_invalidation("call", call_id)
         return {"success": True, "closed": True}
 
     if event == "participant-leave":
@@ -305,6 +401,7 @@ async def twilio_conference_status(request: Request, db: AsyncSession = Depends(
         if is_principal and call.get("handoff_state") in _LIVE_HANDOFF_STATES:
             await _close_call(db, call_id=call_id)
             await db.commit()
+            await publish_invalidation("call", call_id)
             return {"success": True, "closed": True}
 
     return {"success": True}

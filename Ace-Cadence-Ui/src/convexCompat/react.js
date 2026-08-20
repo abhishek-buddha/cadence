@@ -2,6 +2,70 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // Compatibility shim for legacy Convex-shaped screens during REST migration.
 
+// ---------------------------------------------------------------------------
+// Live invalidation over /ws/updates.
+//
+// Convex pushed query results to every open tab. The REST port replaced that
+// with a 3s poll on a *subset* of queries (see `shouldPoll`), which left every
+// other screen — claims list, call history, dashboards — frozen at whatever it
+// read when it mounted. The backend already had both halves of the intended
+// "invalidate + refetch" design (ui-data-loading-svc's POST /invalidate and its
+// /ws/updates Redis relay); nothing published and nothing subscribed. This is
+// the subscriber.
+//
+// Any invalidation bumps one shared counter and every mounted query refetches.
+// That is deliberately coarser than per-entity invalidation: at this app's scale
+// a refetch of the mounted screens costs less than the bookkeeping to target
+// them, and being coarse cannot go stale the way a missed mapping would.
+// Bursts are coalesced so a flurry of writes causes one refetch, not ten.
+// ---------------------------------------------------------------------------
+const REVALIDATE_COALESCE_MS = 300;
+const WS_RECONNECT_MS = 5000;
+
+let liveTick = 0;
+const liveSubscribers = new Set();
+let liveSocket = null;
+let coalesceTimer = null;
+
+function notifySubscribers() {
+  liveTick += 1;
+  for (const notify of liveSubscribers) notify(liveTick);
+}
+
+function scheduleRevalidate() {
+  if (coalesceTimer) return;
+  coalesceTimer = setTimeout(() => {
+    coalesceTimer = null;
+    notifySubscribers();
+  }, REVALIDATE_COALESCE_MS);
+}
+
+function ensureLiveSocket() {
+  if (typeof window === 'undefined' || liveSocket) return;
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  let socket;
+  try {
+    socket = new WebSocket(`${protocol}//${window.location.host}/ws/updates`);
+  } catch {
+    return; // no live updates; polling still covers the live screens
+  }
+  liveSocket = socket;
+  socket.onmessage = scheduleRevalidate;
+  const retry = () => {
+    if (liveSocket === socket) liveSocket = null;
+    // Only keep retrying while something is actually on screen.
+    if (liveSubscribers.size > 0) setTimeout(ensureLiveSocket, WS_RECONNECT_MS);
+  };
+  socket.onclose = retry;
+  socket.onerror = () => socket.close();
+}
+
+function subscribeToLiveUpdates(notify) {
+  liveSubscribers.add(notify);
+  ensureLiveSocket();
+  return () => liveSubscribers.delete(notify);
+}
+
 async function request(path, { method = 'GET', body, params } = {}) {
   const url = new URL(`/api${path}`, window.location.origin);
   if (params) {
@@ -555,6 +619,14 @@ export function useQuery(fn, args) {
     const timer = setInterval(() => setRefreshTick((value) => value + 1), 3000);
     return () => clearInterval(timer);
   }, [shouldPoll, key]);
+
+  // Refetch when the backend says something changed. Polling above is kept as
+  // the safety net for the live handoff screens, so losing the socket degrades
+  // to the previous behavior rather than breaking them.
+  useEffect(() => {
+    if (!name || args === 'skip') return undefined;
+    return subscribeToLiveUpdates(() => setRefreshTick((value) => value + 1));
+  }, [name, key]);
 
   useEffect(() => {
     alive.current = true;

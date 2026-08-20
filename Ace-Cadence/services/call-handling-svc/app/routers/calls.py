@@ -14,6 +14,7 @@ from common.db import get_db
 from common.serialize import from_json, row_to_dict, rows_to_dicts, to_json
 
 from ..config import settings
+from ..invalidate import publish_invalidation
 
 router = APIRouter(prefix="/calls", tags=["calls"])
 
@@ -282,10 +283,13 @@ async def initiate_call(body: dict, db: AsyncSession = Depends(get_db)) -> dict:
             await db.execute(text("UPDATE claims SET status = 'in_progress' WHERE id = :id"), {"id": claim_id})
         await db.execute(text("UPDATE claim_followups SET last_called_at = :now WHERE claim_id = :id"), {"id": claim_id, "now": _now()})
         await db.commit()
+        await publish_invalidation("call", call_id)
+        await publish_invalidation("claim", claim_id)
         return {"success": True, "callId": call_id, "mode": mode}
     except Exception as exc:
         await _mark_failed(db, call_id, str(exc))
         await db.commit()
+        await publish_invalidation("call", call_id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 @router.patch("/{call_id}")

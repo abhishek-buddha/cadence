@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.db import get_db
 from common.serialize import from_json, row_to_dict, rows_to_dicts
 
+from ..invalidate import publish_invalidation
+
 router = APIRouter(prefix="/handoff", tags=["handoff"])
 
 _LIVE_HANDOFF = {"awaiting_human", "accepting", "connected"}
@@ -223,6 +225,7 @@ async def accept_handoff(call_id: int, body: dict, db: AsyncSession = Depends(ge
         return {"ok": False, "reason": "already_taken"}
     await _log_event(db, call_id, "handoff_accepted", agent.get("email") if agent else body.get("agent_email"))
     await db.commit()
+    await publish_invalidation("call", call_id)
     return {"ok": True, "conferenceName": f"cadence-{call_id}"}
 
 
@@ -245,6 +248,7 @@ async def mark_connected(call_id: int, db: AsyncSession = Depends(get_db)) -> di
         return {"ok": False, "reason": "unexpected_state"}
     await _log_event(db, call_id, "handoff_connected", "browser softphone bridged")
     await db.commit()
+    await publish_invalidation("call", call_id)
     return {"ok": True}
 
 
@@ -258,6 +262,7 @@ async def end_handoff(call_id: int, db: AsyncSession = Depends(get_db)) -> dict:
         return {"ok": False, "reason": "not_found"}
     await _log_event(db, call_id, "handoff_ended", "ended_by_operator")
     await db.commit()
+    await publish_invalidation("call", call_id)
     return {"ok": True}
 
 
@@ -271,6 +276,7 @@ async def complete_wrap_up(call_id: int, db: AsyncSession = Depends(get_db)) -> 
         return {"ok": False, "reason": "not_found"}
     await _log_event(db, call_id, "wrap_up_completed", "operator marked call complete")
     await db.commit()
+    await publish_invalidation("call", call_id)
     return {"ok": True}
 
 

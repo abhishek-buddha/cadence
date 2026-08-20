@@ -41,6 +41,7 @@ from common.serialize import row_to_dict, to_json
 
 from ..config import settings
 from ..constants import validate_status_transition
+from ..invalidate import publish_invalidation
 from ..outcome_classifier import classify_medical_call_outcome
 
 logger = logging.getLogger(__name__)
@@ -347,6 +348,9 @@ async def analyze_call(db: AsyncSession, call_id: int) -> dict:
         payload_summary=f"outcome={classification['outcome']}",
     )
     await db.commit()
+    # Outcome + claim status both moved: refresh call and claim views.
+    await publish_invalidation("call", call_id)
+    await publish_invalidation("claim", call["claim_id"])
 
     return {
         "callId": call_id,

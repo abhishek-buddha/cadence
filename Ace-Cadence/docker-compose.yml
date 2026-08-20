@@ -60,6 +60,13 @@ services:
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
       ELEVENLABS_AGENT_ID: ${ELEVENLABS_AGENT_ID}
       ELEVENLABS_AGENT_PHONE_NUMBER_ID: ${ELEVENLABS_AGENT_PHONE_NUMBER_ID}
+      # Signing secret for the post-call webhook. /elevenlabs-webhook refuses
+      # every delivery with 401 when this is unset — deliberately, since it
+      # verifies the HMAC — so it must reach the container, not just .env.
+      ELEVENLABS_WEBHOOK_SECRET: ${ELEVENLABS_WEBHOOK_SECRET}
+      # Overridable so a wrong/retired OpenAI model id can be corrected in env
+      # without a redeploy; defaults to the Render baseline's model.
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.2}
     depends_on: [redis]
     extra_hosts:
       - "host.docker.internal:host-gateway"

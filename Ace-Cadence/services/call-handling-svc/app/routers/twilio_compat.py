@@ -326,10 +326,31 @@ async def _close_call(
     final = "completed" if twilio_status_value == "completed" else "failed"
     await db.execute(
         text(
-            "UPDATE calls SET status = :final, completed_at = COALESCE(completed_at, :now), "
-            "duration = COALESCE(duration, :duration) WHERE id = :id AND completed_at IS NULL"
+            "UPDATE calls SET status = :final, completed_at = COALESCE(completed_at, :now) "
+            "WHERE id = :id AND completed_at IS NULL"
         ),
-        {"id": call_id, "final": final, "now": _now(), "duration": duration},
+        {"id": call_id, "final": final, "now": _now()},
+    )
+    # Duration is settled separately from the status, NOT in the same
+    # first-close-wins statement.
+    #
+    # Several signals race to close a call and only some carry a duration: the
+    # conference status callback (participant-leave) usually lands first with
+    # none, and the payer leg's own StatusCallback arrives later carrying
+    # CallDuration. Folding both into one `WHERE completed_at IS NULL` update
+    # meant the first close won and duration stayed NULL forever.
+    #
+    # Falling back to the DB's own started_at -> completed_at span means every
+    # closed call gets a duration covering the whole call (agent<->IVR, then
+    # rep<->agent, then rep<->operator), rather than only the legs Twilio
+    # happened to report.
+    await db.execute(
+        text(
+            "UPDATE calls SET duration = COALESCE(:duration, "
+            "TIMESTAMPDIFF(SECOND, started_at, COALESCE(completed_at, :now))) "
+            "WHERE id = :id AND duration IS NULL"
+        ),
+        {"id": call_id, "duration": duration, "now": _now()},
     )
     released = await db.execute(
         text(

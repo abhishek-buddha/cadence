@@ -12,6 +12,7 @@ hits us and we fetch upstream.
 """
 
 import base64
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -56,6 +57,56 @@ def _fetch_media(url: str, headers: dict[str, str]) -> tuple[bytes, str] | None:
         return None
     except Exception:
         return None
+
+
+def _media_response(audio: bytes, content_type: str, range_header: str | None) -> Response:
+    """Serve audio with real HTTP Range support.
+
+    The players were previously handed `Accept-Ranges: bytes` with a plain 200
+    and the whole body for every request, including ranged ones. An <audio>
+    element that cannot range-request can neither seek nor probe the end of the
+    file, so it reports a garbage duration (the 33:16 on a half-minute
+    recording) and its progress bar drifts out of sync with playback.
+
+    Advertising a capability we don't implement is worse than not advertising
+    it, so this actually implements it.
+    """
+    total = len(audio)
+    common = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=300"}
+
+    match = re.match(r"bytes=(\d*)-(\d*)\s*$", (range_header or "").strip()) if range_header else None
+    if match and (match.group(1) or match.group(2)):
+        start_raw, end_raw = match.group(1), match.group(2)
+        if start_raw:
+            start = int(start_raw)
+            end = int(end_raw) if end_raw else total - 1
+        else:
+            # Suffix form ("bytes=-500") — the trailing N bytes.
+            start = max(0, total - int(end_raw))
+            end = total - 1
+        end = min(end, total - 1)
+        if start > end or start >= total:
+            return Response(
+                status_code=416,
+                headers={"Content-Range": f"bytes */{total}", **common},
+            )
+        chunk = audio[start : end + 1]
+        return Response(
+            content=chunk,
+            status_code=206,
+            media_type=content_type,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{total}",
+                "Content-Length": str(len(chunk)),
+                **common,
+            },
+        )
+
+    return Response(
+        content=audio,
+        media_type=content_type,
+        headers={"Content-Length": str(total), **common},
+    )
 
 
 def _is_allowed_media_url(raw_url: str, allowed_host_suffix: str) -> bool:
@@ -150,7 +201,7 @@ async def twilio_transcription(request: Request, db: AsyncSession = Depends(get_
 
 
 @router.get("/twilio-recording-media")
-async def twilio_recording_media(callId: int, db: AsyncSession = Depends(get_db)) -> Response:
+async def twilio_recording_media(callId: int, request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     """Authenticated proxy for the Twilio conference recording."""
     result = await db.execute(
         text("SELECT recording_path, human_recording_path FROM calls WHERE id = :id"),
@@ -174,15 +225,11 @@ async def twilio_recording_media(callId: int, db: AsyncSession = Depends(get_db)
     if fetched is None:
         return Response(content="Recording fetch failed", status_code=502, media_type="text/plain")
     audio, content_type = fetched
-    return Response(
-        content=audio,
-        media_type=content_type,
-        headers={"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=300"},
-    )
+    return _media_response(audio, content_type, request.headers.get("range"))
 
 
 @router.get("/elevenlabs-recording-media")
-async def elevenlabs_recording_media(callId: int, db: AsyncSession = Depends(get_db)) -> Response:
+async def elevenlabs_recording_media(callId: int, request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     """Authenticated proxy for the ElevenLabs (AI leg) conversation audio.
 
     The UI has always pointed at this path; on Render it was served by the
@@ -209,8 +256,4 @@ async def elevenlabs_recording_media(callId: int, db: AsyncSession = Depends(get
     if fetched is None:
         return Response(content="Recording fetch failed", status_code=502, media_type="text/plain")
     audio, content_type = fetched
-    return Response(
-        content=audio,
-        media_type=content_type,
-        headers={"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=300"},
-    )
+    return _media_response(audio, content_type, request.headers.get("range"))

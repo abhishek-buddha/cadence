@@ -229,16 +229,14 @@ function CallTimelineEntry({ call, claim, isLatestHandoffCall }) {
               </span>
             )}
           </div>
-          {hasArtifacts ? (
-            expanded ? (
-              <ChevronUp className="w-4 h-4 text-muted shrink-0" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-muted shrink-0" />
-            )
-          ) : null}
+          {expanded ? (
+            <ChevronUp className="w-4 h-4 text-muted shrink-0" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-muted shrink-0" />
+          )}
         </button>
 
-        {expanded && hasArtifacts && (
+        {expanded && (
           <div className="border-t border-border px-4 py-3 space-y-4">
             {/* AI/IVR Recording — the ElevenLabs agent↔IVR leg */}
             {(recordingUrls?.aiUrl || call.elevenLabsConversationId) && (
@@ -255,8 +253,12 @@ function CallTimelineEntry({ call, claim, isLatestHandoffCall }) {
               </div>
             )}
 
-            {/* Human Agent Recording — the Twilio human↔human conference leg */}
-            {(recordingUrls?.humanUrl || call.recordingUrl) && (
+            {/* Human Agent Recording — the Twilio human↔human conference leg.
+                Only exists once a handoff actually reached an operator, and
+                Twilio delivers it a little after the call ends, so distinguish
+                "still coming" from "never happened" instead of rendering
+                nothing at all. */}
+            {(recordingUrls?.humanUrl || call.recordingUrl) ? (
               <div>
                 <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5">
                   <Mic className="w-3 h-3" /> Human Agent Recording
@@ -268,7 +270,16 @@ function CallTimelineEntry({ call, claim, isLatestHandoffCall }) {
                   className="h-9 w-full max-w-md"
                 />
               </div>
-            )}
+            ) : call.handoffState ? (
+              <div>
+                <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5">
+                  <Mic className="w-3 h-3" /> Human Agent Recording
+                </p>
+                <p className="text-xs text-muted">
+                  Twilio is still processing the conference recording — it appears here once ready.
+                </p>
+              </div>
+            ) : null}
 
             {/* AI/IVR Transcript */}
             {call.transcript && (
@@ -325,6 +336,15 @@ function CallTimelineEntry({ call, claim, isLatestHandoffCall }) {
                   )}
                 </div>
               </div>
+            )}
+
+            {/* Every call is expandable now, so say plainly when there is
+                nothing to show rather than opening onto blank space. Calls
+                placed before artifact capture existed will look like this. */}
+            {!hasArtifacts && (
+              <p className="text-xs text-muted">
+                No recording or transcript was captured for this call.
+              </p>
             )}
           </div>
         )}

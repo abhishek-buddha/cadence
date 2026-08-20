@@ -171,10 +171,15 @@ async def find_available_operator(db: AsyncSession) -> dict | None:
     were routed to someone the UI said was busy, skipping the next genuinely
     free operator.
     """
+    # Ordered exactly like list_routing_agents below (name, email), so "the top
+    # available operator" means the same thing here as in the Claim User Routing
+    # list. Render sorted by creation time, which on AWS produced the confusing
+    # result of a call going to an operator displayed *below* another free one.
+    # `id` is only a tiebreak to keep selection deterministic for duplicate names.
     users_result = await db.execute(
         text(
             "SELECT id, email, COALESCE(name, email) AS display_name FROM users "
-            "WHERE role = 'operator' AND status != 'disabled' ORDER BY id"
+            "WHERE role = 'operator' AND status != 'disabled' ORDER BY name, email, id"
         )
     )
     for user in rows_to_dicts(users_result):

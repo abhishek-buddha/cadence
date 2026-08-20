@@ -22,6 +22,17 @@ Two deliberate deviations from Render, both forced by AWS differences:
 Render also placed an automatic follow-up call to the payer's human-agent number
 at the end of this action. That is NOT ported: on Mode A a human operator is
 already being connected, so it would double-dial the payer.
+
+⚠️ THIS MODULE MUST NEVER PLACE A PHONE CALL. It is invoked automatically from
+`/call-artifacts` the moment a transcript is stored, so anything here that dials
+runs once per completed call, unattended. Render learned this the hard way — see
+the 2026-07-20 incident recorded in their `convex/crons.ts`, where a job that
+touched transcripts re-triggered real follow-up calls for days-old calls, and
+the standing warning on their `fetchAndStoreCallArtifacts`: "fetching a
+transcript must never trigger a call."
+
+If a follow-up dialer is ever wanted, it belongs on an explicit operator action
+or a deliberate endpoint — NOT downstream of transcript storage.
 """
 
 import json

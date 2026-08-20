@@ -65,12 +65,34 @@ def _merge_claim(claim: dict, followup: dict | None, patients: dict, providers: 
         "next_follow_up_date": (followup or {}).get("next_follow_up_date"),
         "follow_up_disposition": (followup or {}).get("follow_up_disposition"),
         "follow_up_comment": (followup or {}).get("follow_up_comment"),
+        "follow_up_by": (followup or {}).get("follow_up_by"),
+        "follow_up_at": (followup or {}).get("follow_up_at"),
     }
 
 
-# A disposition of complete/denied means the operator has finished with that
-# claim, so it drops out of the "still to process" list.
+# Mirrors Render's `needsProcessing` in convex/claimFollowups.ts.
+# A claim drops off the operator's "to process" list when either the operator
+# has dispositioned it complete/denied, or the claim status is already resolved.
 _PROCESSED_DISPOSITIONS = {"complete", "denied"}
+_TERMINAL_STATUSES = {"paid", "write_off"}
+# Highest priority first, then oldest date of service — Render sorts this way so
+# the operator works the most urgent siblings while the rep is still on the line.
+_PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def _needs_processing(claim: dict) -> bool:
+    if claim.get("status") in _TERMINAL_STATUSES:
+        return False
+    if claim.get("follow_up_disposition") in _PROCESSED_DISPOSITIONS:
+        return False
+    return True
+
+
+def _processing_order(claim: dict) -> tuple:
+    return (
+        _PRIORITY_RANK.get(claim.get("priority"), 3),
+        claim.get("date_of_service") or "",
+    )
 
 
 @router.get("/related-for-call/{call_id}")
@@ -131,7 +153,7 @@ async def get_related_claims_for_call(call_id: int) -> dict:
         _merge_claim(claim, followup, patients, providers, payer_name)
         for claim, followup in zip(siblings, sibling_followups)
     ]
-    open_claims = [c for c in merged if c["follow_up_disposition"] not in _PROCESSED_DISPOSITIONS]
+    open_claims = sorted((c for c in merged if _needs_processing(c)), key=_processing_order)
 
     return {
         "current_claim": _merge_claim(current, current_followup, patients, providers, payer_name),

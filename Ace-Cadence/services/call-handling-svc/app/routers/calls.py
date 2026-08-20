@@ -183,6 +183,13 @@ def _dynamic_vars(row: dict, call_id: int, handoff_token: str = "", direct: bool
         "human_agent_number": "N/A" if direct else (row.get("human_agent_number") or "N/A"),
         "bridge_number": settings.twilio_phone_number if bridge else "",
         "handoff_token": handoff_token,
+        # The deployed ElevenLabs prompt's FIRST instruction is
+        # `check call_connection_type = "{{call_connection_type}}"` and it
+        # branches on ivr_human_handoff / ivr_only_cut_at_handoff /
+        # direct_to_agent. AWS read this column for its own routing but never
+        # passed it to the agent, so the agent was resolving the literal
+        # "{{call_connection_type}}" and its very first decision ran on garbage.
+        "call_connection_type": row.get("call_connection_type") or "ivr_human_handoff",
     }
 
 

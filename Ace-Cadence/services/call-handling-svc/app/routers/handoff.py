@@ -34,18 +34,38 @@ def _decode(row: dict | None) -> dict | None:
     return row
 
 
+# Safety net, matching Render's routingStatus.ts STALE_MS: after this long an
+# unresolved call stops occupying its operator, whether it is a live call that
+# never closed or a wrap-up nobody completed. Without the wrap-up half, an
+# operator who forgets to click "Complete Call" is blocked from new calls
+# forever — see the comment in convex/lib/routingStatus.ts.
+_STALE_AFTER = timedelta(hours=2)
+
+
+def _as_datetime(value) -> datetime | None:
+    if isinstance(value, str):
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    return value
+
+
 def _is_active_call(call: dict) -> bool:
     state = call.get("handoff_state")
-    if state in _LIVE_HANDOFF:
-        return not call.get("completed_at")
+    cutoff = _now() - _STALE_AFTER
+
+    if state in _LIVE_HANDOFF and not call.get("completed_at"):
+        started_at = _as_datetime(call.get("started_at"))
+        return bool(started_at and started_at >= cutoff)
+
     if state in _WRAP_UP_HANDOFF and not call.get("wrap_up_completed_at"):
-        return True
+        # Render measures wrap-up staleness from completed_at, falling back to
+        # started_at when the call never recorded an end.
+        ended_at = _as_datetime(call.get("completed_at")) or _as_datetime(call.get("started_at"))
+        return bool(ended_at and ended_at >= cutoff)
+
     if call.get("status") not in {"initiating", "in_progress"} or call.get("completed_at"):
         return False
-    started_at = call.get("started_at")
-    if isinstance(started_at, str):
-        started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00")).replace(tzinfo=None)
-    return bool(started_at and started_at >= _now() - timedelta(hours=6))
+    started_at = _as_datetime(call.get("started_at"))
+    return bool(started_at and started_at >= cutoff)
 
 
 async def _log_event(db: AsyncSession, call_id: int, event_type: str, message: str | None = None) -> None:

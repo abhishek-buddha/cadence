@@ -19,6 +19,7 @@ from common.serialize import row_to_dict, rows_to_dicts
 from ..config import settings
 from ..invalidate import publish_invalidation
 from .calls import _claim_context, _dynamic_vars
+from .handoff import find_available_operator
 
 router = APIRouter(tags=["twilio-compat"])
 
@@ -148,44 +149,6 @@ async def call_metadata(callId: int, db: AsyncSession = Depends(get_db)) -> dict
     }
 
 
-async def _find_available_operator(db: AsyncSession) -> dict | None:
-    """Pick the operator a new handoff should be offered to.
-
-    Port of Render's `findAvailableRoutingAgent`: the earliest-created operator
-    who isn't already on a live call. AWS never assigned anyone, which is why
-    every operator showed as "available" in Claim User Routing and no toast ever
-    named an assignee. `accept_handoff` already refuses a mismatched agent, so
-    stamping the assignment here is what actually routes the call.
-
-    "Busy" mirrors Render's isRoutingCallActive: not completed/failed, started
-    within the same 6h staleness window used by /handoff/live, and either a live
-    call status or a live handoff state.
-    """
-    result = await db.execute(
-        text(
-            """
-            SELECT u.id, u.email, COALESCE(u.name, u.email) AS display_name
-            FROM users u
-            WHERE u.role = 'operator' AND u.status <> 'disabled'
-              AND NOT EXISTS (
-                SELECT 1 FROM calls c
-                WHERE c.assigned_agent_user_id = u.id
-                  AND c.status NOT IN ('completed', 'failed')
-                  AND c.completed_at IS NULL
-                  AND c.started_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 6 HOUR)
-                  AND (
-                    c.status IN ('initiating', 'in_progress')
-                    OR c.handoff_state IN ('awaiting_human', 'accepting', 'connected')
-                  )
-              )
-            ORDER BY u.id
-            LIMIT 1
-            """
-        )
-    )
-    return row_to_dict(result.first())
-
-
 @router.post("/twilio-request-handoff")
 @router.get("/twilio-request-handoff")
 async def request_handoff(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
@@ -197,7 +160,7 @@ async def request_handoff(request: Request, db: AsyncSession = Depends(get_db)) 
     existing = await db.execute(text("SELECT id FROM calls WHERE id = :id"), {"id": int(call_id)})
     if row_to_dict(existing.first()) is None:
         return {"ok": False, "error": "call_not_found", "callId": call_id}
-    agent = await _find_available_operator(db)
+    agent = await find_available_operator(db)
     # A human answering ends the hold. hold_duration is derived here rather than
     # sent by the bridge so the clock is always the DB's, and TIMESTAMPDIFF
     # leaves it NULL when no hold was ever recorded.
@@ -232,6 +195,45 @@ async def request_handoff(request: Request, db: AsyncSession = Depends(get_db)) 
     await db.commit()
     await publish_invalidation("call", call_id)
     return {"ok": True, "callId": call_id, "assignedTo": agent["display_name"] if agent else None}
+
+
+@router.post("/call-artifacts")
+async def call_artifacts(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """Bridge reports back what only it knows about a Mode A call.
+
+    For `ivr_human_handoff` the ElevenLabs conversation is opened by the bridge
+    (signed URL), so the app never learned its id, and the transcript lived only
+    in the bridge's logs. Consequences: Call History had no transcript and no AI
+    recording to play, and the analysis pipeline had nothing to analyse.
+
+    Both fields are COALESCEd, so a later ElevenLabs post-call webhook cannot be
+    overwritten by a partial report and vice versa.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    call_id = request.query_params.get("callId") or body.get("callId")
+    if not call_id:
+        return {"ok": False, "error": "missing_call_id"}
+    conversation_id = body.get("conversation_id") or body.get("conversationId")
+    transcript = body.get("transcript")
+    if not conversation_id and not transcript:
+        return {"ok": False, "error": "nothing_to_record"}
+
+    result = await db.execute(
+        text(
+            "UPDATE calls SET "
+            "eleven_labs_conversation_id = COALESCE(eleven_labs_conversation_id, :cid), "
+            "transcript = COALESCE(transcript, :transcript) "
+            "WHERE id = :id"
+        ),
+        {"id": int(call_id), "cid": conversation_id, "transcript": transcript or None},
+    )
+    await db.commit()
+    if result.rowcount:
+        await publish_invalidation("call", call_id)
+    return {"ok": True, "callId": call_id}
 
 
 @router.api_route("/call-hold-start", methods=["GET", "POST"])

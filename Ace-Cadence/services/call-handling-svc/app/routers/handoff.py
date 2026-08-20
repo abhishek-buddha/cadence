@@ -158,6 +158,32 @@ async def get_my_routing_status(user_id: int, db: AsyncSession = Depends(get_db)
     return {"user": user, "availability": availability, "activeCall": active_call}
 
 
+async def find_available_operator(db: AsyncSession) -> dict | None:
+    """Pick the operator a new handoff should be offered to: the
+    earliest-created operator who is not already occupied.
+
+    Deliberately reuses `_is_active_call` — the *same* test that
+    /handoff/routing/status uses to render availability — so the selector and
+    the Claim User Routing screen can never disagree. They did: the first
+    version of this lived in twilio_compat.py and tested only live call/handoff
+    states, so an operator in `handoff_ended` with wrap-up still outstanding
+    counted as free here while the UI correctly showed them as "wrap_up". Calls
+    were routed to someone the UI said was busy, skipping the next genuinely
+    free operator.
+    """
+    users_result = await db.execute(
+        text(
+            "SELECT id, email, COALESCE(name, email) AS display_name FROM users "
+            "WHERE role = 'operator' AND status != 'disabled' ORDER BY id"
+        )
+    )
+    for user in rows_to_dicts(users_result):
+        calls = await _list_calls(db, "c.assigned_agent_user_id = :user_id", {"user_id": user["id"]}, limit=25)
+        if not any(_is_active_call(call) for call in calls):
+            return user
+    return None
+
+
 @router.get("/routing/agents")
 async def list_routing_agents(db: AsyncSession = Depends(get_db)) -> list[dict]:
     users_result = await db.execute(text("SELECT * FROM users WHERE role = 'operator' AND status != 'disabled' ORDER BY name, email"))
@@ -303,7 +329,7 @@ async def payer_conference_twiml(call_id: int, request: Request, db: AsyncSessio
     # open with "are you still there?" instead of picking up the thread.
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Thank you for holding. I am connecting you with a Cadence specialist now. Please stay on the line.</Say>
+  <Say voice="alice">Connecting you to a specialist now.</Say>
   <Dial>
     <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
                 waitUrl="{escape(base)}/twiml-conference-hold" beep="false"

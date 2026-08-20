@@ -29,6 +29,7 @@ import {
 import HandoffContextCard from '../components/HandoffContextCard';
 import HandoffTimeline from '../components/HandoffTimeline';
 import PostCallWorkspace from '../components/operator/PostCallWorkspace';
+import CallSafeBoundary from '../components/CallSafeBoundary';
 import { useSoftphone } from '../hooks/useSoftphone';
 import { useAuth } from '../context/AuthContext';
 
@@ -291,7 +292,7 @@ function OnCallPanel({ call, softphone }) {
 
       {/* Claim grouping + disposition workspace — same-payer claims the operator
           can process while the payer rep is still on the line. */}
-      <PostCallWorkspace call={c} />
+      <CallSafeBoundary label="Post-call workspace"><PostCallWorkspace call={c} /></CallSafeBoundary>
     </div>
   );
 }
@@ -385,7 +386,7 @@ function EndedPanel({ call }) {
 
       {/* Post-call: set the disposition for the handed-off claim and process any
           other open claims for the same payer. */}
-      <PostCallWorkspace call={call} />
+      <CallSafeBoundary label="Post-call workspace"><PostCallWorkspace call={call} /></CallSafeBoundary>
     </div>
   );
 }

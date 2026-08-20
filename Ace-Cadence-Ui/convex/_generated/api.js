@@ -21,6 +21,9 @@ export const api = {
     listRecent: marker('calls.listRecent'),
     getRecordingUrls: marker('calls.getRecordingUrls'),
   },
+  claimFollowups: {
+    listRelatedForCall: marker('claimFollowups.listRelatedForCall'),
+  },
   handoff: {
     listAwaitingHandoff: marker('handoff.listAwaitingHandoff'),
     listLive: marker('handoff.listLive'),

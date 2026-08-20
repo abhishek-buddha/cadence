@@ -118,6 +118,13 @@ function claimToLegacy(row) {
     nextFollowUpDate: row.next_follow_up_date,
     followUpDisposition: row.follow_up_disposition,
     followUpComment: row.follow_up_comment,
+    // Present only on payloads that pre-join them (e.g. /ui-data/related-for-call);
+    // undefined elsewhere, which is what the plain claim screens already expect.
+    patientName: row.patient_name,
+    patientDob: row.patient_dob,
+    memberId: row.member_id,
+    providerName: row.provider_name,
+    insuranceCompany: row.insurance_company,
   };
 }
 
@@ -323,6 +330,20 @@ async function getRecordingUrls(callId) {
   return {
     aiUrl: call?.elevenLabsConversationId ? `/elevenlabs-recording-media?callId=${id}` : null,
     humanUrl: call?.humanRecordingPath || call?.recordingUrl ? `/twilio-recording-media?callId=${id}` : null,
+  };
+}
+
+// Operator post-call workspace: handed-off claim + other open claims for the
+// same payer. The backend merges names/disposition, so this only reshapes.
+async function listRelatedForCall(callId) {
+  if (!callId) return null;
+  const payload = await request(`/ui-data/related-for-call/${Number(callId)}`);
+  if (!payload?.current_claim) return { currentClaim: null, relatedClaims: [], payerName: payload?.payer_name ?? null, processedCount: 0 };
+  return {
+    currentClaim: claimToLegacy(payload.current_claim),
+    relatedClaims: toArray(payload.related_claims).map(claimToLegacy),
+    payerName: payload.payer_name ?? null,
+    processedCount: payload.processed_count ?? 0,
   };
 }
 
@@ -544,6 +565,7 @@ async function executeQuery(name, args) {
   if (name === 'providers.list') return (await request('/master-data/providers')).map(providerToLegacy);
   if (name === 'calls.listRecent') return (await request('/calls')).map(callToLegacy).slice(0, args?.limit || 50);
   if (name === 'calls.getRecordingUrls') return getRecordingUrls(args?.callId);
+  if (name === 'claimFollowups.listRelatedForCall') return listRelatedForCall(args?.callId);
   if (name === 'callResults.listLatestByUser') return listLatestResultsByClaim();
   if (name === 'handoff.listAwaitingHandoff') return (await request('/handoff/awaiting')).map(handoffCallToLegacy);
   if (name === 'handoff.listLive') return (await request('/handoff/live')).map(handoffCallToLegacy);

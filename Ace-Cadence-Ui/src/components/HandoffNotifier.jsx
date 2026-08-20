@@ -10,20 +10,35 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { PhoneIncoming, ArrowRight } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function HandoffNotifier() {
   const navigate = useNavigate();
   const location = useLocation();
+  const auth = useAuth();
   const awaiting = useQuery(api.handoff.listAwaitingHandoff);
 
-  const list = awaiting ?? [];
+  // Only the operator the call was actually routed to is offered it.
+  //
+  // Render broadcast every awaiting handoff to every logged-in user; on AWS
+  // that meant admins got toasts for calls they must not take (see the
+  // "admins/managers do not take calls" rule) and several people raced for the
+  // same call. `/twilio-request-handoff` now stamps assigned_agent_user_id, and
+  // `accept_handoff` rejects anyone else, so filtering here just stops showing
+  // people a button that would fail.
+  const list = (awaiting ?? []).filter(
+    (call) =>
+      auth?.role === 'operator' &&
+      auth?.userId != null &&
+      String(call.assignedAgentUserId) === String(auth.userId)
+  );
   if (list.length === 0) return null;
   if (location.pathname === '/live' || location.pathname === '/call-audit/live') return null;
 
   const first = list[0];
   const payer = first.insuranceCompany || 'A payer';
   const extra = list.length > 1 ? ` (+${list.length - 1} more)` : '';
-  const assigned = first.assignedAgentName || 'an available agent';
+  const assigned = first.assignedAgentName || 'you';
 
   return (
     <div className="fixed bottom-6 right-6 z-50 max-w-sm">

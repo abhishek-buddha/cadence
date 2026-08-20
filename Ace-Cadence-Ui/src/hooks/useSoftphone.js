@@ -109,6 +109,31 @@ export function useSoftphone() {
     async (callId) => {
       const device = await ensureDevice();
       if (!device) return { ok: false, error: 'softphone_unconfigured' };
+
+      // Acquire the microphone explicitly, before dialling.
+      //
+      // The SDK would otherwise request it lazily inside device.connect(), and
+      // if the browser blocks or never resolves that prompt the call still
+      // connects — the operator hears the rep, the rep hears silence, and
+      // nothing anywhere says why. Doing it here also means the permission
+      // prompt happens under the Accept click (a real user gesture), which is
+      // what lets the audio pipeline start at all.
+      try {
+        const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Release immediately; the SDK opens its own capture. Permission for
+        // the origin persists, so this is only a gate, not the live stream.
+        probe.getTracks().forEach((track) => track.stop());
+      } catch (e) {
+        const denied = e?.name === 'NotAllowedError' || e?.name === 'SecurityError';
+        setError(
+          denied
+            ? 'Microphone blocked. Allow mic access for this site, then accept the call again — the payer cannot hear you until you do.'
+            : `No microphone available: ${e?.message || e?.name || 'unknown error'}`
+        );
+        setStatus('error');
+        return { ok: false, error: denied ? 'microphone_blocked' : 'microphone_unavailable' };
+      }
+
       setStatus('connecting');
       setMuted(false);
       try {

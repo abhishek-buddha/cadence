@@ -297,8 +297,13 @@ async def payer_conference_twiml(call_id: int, request: Request, db: AsyncSessio
     # it is declared here (payer leg) only. recordingStatusCallback fires once
     # when the file is ready — see routers/recordings.py.
     recording_callback = f"{base}/twilio-recording-status?callId={call_id}"
+    # Tell the rep what just happened. Without this the AI simply stops
+    # mid-conversation and the line goes quiet while Twilio moves the leg into
+    # the conference, which reads as a dropped call. The operator then has to
+    # open with "are you still there?" instead of picking up the thread.
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Say voice="alice">Thank you for holding. I am connecting you with a Cadence specialist now. Please stay on the line.</Say>
   <Dial>
     <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
                 waitUrl="{escape(base)}/twiml-conference-hold" beep="false"

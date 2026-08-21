@@ -202,10 +202,28 @@ async def _advance_claim_status(
     return path[-1]
 
 
-async def analyze_call(db: AsyncSession, call_id: int) -> dict:
-    """Run extraction + classification for one call. Commits on success."""
+async def analyze_call(db: AsyncSession, call_id: int, *, force: bool = False) -> dict:
+    """Run extraction + classification for one call. Commits on success.
+
+    Two automatic triggers race for every handoff call — the bridge posting the
+    transcript to /call-artifacts, and the ElevenLabs post-call webhook — and on
+    call 3745 both landed 4s apart. That produced two `outcome_classified` rows in
+    the timeline and, worse, paid for the same OpenAI extraction twice. Whichever
+    trigger arrives first wins; the second is a no-op.
+
+    `force=True` is for the manual /calls/{id}/analyze endpoint, whose entire
+    purpose is re-running analysis on an existing transcript.
+    """
     if not settings.openai_api_key:
         raise HTTPException(status_code=503, detail="OpenAI not configured")
+
+    if not force:
+        existing = await db.execute(
+            text("SELECT outcome FROM calls WHERE id = :id"), {"id": call_id}
+        )
+        row = row_to_dict(existing.first())
+        if row and row.get("outcome"):
+            return {"callId": call_id, "outcome": row["outcome"], "skipped": "already_classified"}
 
     result = await db.execute(
         text(
@@ -375,4 +393,4 @@ async def analyze_call(db: AsyncSession, call_id: int) -> dict:
 async def analyze_call_endpoint(call_id: int, db: AsyncSession = Depends(get_db)) -> dict:
     """Manual/backfill trigger. The automatic path is the ElevenLabs post-call
     webhook; this exists to re-run analysis on an existing transcript."""
-    return await analyze_call(db, call_id)
+    return await analyze_call(db, call_id, force=True)

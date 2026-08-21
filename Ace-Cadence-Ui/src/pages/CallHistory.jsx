@@ -8,6 +8,7 @@ import EmptyState from '../components/EmptyState';
 import DispositionBadge from '../components/DispositionBadge';
 import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 import { useProviderFilter } from '../context/ProviderFilterContext';
+import { formatDuration, callDuration } from '../utils/duration';
 
 const OUTCOME_OPTIONS = [
   { value: 'successful', label: 'Successful' },
@@ -69,20 +70,6 @@ function displayOutcome(call) {
   return connectedHumanHandoff(call) ? 'transferred_to_human' : call?.outcome;
 }
 
-function formatDuration(seconds) {
-  if (seconds == null) return '--:--';
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-}
-
-function callDuration(call) {
-  if (call.duration != null && call.duration > 0) return call.duration;
-  if (call.startedAt && call.completedAt) {
-    return Math.max(0, Math.round((new Date(call.completedAt).getTime() - new Date(call.startedAt).getTime()) / 1000));
-  }
-  return null;
-}
 
 function convexSiteUrl() {
   const explicit = import.meta.env.VITE_CONVEX_SITE_URL;

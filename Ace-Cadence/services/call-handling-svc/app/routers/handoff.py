@@ -13,11 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.db import get_db
 from common.serialize import from_json, row_to_dict, rows_to_dicts
 
+from ..handoff_states import LIVE_HANDOFF_STATES, LIVE_HANDOFF_STATES_SQL
+
 from ..invalidate import publish_invalidation
 
 router = APIRouter(prefix="/handoff", tags=["handoff"])
 
-_LIVE_HANDOFF = {"awaiting_human", "accepting", "connected"}
+_LIVE_HANDOFF = set(LIVE_HANDOFF_STATES)
 _WRAP_UP_HANDOFF = {"handoff_ended", "handoff_failed"}
 
 
@@ -305,12 +307,23 @@ async def mark_connected(call_id: int, db: AsyncSession = Depends(get_db)) -> di
 
 @router.post("/{call_id}/ended")
 async def end_handoff(call_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    # Only a *live* handoff can be ended, which makes this idempotent.
+    #
+    # Without the state guard the UPDATE always matched, so every call logged
+    # another `handoff_ended` event. The UI reaches here from more than one place
+    # (the End Call button and the softphone's own disconnect handler), so call
+    # 3745 got two identical rows at 13:09:29 and the handoff timeline rendered
+    # each entry twice. A repeat is a no-op success, not an error — the first one
+    # already did the work.
     result = await db.execute(
-        text("UPDATE calls SET handoff_state = 'handoff_ended' WHERE id = :call_id"),
+        text(
+            "UPDATE calls SET handoff_state = 'handoff_ended' "
+            f"WHERE id = :call_id AND handoff_state IN ({LIVE_HANDOFF_STATES_SQL})"
+        ),
         {"call_id": call_id},
     )
     if result.rowcount != 1:
-        return {"ok": False, "reason": "not_found"}
+        return {"ok": True, "already_ended": True}
     await _log_event(db, call_id, "handoff_ended", "ended_by_operator")
     await db.commit()
     await publish_invalidation("call", call_id)

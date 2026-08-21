@@ -19,6 +19,7 @@ from common.db import get_db, AsyncSessionLocal
 from common.serialize import row_to_dict, rows_to_dicts
 
 from ..config import settings
+from ..handoff_states import LIVE_HANDOFF_STATES, LIVE_HANDOFF_STATES_SQL
 from ..invalidate import publish_invalidation
 from .analysis import analyze_call
 from .calls import _claim_context, _dynamic_vars
@@ -319,13 +320,12 @@ async def call_ended(request: Request, db: AsyncSession = Depends(get_db)) -> di
 
 _FINAL_TWILIO_STATUSES = {"completed", "failed", "busy", "no-answer", "canceled"}
 
-# Handoff states that mean "this call is still live with an operator". A call
-# that ends while in one of these must be moved out of them, or the operator UI
-# (which keys off handoff_state, not status) stays parked on a dead call.
-_LIVE_HANDOFF_STATES = ("awaiting_human", "accepting", "connected")
-# Inlined rather than a bound param: SQLAlchemy needs expanding=True to expand a
-# sequence into an IN list, and these are fixed internal constants (no user input).
-_LIVE_HANDOFF_STATES_SQL = ", ".join(f"'{state}'" for state in _LIVE_HANDOFF_STATES)
+# A call that ends while in one of these must be moved out of them, or the
+# operator UI (which keys off handoff_state, not status) stays parked on a dead
+# call. Canonical definition lives in app/handoff_states.py — aliased here
+# because this module refers to it a dozen times.
+_LIVE_HANDOFF_STATES = LIVE_HANDOFF_STATES
+_LIVE_HANDOFF_STATES_SQL = LIVE_HANDOFF_STATES_SQL
 
 
 async def _hangup_operator_leg(db: AsyncSession, call_id: int) -> None:

@@ -2,18 +2,19 @@
 
 Ported from the Render/Convex `cadence_pro_ivr` baseline. ElevenLabs POSTs here
 once a conversation ends with the full transcript and call metadata. Without this
-route, calls placed through ElevenLabs (the `real_ivr_cut_call` and
+route, calls placed through ElevenLabs (the `ivr_only_cut_at_handoff` and
 `direct_to_agent` connection types, which dial via the ElevenLabs outbound API
 rather than our own Twilio leg) never stored a transcript at all.
 
 Correlation is by the `internal_call_id` dynamic variable we set at call time,
 falling back to the ElevenLabs conversation id.
 
-NOTE: this deliberately stops at persisting the transcript. Render additionally
-kicked off an OpenAI extraction (`analyzeTranscript`) that populates
-`call_results` / claim status / outcome classification. That pipeline does not
-exist on AWS yet and is tracked as its own work item — see the parity section of
-CADENCE_WORKING_NOTES.md. Storing the transcript is its prerequisite.
+After persisting the transcript this kicks off the OpenAI extraction in
+`.analysis.analyze_call`, which populates `call_results` / claim status / outcome
+classification — the equivalent of Render's `analyzeTranscript`.
+
+A conversation ending here does NOT mean the call ended: see the guard around
+`_close_call` below.
 """
 
 import hashlib

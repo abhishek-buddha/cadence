@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import time
 import urllib.parse
 import urllib.request
@@ -15,6 +16,8 @@ from common.serialize import from_json, row_to_dict, rows_to_dicts, to_json
 
 from ..config import settings
 from ..invalidate import publish_invalidation
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/calls", tags=["calls"])
 
@@ -189,7 +192,13 @@ def _dynamic_vars(row: dict, call_id: int, handoff_token: str = "", direct: bool
         # direct_to_agent. AWS read this column for its own routing but never
         # passed it to the agent, so the agent was resolving the literal
         # "{{call_connection_type}}" and its very first decision ran on garbage.
-        "call_connection_type": row.get("call_connection_type") or "ivr_human_handoff",
+        #
+        # `direct` legs report direct_to_agent regardless of the payer's
+        # configured type: whoever answers is already a live rep, so the prompt
+        # must skip its IVR-navigation fragment. That covers both the
+        # direct_to_agent payer type and the human-agent follow-up leg, which
+        # dials a rep's direct line off the back of an IVR call.
+        "call_connection_type": "direct_to_agent" if direct else (row.get("call_connection_type") or "ivr_human_handoff"),
     }
 
 
@@ -235,6 +244,38 @@ async def _mark_failed(db: AsyncSession, call_id: int, message: str) -> None:
     await db.execute(text("UPDATE calls SET status = 'failed', error_message = :message WHERE id = :id"), {"id": call_id, "message": message})
 
 
+async def _set_forward_number(db: AsyncSession, call_id: int, human_agent_number: str | None) -> None:
+    """Publish the payer's human-agent number for the test IVR to dial.
+
+    This is the mechanism behind "IVR -> IVR, then Human <-> Human": the test
+    IVR answering the payer's main number reads this setting and <Dial>s it, so
+    the human rep joins the SAME call leg the AI is already on. The existing
+    handoff flow then works unchanged — bridge detects the human, the operator
+    is offered the call, and the AI is dropped on takeover.
+
+    Port of Render's `setCallSetting({ key: 'forwardNumber', ... })` in
+    callActions.initiateCallViaTwilio, written immediately before dialing.
+
+    Two keys are written on purpose:
+      * `forwardNumber:<callId>` — what the IVR should prefer. Render uses only
+        the global key, which two concurrent calls to different payers will
+        fight over; the per-call key removes that race.
+      * `forwardNumber` — the global key, kept for compatibility with the
+        Render-hosted IVR during the transition (it only knows the global one).
+    """
+    value = (human_agent_number or "").strip()
+    if value.upper() == "N/A":
+        value = ""
+    for key in (f"forwardNumber:{call_id}", "forwardNumber"):
+        await db.execute(
+            text(
+                "INSERT INTO call_settings (`key`, value) VALUES (:key, :value) "
+                "ON DUPLICATE KEY UPDATE value = :value"
+            ),
+            {"key": key, "value": value},
+        )
+
+
 @router.post("/initiate")
 async def initiate_call(body: dict, db: AsyncSession = Depends(get_db)) -> dict:
     claim_id = int(body.get("claim_id") or body.get("claimId") or 0)
@@ -248,6 +289,9 @@ async def initiate_call(body: dict, db: AsyncSession = Depends(get_db)) -> dict:
         text("UPDATE calls SET handoff_token = :token, conference_name = :conference WHERE id = :id"),
         {"id": call_id, "token": handoff_token, "conference": f"cadence-{call_id}"},
     )
+    # Must be written BEFORE dialing: the IVR reads it as soon as it answers.
+    await _set_forward_number(db, call_id, row.get("human_agent_number"))
+    await db.commit()
 
     try:
         if mode == "ivr_human_handoff":

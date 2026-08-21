@@ -263,6 +263,7 @@ async def call_artifacts(request: Request, db: AsyncSession = Depends(get_db)) -
             analyzed = (await analyze_call(db, int(call_id)))["outcome"]
         except Exception as exc:
             logger.warning("post-call analysis failed for call %s: %s", call_id, exc)
+
     return {"ok": True, "callId": call_id, "outcome": analyzed}
 
 

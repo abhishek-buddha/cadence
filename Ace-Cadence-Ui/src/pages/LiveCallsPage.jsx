@@ -277,6 +277,26 @@ function SoftphoneBar({ softphone }) {
     );
   }
 
+  // Same prominent treatment as unconfigured above, not folded into the dot +
+  // label below — "idle" and "the signaling connection died and a routed call
+  // would get no audio" must not look the same.
+  if (status === 'reconnecting') {
+    return (
+      <div className="rounded-lg border border-warn/30 bg-warn/5 px-4 py-2.5 text-sm text-warn flex items-center gap-2">
+        <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+        Softphone lost connection — reconnecting. You will not receive calls until this clears.
+      </div>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <div className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-2.5 text-sm text-danger flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 shrink-0" />
+        Softphone error: {error || 'unknown'} — you will not receive calls until this is resolved.
+      </div>
+    );
+  }
+
   const dot =
     status === 'on_call'
       ? 'bg-success animate-pulse'
@@ -284,9 +304,7 @@ function SoftphoneBar({ softphone }) {
         ? 'bg-warn animate-pulse'
         : status === 'ready'
           ? 'bg-success'
-          : status === 'error'
-            ? 'bg-danger'
-            : 'bg-gray-300';
+          : 'bg-gray-300';
 
   return (
     <div className="rounded-lg border border-border bg-white px-4 py-2.5 text-sm flex items-center justify-between">

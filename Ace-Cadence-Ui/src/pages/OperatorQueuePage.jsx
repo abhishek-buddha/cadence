@@ -72,6 +72,27 @@ function SoftphoneStatus({ softphone }) {
       </div>
     );
   }
+  // Reconnecting/error get the same prominent banner treatment as the
+  // unconfigured case above, not just a small dot — this is the state where
+  // "You're marked available" is actively misleading (the signaling
+  // connection to Twilio is down, so a routed call would get no audio), so it
+  // has to be impossible to miss.
+  if (status === 'reconnecting') {
+    return (
+      <div className="rounded-lg border border-warn/30 bg-warn/5 px-4 py-2.5 text-sm text-warn flex items-center gap-2">
+        <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+        Softphone lost connection — reconnecting. You will not receive calls until this clears.
+      </div>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <div className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-2.5 text-sm text-danger flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 shrink-0" />
+        Softphone error: {error || 'unknown'} — you will not receive calls until this is resolved.
+      </div>
+    );
+  }
   const dot =
     status === 'on_call'
       ? 'bg-success animate-pulse'
@@ -79,9 +100,7 @@ function SoftphoneStatus({ softphone }) {
         ? 'bg-warn animate-pulse'
         : status === 'ready'
           ? 'bg-success'
-          : status === 'error'
-            ? 'bg-danger'
-            : 'bg-gray-300';
+          : 'bg-gray-300';
   const label =
     status === 'on_call'
       ? 'On call'
@@ -89,9 +108,7 @@ function SoftphoneStatus({ softphone }) {
         ? 'Connecting…'
         : status === 'ready'
           ? 'Softphone ready'
-          : status === 'error'
-            ? `Error: ${error || 'unknown'}`
-            : 'Preparing softphone…';
+          : 'Preparing softphone…';
   return (
     <div className="inline-flex items-center gap-2 text-xs text-muted">
       <span className={`w-2 h-2 rounded-full ${dot}`} />

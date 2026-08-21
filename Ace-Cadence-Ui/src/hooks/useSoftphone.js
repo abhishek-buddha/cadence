@@ -17,8 +17,20 @@ function softphoneBaseUrl() {
   return window.location.origin.replace(/\/$/, '');
 }
 
+// The Device's connection to Twilio's signaling servers is a browser<->Twilio
+// WebSocket that never touches our backend, and idle WebSockets get dropped by
+// browsers/OS/wifi power-saving fairly routinely. The SDK is supposed to
+// recover on its own; when it can't, it emits device.on('error') (observed as
+// Twilio error 31005 "ConnectionError") and just stops — nothing re-registers
+// it. Without the retry below, an operator who leaves My Queue open for a
+// while ends up silently unable to receive calls while the UI still says
+// "You're marked available", with no way to notice short of a manual refresh.
+const RECONNECT_MAX_ATTEMPTS = 5;
+const RECONNECT_BASE_DELAY_MS = 3000;
+const RECONNECT_MAX_DELAY_MS = 30000;
+
 export function useSoftphone() {
-  // idle | loading | ready | unconfigured | error | connecting | on_call
+  // idle | loading | ready | unconfigured | error | connecting | on_call | reconnecting
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
   const [activeCallId, setActiveCallId] = useState(null);
@@ -26,10 +38,43 @@ export function useSoftphone() {
   const deviceRef = useRef(null);
   const callRef = useRef(null);
   const DeviceCtorRef = useRef(null);
+  const ensureDeviceRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef(null);
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }, []);
+
+  // Scheduled from the Device's error handler, never from call errors — a live
+  // call is left alone rather than torn out from under the operator, and a
+  // fatal token/config error is capped rather than hammering the token
+  // endpoint forever.
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectTimerRef.current) return; // already counting down
+    if (reconnectAttemptsRef.current >= RECONNECT_MAX_ATTEMPTS) {
+      setStatus('error');
+      setError('Softphone disconnected and could not reconnect. Refresh the page.');
+      return;
+    }
+    const attempt = reconnectAttemptsRef.current;
+    reconnectAttemptsRef.current += 1;
+    const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** attempt, RECONNECT_MAX_DELAY_MS);
+    setStatus('reconnecting');
+    setError(null);
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      ensureDeviceRef.current?.();
+    }, delay);
+  }, []);
 
   // Tear down on unmount.
   useEffect(() => {
     return () => {
+      clearReconnectTimer();
       try {
         callRef.current?.disconnect?.();
       } catch {
@@ -43,7 +88,7 @@ export function useSoftphone() {
       deviceRef.current = null;
       callRef.current = null;
     };
-  }, []);
+  }, [clearReconnectTimer]);
 
   // Fetch a token and (re)initialize the Device. Idempotent-ish: reuses an
   // existing ready device.
@@ -78,7 +123,18 @@ export function useSoftphone() {
       const device = new Device(token, { codecPreferences: ['opus', 'pcmu'] });
       device.on('error', (e) => {
         setError(e?.message || 'Softphone error');
-        setStatus('error');
+        // A call in progress is left alone — recreating the Device mid-call
+        // would clobber it. Idle is exactly the case that bit us: the
+        // operator sees "available" while the signaling connection is dead.
+        if (callRef.current) {
+          setStatus('error');
+        } else {
+          scheduleReconnect();
+        }
+      });
+      device.on('registered', () => {
+        reconnectAttemptsRef.current = 0;
+        clearReconnectTimer();
       });
       device.on('tokenWillExpire', async () => {
         try {
@@ -101,6 +157,13 @@ export function useSoftphone() {
       return null;
     }
   }, [status]);
+
+  // scheduleReconnect's setTimeout fires outside React's render cycle, so it
+  // needs a stable way to reach whichever ensureDevice closure is current
+  // rather than capturing one at schedule time.
+  useEffect(() => {
+    ensureDeviceRef.current = ensureDevice;
+  }, [ensureDevice]);
 
   // Join the conference for a given callId (the accepted handoff).
   // Resolves only after Twilio accepts the browser leg, so callers can avoid

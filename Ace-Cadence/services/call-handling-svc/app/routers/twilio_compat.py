@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -21,6 +22,7 @@ from ..config import settings
 from ..invalidate import publish_invalidation
 from .analysis import analyze_call
 from .calls import _claim_context, _dynamic_vars
+from .handoff import _twilio_post
 from .handoff import find_available_operator
 
 logger = logging.getLogger(__name__)
@@ -326,6 +328,42 @@ _LIVE_HANDOFF_STATES = ("awaiting_human", "accepting", "connected")
 _LIVE_HANDOFF_STATES_SQL = ", ".join(f"'{state}'" for state in _LIVE_HANDOFF_STATES)
 
 
+async def _hangup_operator_leg(db: AsyncSession, call_id: int) -> None:
+    """Hang up the operator's browser leg when a live handoff is closed.
+
+    Both conference legs declare `endConferenceOnExit="true"`, so a normal
+    hangup by either party already drops the other — Twilio does it for us.
+    This covers the case Twilio cannot: the call being closed while the operator
+    is the *only* participant, which happens if the payer redirect failed or the
+    payer leg died before joining the conference. There is no second participant
+    whose exit would end things, so without this the leg runs until the operator
+    closes their browser. Call 3744 ran 56 minutes that way, billing the whole
+    time and holding the conference recording unfinalized.
+
+    Best-effort by design: a leg that already ended returns 404/409 here, which
+    is the expected outcome on the common path and must not fail the close.
+    """
+    if not (settings.twilio_account_sid and settings.twilio_auth_token):
+        return
+    result = await db.execute(
+        text("SELECT human_participant_call_sid FROM calls WHERE id = :id"), {"id": call_id}
+    )
+    sid = (row_to_dict(result.first()) or {}).get("human_participant_call_sid")
+    if not sid:
+        return
+    try:
+        # urllib is blocking; keep it off the event loop.
+        await asyncio.to_thread(
+            _twilio_post,
+            settings.twilio_account_sid,
+            settings.twilio_auth_token,
+            f"/Calls/{urllib.parse.quote(sid)}.json",
+            {"Status": "completed"},
+        )
+    except Exception as exc:
+        logger.info("operator leg %s for call %s not hung up: %s", sid, call_id, exc)
+
+
 async def _close_call(
     db: AsyncSession,
     *,
@@ -398,6 +436,9 @@ async def _close_call(
             ),
             {"id": call_id, "message": f"call ended ({twilio_status_value})", "now": _now()},
         )
+        # Only when we actually released a *live* handoff — on any other close
+        # there is no operator leg to worry about.
+        await _hangup_operator_leg(db, call_id)
     return call_id
 
 
@@ -438,6 +479,32 @@ async def twilio_conference_status(request: Request, db: AsyncSession = Depends(
         await publish_invalidation("call", call_id)
         return {"success": True, "closed": True}
 
+    if event == "participant-join":
+        # Capture the operator's browser leg SID.
+        #
+        # Nothing else can: the softphone places its own outgoing call through
+        # the Twilio Voice SDK, so the app never sees an API response carrying
+        # that SID. (Render has the same hole — its `connectHumanToConference`
+        # records one, but that action is an unused dialed-number fallback, not
+        # the softphone path.) Without it `_hangup_operator_leg` has nothing to
+        # hang up and `is_principal` below can never match the operator.
+        #
+        # Anything joining this conference that is not the payer leg is the
+        # operator, and the column is only filled while NULL, so a rejoin or a
+        # duplicate callback cannot overwrite it.
+        joined_sid = data.get("CallSid") or data.get("ParticipantCallSid") or data.get("ParticipantSid") or ""
+        if joined_sid:
+            await db.execute(
+                text(
+                    "UPDATE calls SET human_participant_call_sid = :sid "
+                    "WHERE id = :id AND human_participant_call_sid IS NULL "
+                    "AND (twilio_call_sid IS NULL OR twilio_call_sid <> :sid)"
+                ),
+                {"id": call_id, "sid": joined_sid},
+            )
+            await db.commit()
+        return {"success": True}
+
     if event == "participant-leave":
         result = await db.execute(
             text("SELECT twilio_call_sid, human_participant_call_sid, handoff_state FROM calls WHERE id = :id"),
@@ -452,7 +519,11 @@ async def twilio_conference_status(request: Request, db: AsyncSession = Depends(
             call.get("twilio_call_sid"),
             call.get("human_participant_call_sid"),
         }
-        if is_principal and call.get("handoff_state") in _LIVE_HANDOFF_STATES:
+        # Render also closes on any participant leaving with a completed status
+        # (`ParticipantCallStatus`), which is what makes this work when neither
+        # SID is on file. The AWS port dropped that condition; restore it.
+        participant_status = data.get("ParticipantCallStatus") or ""
+        if (is_principal or participant_status == "completed") and call.get("handoff_state") in _LIVE_HANDOFF_STATES:
             await _close_call(db, call_id=call_id)
             await db.commit()
             await publish_invalidation("call", call_id)

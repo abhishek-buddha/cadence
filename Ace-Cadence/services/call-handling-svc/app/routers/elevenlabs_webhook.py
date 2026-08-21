@@ -31,7 +31,7 @@ from common.serialize import row_to_dict
 
 from ..config import settings
 from .analysis import analyze_call
-from .twilio_compat import _close_call
+from .twilio_compat import _LIVE_HANDOFF_STATES, _close_call
 
 logger = logging.getLogger(__name__)
 
@@ -157,8 +157,11 @@ async def elevenlabs_webhook(request: Request, db: AsyncSession = Depends(get_db
             media_type="application/json",
         )
 
-    exists = await db.execute(text("SELECT id FROM calls WHERE id = :id"), {"id": call_id})
-    if row_to_dict(exists.first()) is None:
+    existing = await db.execute(
+        text("SELECT id, handoff_state FROM calls WHERE id = :id"), {"id": call_id}
+    )
+    call = row_to_dict(existing.first())
+    if call is None:
         return Response(
             content=json.dumps({"error": "call_not_found"}),
             status_code=200,
@@ -173,9 +176,21 @@ async def elevenlabs_webhook(request: Request, db: AsyncSession = Depends(get_db
         ),
         {"id": call_id, "transcript": transcript or None, "cid": conversation_id},
     )
-    # Same close path as every other end-signal, so status/handoff_state stay
-    # consistent no matter which side reports the call over first.
-    await _close_call(db, call_id=call_id, twilio_status_value="completed", duration=duration)
+    # The ElevenLabs conversation ending is NOT the call ending.
+    #
+    # In ivr_human_handoff the AI is deliberately dropped at the handoff, so this
+    # webhook arrives seconds later while the operator and payer are still
+    # talking on the same Twilio leg. Closing here ended live calls ~7s in (the
+    # operator's UI flipped to "Call ended · Complete Call") and stamped
+    # `duration` with ElevenLabs' `call_duration_secs` — the AI-only span, not
+    # the whole call.
+    #
+    # The conference status callback and the payer leg's own StatusCallback are
+    # the real end-signals for that mode. For the ElevenLabs-owned modes
+    # (ivr_only_cut_at_handoff, direct_to_agent) no handoff is live and this
+    # remains the only close path, so it still runs.
+    if call.get("handoff_state") not in _LIVE_HANDOFF_STATES:
+        await _close_call(db, call_id=call_id, twilio_status_value="completed", duration=duration)
     await db.commit()
 
     # Extraction + outcome classification. Best-effort: the transcript is already

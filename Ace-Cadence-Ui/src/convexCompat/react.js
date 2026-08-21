@@ -624,6 +624,14 @@ async function executeAction(name, args = {}) {
   if (name === 'callActions.initiateCall') return request('/calls/initiate', { method: 'POST', body: { claim_id: Number(args.claimId) } });
   if (name === 'handoff.redirectPayerToConference') return request(`/handoff/${Number(args.callId)}/redirect-payer`, { method: 'POST' });
   if (name === 'callActions.endCall') return request(`/handoff/${Number(args.callId)}/ended`, { method: 'POST' });
+  // Live transcript for ElevenLabs-owned legs (ivr_only_cut_at_handoff,
+  // direct_to_agent), where there is no bridge and so no /listen socket.
+  // LiveCallMonitor polls this every 3s. callId identifies the call; the
+  // conversation id is resolved server-side from the call row.
+  if (name === 'callActions.getCallStatus') {
+    if (!args.callId) return null;
+    return request(`/calls/${Number(args.callId)}/eleven-status`);
+  }
   if (name.startsWith('claimImport.')) throw new Error('AI claim import is not wired to the new backend yet.');
   return undefined;
 }

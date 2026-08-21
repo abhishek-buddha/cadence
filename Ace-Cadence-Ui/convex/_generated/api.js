@@ -40,6 +40,7 @@ export const api = {
   callActions: {
     initiateCall: marker('callActions.initiateCall'),
     endCall: marker('callActions.endCall'),
+    getCallStatus: marker('callActions.getCallStatus'),
   },
   operatorStats: {
     getStats: marker('operatorStats.getStats'),

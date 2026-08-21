@@ -352,11 +352,25 @@ async def payer_conference_twiml(call_id: int, request: Request, db: AsyncSessio
     # mid-conversation and the line goes quiet while Twilio moves the leg into
     # the conference, which reads as a dropped call. The operator then has to
     # open with "are you still there?" instead of picking up the thread.
+    # endConferenceOnExit=true on BOTH legs: either party hanging up means the
+    # call is over, so the conference must end and the recording stop there.
+    #
+    # Render leaves this leg "false" (only the operator's leg ends the
+    # conference). That strands the survivor: when the payer hung up on call 3744
+    # the conference stayed open around the operator's browser leg for 56 minutes
+    # — billing the whole time, and the conference recording only finalizes when
+    # the conference ends, so the file was 21s of conversation followed by ~56
+    # minutes of silence.
+    #
+    # Nothing needs the conference to outlive the payer. Before the operator
+    # joins the payer is alone on waitUrl, so "ends when they leave" is correct
+    # there too. Twilio also disconnects the remaining participant, which gives
+    # the softphone a clean `disconnect` event instead of a dangling leg.
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">Connecting you to a specialist now.</Say>
   <Dial>
-    <Conference startConferenceOnEnter="true" endConferenceOnExit="false"
+    <Conference startConferenceOnEnter="true" endConferenceOnExit="true"
                 waitUrl="{escape(base)}/twiml-conference-hold" beep="false"
                 statusCallback="{escape(status_callback)}"
                 statusCallbackEvent="start end join leave"

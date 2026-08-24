@@ -32,6 +32,7 @@ from common.serialize import row_to_dict
 
 from ..config import settings
 from .analysis import analyze_call
+from .eleven_status import _turn_to_line
 from .twilio_compat import _LIVE_HANDOFF_STATES, _close_call
 
 logger = logging.getLogger(__name__)
@@ -85,8 +86,19 @@ def _verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
 
 
 def _flatten_transcript(raw) -> str:
-    """ElevenLabs sends transcript as a list of turns; Render flattened it to
-    `role: message` lines and stored that."""
+    """ElevenLabs sends transcript as a list of turns; flatten to `role: message`
+    lines for storage.
+
+    Keypad presses are turns whose `message` is empty and whose real content sits
+    in `tool_calls` (`play_keypad_touch_tone`). Rendering only `message` turned
+    every DTMF press into a blank `agent:` line, so a transcript of a keypad IVR
+    looked like the agent said nothing while it was in fact navigating menus --
+    and that transcript is what `analyze_call` classifies, so a lost keypress can
+    change the recorded outcome.
+
+    Reuses `_turn_to_line` rather than repeating the tool-call parsing: the live
+    poll and this post-call path must not disagree about what a transcript says.
+    """
     if isinstance(raw, str):
         return raw
     if not isinstance(raw, list):
@@ -95,9 +107,14 @@ def _flatten_transcript(raw) -> str:
     for turn in raw:
         if not isinstance(turn, dict):
             continue
-        role = turn.get("role") or turn.get("speaker") or "unknown"
-        message = turn.get("message") or turn.get("text") or ""
-        lines.append(f"{role}: {message}")
+        line = _turn_to_line(turn)
+        if line is None:
+            # Keep the turn visible even when it carries no message and no tool
+            # call, so the shape of the conversation is preserved.
+            role = turn.get("role") or turn.get("speaker") or "unknown"
+            message = turn.get("message") or turn.get("text") or ""
+            line = f"{role}: {message}"
+        lines.append(line)
     return "\n".join(lines)
 
 

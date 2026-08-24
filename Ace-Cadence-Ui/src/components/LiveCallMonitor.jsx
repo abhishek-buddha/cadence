@@ -92,6 +92,22 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     }
   }, [muted]);
 
+  // onComplete lives in a ref, and is deliberately NOT a dependency of the poll
+  // effect below.
+  //
+  // Callers pass a fresh function identity on every render -- ClaimDetailPage
+  // declares `handleCallComplete` inline, SessionDetailPanel passes
+  // `onComplete={() => {}}` -- and those pages re-render every 3s from their own
+  // polling. With onComplete in the dependency array the effect tore down and
+  // re-armed its 8s start timer every 3s, so `poll()` never once ran and the
+  // transcript panel sat on "Waiting for transcript data..." for the whole call.
+  // A ref cannot be fixed by memoising at the call sites, because an inline
+  // arrow like SessionDetailPanel's is unstable by construction.
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
   // Polling for call status + transcript
   const [polledData, setPolledData] = useState(null);
   const [liveTranscript, setLiveTranscript] = useState([]);
@@ -118,7 +134,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
               callDoneDurationRef.current = data.duration ||
                 (call?.startedAt ? Math.floor((Date.now() - new Date(call.startedAt).getTime()) / 1000) : 0);
               completionTriggeredRef.current = true;
-              if (onComplete) onComplete(call._id);
+              onCompleteRef.current?.(call._id);
             }
             setPolledData(data);
             if (isTerminal) {
@@ -137,7 +153,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       clearTimeout(startDelay);
       clearTimeout(pollRef.current);
     };
-  }, [call?.elevenLabsConversationId, call?._id, call?.claimId, getCallStatus, onComplete]);
+  }, [call?.elevenLabsConversationId, call?._id, call?.claimId, getCallStatus]);
 
   const isCompleted = polledData?.status === 'done' || polledData?.status === 'failed' || call?.status === 'completed' || call?.status === 'failed';
 

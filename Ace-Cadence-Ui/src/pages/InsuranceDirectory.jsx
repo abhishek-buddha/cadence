@@ -64,6 +64,40 @@ const CALL_CONNECTION_OPTIONS = [
 
 const WAIT_SECONDS_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
+// Which phone field a connection type actually dials, and therefore which one
+// the form shows. Traced through calls.py::initiate_call:
+//
+//   ivr_human_handoff       To = insurance_phone   (Human Agent Number is only
+//                                                   read by our own IVR
+//                                                   simulator's forwardNumber,
+//                                                   so it stays visible but
+//                                                   optional -- a real payer's
+//                                                   IVR routes to its own reps
+//                                                   and never sees it)
+//   ivr_only_cut_at_handoff to_number = insurance_phone  (no human is reached,
+//                                                   so Human Agent Number is
+//                                                   meaningless here)
+//   direct_to_agent         to_number = human_agent_number  (Phone Number is
+//                                                   not read at all)
+//
+// Showing both fields for direct_to_agent is what made people fill the same
+// number into each (see Kaiser Permanente).
+function dialsHumanAgentNumber(type) {
+  return type === 'direct_to_agent';
+}
+
+// IVR navigation config is irrelevant when the call never touches an IVR.
+function usesIvrConfig(type) {
+  return type !== 'direct_to_agent';
+}
+
+// Human Agent Number is shown for the handoff mode (optional, simulator only)
+// and for direct_to_agent (required, it is the dialled number). Never for
+// ivr_only_cut_at_handoff.
+function showsHumanAgentNumber(type) {
+  return type === 'ivr_human_handoff' || type === 'direct_to_agent';
+}
+
 // Voice AI agent config ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â not wired to any call behavior yet, just stored for
 // now until the agent-side functionality is built.
 const VOICE_TONE_OPTIONS = [
@@ -101,6 +135,11 @@ const EMPTY_FORM = {
   voiceModulation: '',
 };
 
+function FieldError({ message }) {
+  if (!message) return null;
+  return <p className="mt-1 text-xs font-medium text-red-600">{message}</p>;
+}
+
 function stepsToSequence(steps) {
   return steps
     .map((s) => 'w'.repeat(Math.max(0, Number(s.waitSeconds) || 0)) + (s.digit || ''))
@@ -121,6 +160,11 @@ export default function InsuranceDirectory() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
   const originalIvrKeyRef = useRef(null);
+  // The connection type this payer was saved with. Fields that no longer apply
+  // are cleared on save ONLY when the type actually changed, so opening a payer
+  // and pressing Update without touching the selector never wipes its config.
+  const originalConnectionTypeRef = useRef(null);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredContacts = (contacts ?? []).filter((contact) => {
@@ -135,6 +179,8 @@ export default function InsuranceDirectory() {
     setForm(EMPTY_FORM);
     setTranscriptInput('');
     setGenError(null);
+    setFieldErrors({});
+    originalConnectionTypeRef.current = null;
     setModalOpen(true);
   }
 
@@ -161,6 +207,8 @@ export default function InsuranceDirectory() {
       voiceModulation: contact.voice_modulation ?? '',
     });
     originalIvrKeyRef.current = ivrConfigKey(contact.ivr_instructions, contact.ivr_steps, contact.voice_ivr_phrases);
+    originalConnectionTypeRef.current = contact.call_connection_type ?? 'ivr_human_handoff';
+    setFieldErrors({});
     // Start the transcript box empty ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â the playbook may already be filled (e.g.
     // from a bulk upload). The "Generate playbook" button stays disabled until
     // the user actually pastes a new transcript here.
@@ -175,7 +223,9 @@ export default function InsuranceDirectory() {
     setForm(EMPTY_FORM);
     setTranscriptInput('');
     setGenError(null);
+    setFieldErrors({});
     originalIvrKeyRef.current = null;
+    originalConnectionTypeRef.current = null;
   }
 
   async function handleMarkVerified() {
@@ -242,8 +292,27 @@ export default function InsuranceDirectory() {
     setForm((prev) => ({ ...prev, voiceIvrPhrases: prev.voiceIvrPhrases.filter((_, i) => i !== index) }));
   }
 
+  // Required fields depend on the connection type, because which number gets
+  // dialled depends on it. Only ever-visible fields are validated, so submit
+  // can never be blocked by something the user cannot see.
+  function validate() {
+    const errors = {};
+    if (!form.name.trim()) errors.name = 'Payer name is required.';
+    if (dialsHumanAgentNumber(form.callConnectionType)) {
+      if (!form.humanAgentNumber.trim()) {
+        errors.humanAgentNumber = 'Required for Direct to Agent - this is the number Cadence dials.';
+      }
+    } else if (!form.phone.trim()) {
+      errors.phone = 'Required - this is the number Cadence dials.';
+    }
+    return errors;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
+    const errors = validate();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setSaving(true);
     try {
       const cleanSteps = form.ivrSteps
@@ -261,35 +330,59 @@ export default function InsuranceDirectory() {
       const newIvrKey = ivrConfigKey(form.ivrInstructions, cleanSteps, cleanPhrases);
       const ivrConfigChanged = editing && originalIvrKeyRef.current !== null && newIvrKey !== originalIvrKeyRef.current;
 
+      // Clear fields the selected type no longer uses -- but ONLY when the type
+      // actually changed since this payer was opened. Otherwise merely opening a
+      // Direct to Agent payer and pressing Update would wipe its IVR config
+      // without the user touching anything.
+      const typeChanged =
+        editing != null &&
+        originalConnectionTypeRef.current != null &&
+        originalConnectionTypeRef.current !== form.callConnectionType;
+      const dropIvr = typeChanged && !usesIvrConfig(form.callConnectionType);
+      const dropHumanAgent = typeChanged && !showsHumanAgentNumber(form.callConnectionType);
+
+      // direct_to_agent hides Phone Number, but insurance_contacts.phone is NOT
+      // NULL and the directory lists it. Mirror the dialled number into it so
+      // the row is not blank, the column stays honest, and the record is also
+      // valid for anything that dials `phone` instead. No call path on this type
+      // reads `phone`, so this is display/search data only.
+      const dialled = form.humanAgentNumber.trim();
+      const phoneValue = dialsHumanAgentNumber(form.callConnectionType)
+        ? (dialled || form.phone)
+        : form.phone;
+
       const payload = {
         name: form.name,
-        phone: form.phone,
+        phone: phoneValue,
         // Send the raw value (empty string when cleared) rather than
         // omitting it: the update endpoint skips absent keys, so leaving
         // this out made it impossible to CLEAR a saved number. "" is
         // written and reads as "no number" everywhere (follow-up guard and
         // prompt both treat it as unset).
-        human_agent_number: form.humanAgentNumber,
+        human_agent_number: dropHumanAgent ? '' : form.humanAgentNumber,
         call_connection_type: form.callConnectionType || 'ivr_human_handoff',
         payer_id: form.payerId || null,
         payer_kind: form.payerKind || null,
         hours: form.hours || null,
-        ivr_instructions: form.ivrInstructions || null,
+        ivr_instructions: dropIvr ? null : (form.ivrInstructions || null),
         verification_requirements: form.verificationRequirements || null,
         avg_hold_time: form.avgHoldTime ? Number(form.avgHoldTime) : null,
         notes: form.notes || null,
-        ivr_enabled: form.ivrEnabled,
-        ivr_steps: cleanSteps.length ? cleanSteps : null,
-        ivr_sequence: cleanSteps.length ? stepsToSequence(cleanSteps) : null,
-        voice_ivr_enabled: form.voiceIvrEnabled,
-        voice_ivr_phrases: cleanPhrases.length ? cleanPhrases : null,
-        ivr_source_transcript: transcriptInput.trim() || null,
+        ivr_enabled: dropIvr ? false : form.ivrEnabled,
+        ivr_steps: dropIvr ? null : (cleanSteps.length ? cleanSteps : null),
+        ivr_sequence: dropIvr ? null : (cleanSteps.length ? stepsToSequence(cleanSteps) : null),
+        voice_ivr_enabled: dropIvr ? false : form.voiceIvrEnabled,
+        voice_ivr_phrases: dropIvr ? null : (cleanPhrases.length ? cleanPhrases : null),
+        ivr_source_transcript: dropIvr ? null : (transcriptInput.trim() || null),
         voice_tone: form.voiceTone || null,
         voice_modulation: form.voiceModulation || null,
       };
 
       if (editing) {
-        await updateInsuranceContact(editing.id, { ...payload, clear_ivr_verified_at: ivrConfigChanged });
+        await updateInsuranceContact(editing.id, {
+          ...payload,
+          clear_ivr_verified_at: ivrConfigChanged || dropIvr,
+        });
       } else {
         await createInsuranceContact(payload);
       }
@@ -437,40 +530,16 @@ export default function InsuranceDirectory() {
 
       <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Payer' : 'Add Payer'} wide>
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Payer Name</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setField('name', e.target.value)}
-                className={inputClass}
-                placeholder="Aetna, Blue Cross, etc."
-                required
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Phone Number</label>
-              <input
-                type="tel"
-                value={form.phone}
-                onChange={(e) => setField('phone', e.target.value)}
-                className={inputClass}
-                placeholder="1-800-555-0100"
-                required
-              />
-            </div>
-          </div>
-
           <div>
-            <label className={labelClass}>Human Agent Number</label>
+            <label className={labelClass}>Payer Name</label>
             <input
-              type="tel"
-              value={form.humanAgentNumber}
-              onChange={(e) => setField('humanAgentNumber', e.target.value)}
+              type="text"
+              value={form.name}
+              onChange={(e) => setField('name', e.target.value)}
               className={inputClass}
-              placeholder="+918309838260 (forwarded after IVR)"
+              placeholder="Aetna, Blue Cross, etc."
             />
+            <FieldError message={fieldErrors.name} />
           </div>
 
           <div>
@@ -500,6 +569,48 @@ export default function InsuranceDirectory() {
               })}
             </div>
           </div>
+
+          {/* The phone fields sit below the selector because which one is shown
+              -- and which one Cadence dials -- depends on the type chosen above. */}
+          {!dialsHumanAgentNumber(form.callConnectionType) && (
+            <div>
+              <label className={labelClass}>Phone Number</label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={(e) => setField('phone', e.target.value)}
+                className={inputClass}
+                placeholder="1-800-555-0100"
+              />
+              <p className="mt-1 text-xs text-muted">
+                The payer's IVR number. Cadence dials this.
+              </p>
+              <FieldError message={fieldErrors.phone} />
+            </div>
+          )}
+
+          {showsHumanAgentNumber(form.callConnectionType) && (
+            <div>
+              <label className={labelClass}>
+                {dialsHumanAgentNumber(form.callConnectionType)
+                  ? 'Agent Direct Number'
+                  : 'Human Agent Number'}
+              </label>
+              <input
+                type="tel"
+                value={form.humanAgentNumber}
+                onChange={(e) => setField('humanAgentNumber', e.target.value)}
+                className={inputClass}
+                placeholder="+918309838260"
+              />
+              <p className="mt-1 text-xs text-muted">
+                {dialsHumanAgentNumber(form.callConnectionType)
+                  ? "The rep's direct line. Cadence dials this - no IVR is involved."
+                  : "Optional. Only used when the IVR is ours to control; a real payer's IVR routes to its own reps."}
+              </p>
+              <FieldError message={fieldErrors.humanAgentNumber} />
+            </div>
+          )}
 
           <div>
             <label className={labelClass}>Payer ID</label>
@@ -585,6 +696,10 @@ export default function InsuranceDirectory() {
             </div>
           </div>
 
+          {/* IVR navigation config only applies when the call actually goes
+              through an IVR - Direct to Agent skips it entirely. */}
+          {usesIvrConfig(form.callConnectionType) && (
+          <>
           {/* Authoring aid: generate a playbook from a real call transcript */}
           <div className="border border-border-light rounded-lg p-4 space-y-3 bg-gray-50/50">
             <div>
@@ -767,6 +882,8 @@ export default function InsuranceDirectory() {
               </div>
             )}
           </div>
+          </>
+          )}
 
           <div>
             <label className={labelClass}>Verification Requirements</label>

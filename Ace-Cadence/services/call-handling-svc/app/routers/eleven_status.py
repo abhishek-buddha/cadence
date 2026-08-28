@@ -35,6 +35,7 @@ from common.db import get_db
 from common.serialize import row_to_dict
 
 from ..config import settings
+from ..handoff_states import LIVE_HANDOFF_STATES
 from ..invalidate import publish_invalidation
 from .analysis import analyze_call
 from .twilio_compat import _close_call
@@ -106,7 +107,7 @@ async def eleven_status(call_id: int, db: AsyncSession = Depends(get_db)) -> dic
 
     result = await db.execute(
         text(
-            "SELECT id, claim_id, status, transcript, eleven_labs_conversation_id "
+            "SELECT id, claim_id, status, handoff_state, transcript, eleven_labs_conversation_id "
             "FROM calls WHERE id = :id"
         ),
         {"id": call_id},
@@ -138,7 +139,22 @@ async def eleven_status(call_id: int, db: AsyncSession = Depends(get_db)) -> dic
         )
         await db.commit()
 
-    if status in _TERMINAL and call.get("status") not in ("completed", "failed"):
+    # A finished ElevenLabs conversation does NOT mean the call is over.
+    #
+    # In ivr_human_handoff the AI is deliberately dropped at the handoff, so the
+    # conversation ends there while the operator and payer keep talking on the
+    # same Twilio leg. Closing here killed live calls ~8s after Accept: the poll
+    # saw status "done", _close_call released the handoff and then
+    # _hangup_operator_leg terminated the operator's browser leg, whose
+    # endConferenceOnExit="true" tore down the conference and dropped the payer
+    # too (call 3757: conversation done at 12:22:50.8, operator leg gone, payer
+    # gone). This is the same trap already guarded in elevenlabs_webhook.py --
+    # the conversation lifecycle and the call lifecycle are different things.
+    #
+    # For the ElevenLabs-owned modes no handoff is ever live, so this remains
+    # their close path and still runs.
+    live_handoff = call.get("handoff_state") in LIVE_HANDOFF_STATES
+    if status in _TERMINAL and not live_handoff and call.get("status") not in ("completed", "failed"):
         await _close_call(
             db,
             call_id=call_id,

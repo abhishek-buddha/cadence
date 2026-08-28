@@ -138,6 +138,17 @@ async def eleven_status(call_id: int, db: AsyncSession = Depends(get_db)) -> dic
 
     turns = data.get("transcript") or []
     status = data.get("status") or ""
+
+    # One line per poll, so whether ElevenLabs serves partial transcripts
+    # mid-call is answerable from the logs instead of argued about. Turn count
+    # rising while status is still in-progress means it does; staying at 0 until
+    # status flips to done means it does not, and the only route is the
+    # (enterprise-gated) monitor WebSocket.
+    #   docker compose logs call-handling-svc | grep eleven-poll
+    logger.info(
+        "eleven-poll call=%s status=%s turns=%d call_status=%s",
+        call_id, status or "?", len(turns), call.get("status"),
+    )
     metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
     duration = metadata.get("call_duration_secs")
 

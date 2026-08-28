@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import logging
@@ -210,6 +211,79 @@ def _post_json(url: str, payload: dict, api_key: str) -> dict:
         return json.loads(response.read().decode() or "{}")
 
 
+def _get_json(url: str, auth: str) -> dict:
+    req = urllib.request.Request(url, headers={"Authorization": auth})
+    with urllib.request.urlopen(req, timeout=20) as response:
+        return json.loads(response.read().decode() or "{}")
+
+
+# How long Twilio takes to move an ElevenLabs-placed call to `in-progress`.
+# Mirrors Render: one quick attempt, then every 5s.
+_MONITOR_ATTEMPTS = 6
+_MONITOR_FIRST_DELAY = 1
+_MONITOR_RETRY_DELAY = 5
+
+
+async def _attach_monitor_stream(call_id: int, call_sid: str) -> None:
+    """Fork a live ElevenLabs-owned call's audio to the bridge, for the browser
+    monitor.
+
+    On `ivr_only_cut_at_handoff` and `direct_to_agent`, ElevenLabs places the
+    call on its own leg, so `cadence-bridge` is not in the media path and the
+    Live Call Monitor has nothing to play. Twilio's Streams API forks a copy of
+    the audio to a WebSocket **without disturbing the call**, so ElevenLabs keeps
+    owning the leg and `play_keypad_touch_tone` keeps working. Routing these
+    calls through the bridge instead would get the same audio but break DTMF,
+    which is the entire reason those modes bypass the bridge.
+
+    Ported from `cadence_pro_ivr` `callActions.ts:431-482`. The receiving half
+    already existed here -- the bridge's `/monitor` WebSocket
+    (`server.js:514`), its `monitorStreams` relay, and the nginx route -- only
+    the call that starts the fork was missing.
+
+    Runs detached from the request: the retry loop can take ~26s and must not
+    hold up the initiate response. Entirely best-effort -- a fork that fails to
+    attach leaves the call completely unaffected, so nothing here may raise.
+    """
+    if not (settings.twilio_account_sid and settings.twilio_auth_token and call_sid):
+        return
+    auth = _auth_header(settings.twilio_account_sid, settings.twilio_auth_token)
+    base = f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}"
+    # Twilio dials out to this, so it must be the public URL, not the Docker name.
+    monitor_ws = _public_url("/monitor").replace("https://", "wss://").replace("http://", "ws://")
+
+    for attempt in range(_MONITOR_ATTEMPTS):
+        await asyncio.sleep(_MONITOR_FIRST_DELAY if attempt == 0 else _MONITOR_RETRY_DELAY)
+        try:
+            call = await asyncio.to_thread(
+                _get_json, f"{base}/Calls/{urllib.parse.quote(call_sid)}.json", auth
+            )
+            status = call.get("status")
+            if status in ("completed", "failed", "canceled", "busy", "no-answer"):
+                logger.info("monitor stream: call %s already %s, not attaching", call_id, status)
+                return
+            if status != "in-progress":
+                continue
+
+            await asyncio.to_thread(
+                _post_form,
+                f"{base}/Calls/{urllib.parse.quote(call_sid)}/Streams.json",
+                {
+                    "Url": monitor_ws,
+                    "Track": "both_tracks",
+                    "Name": f"monitor-{call_id}",
+                    "Parameter1.Name": "callId",
+                    "Parameter1.Value": str(call_id),
+                },
+                auth,
+            )
+            logger.info("monitor stream attached for call %s on attempt %s", call_id, attempt + 1)
+            return
+        except Exception as exc:
+            logger.warning("monitor stream attempt %s for call %s failed: %s", attempt + 1, call_id, exc)
+    logger.warning("monitor stream never attached for call %s", call_id)
+
+
 def _dynamic_vars(row: dict, call_id: int, handoff_token: str = "", direct: bool = False, bridge: bool = True) -> dict[str, str]:
     cpt_codes = _json_list(row.get("cpt_codes"))
     amount = row.get("amount") or 0
@@ -382,7 +456,12 @@ async def initiate_call(body: dict, db: AsyncSession = Depends(get_db)) -> dict:
                 },
                 settings.elevenlabs_api_key,
             )
-            await _mark_started(db, call_id, eleven.get("call_sid") or eleven.get("callSid"), eleven.get("conversation_id") or eleven.get("conversationId"))
+            eleven_call_sid = eleven.get("call_sid") or eleven.get("callSid")
+            await _mark_started(db, call_id, eleven_call_sid, eleven.get("conversation_id") or eleven.get("conversationId"))
+            # Detached: the retry loop outlives this request. Mode A does not
+            # need it -- its TwiML already streams to the bridge.
+            if eleven_call_sid:
+                asyncio.create_task(_attach_monitor_stream(call_id, eleven_call_sid))
 
         if row.get("claim_status") == "pending":
             await db.execute(text("UPDATE claims SET status = 'in_progress' WHERE id = :id"), {"id": claim_id})

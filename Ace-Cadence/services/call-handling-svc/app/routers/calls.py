@@ -128,6 +128,60 @@ def _json_list(value):
     return from_json(value) or []
 
 
+_DIRECT_IVR_INSTRUCTIONS = (
+    "You are already through to a live representative directly - there is no IVR "
+    "to navigate on this call. Proceed straight to the conversation arc."
+)
+
+
+def _ivr_instructions_var(row: dict, direct: bool) -> str:
+    """The `ivr_instructions` dynamic variable, built from BOTH the payer's
+    free-text instructions and its structured keypad steps.
+
+    Ported from `cadence_pro_ivr` `convex/prompts/ivrContext.ts`
+    (`buildIvrInstructionsVar`). The AWS port passed `ivr_instructions` through
+    raw and never rendered `ivr_steps`, so the keypad sequence configured per
+    payer in the UI reached the database and stopped there -- the agent never
+    saw it and navigated menus unaided.
+
+    Empty falls back to a usable sentence rather than the bare "N/A" the port
+    used, which read to the model as a value rather than an absence.
+    """
+    if direct:
+        return _DIRECT_IVR_INSTRUCTIONS
+
+    parts: list[str] = []
+    instructions = (row.get("ivr_instructions") or "").strip()
+    if instructions:
+        parts.append(instructions)
+
+    steps = _json_list(row.get("ivr_steps"))
+    if steps:
+        lines = []
+        for index, step in enumerate(steps, start=1):
+            if not isinstance(step, dict):
+                continue
+            digit = step.get("digit")
+            if not digit:
+                continue
+            label = f" ({step['label']})" if step.get("label") else ""
+            wait = step.get("waitSeconds") or 0
+            lines.append(f'{index}. Wait {wait}s, then press "{digit}"{label}')
+        if lines:
+            parts.append(
+                "Known keypad sequence for this payer's IVR. Follow these presses in "
+                "order via play_keypad_touch_tone when the menu matches this payer:\n"
+                + "\n".join(lines)
+            )
+
+    if not parts:
+        return (
+            "No specific IVR playbook configured for this payer - use your best "
+            "judgment to navigate."
+        )
+    return "\n\n".join(parts)
+
+
 def _auth_header(user: str, password: str) -> str:
     return "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
 
@@ -163,7 +217,7 @@ def _dynamic_vars(row: dict, call_id: int, handoff_token: str = "", direct: bool
         amount_text = f"{float(amount) / 100:.2f}"
     except (TypeError, ValueError):
         amount_text = str(amount)
-    ivr_instructions = "You are already through to a live representative directly - there is no IVR to navigate on this call. Proceed straight to the conversation arc." if direct else (row.get("ivr_instructions") or "N/A")
+    ivr_instructions = _ivr_instructions_var(row, direct)
     return {
         "practice_name": row.get("practice_name") or "",
         "npi": row.get("npi") or "",

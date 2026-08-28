@@ -1,4 +1,6 @@
+import asyncio
 import base64
+import logging
 import os
 import urllib.error
 import urllib.parse
@@ -16,6 +18,8 @@ from common.serialize import from_json, row_to_dict, rows_to_dicts
 from ..handoff_states import LIVE_HANDOFF_STATES, LIVE_HANDOFF_STATES_SQL
 
 from ..invalidate import publish_invalidation
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/handoff", tags=["handoff"])
 
@@ -305,16 +309,86 @@ async def mark_connected(call_id: int, db: AsyncSession = Depends(get_db)) -> di
     return {"ok": True}
 
 
+async def _hangup_leg(sid: str | None) -> bool:
+    """Terminate one Twilio leg. True if Twilio accepted it."""
+    if not sid:
+        return False
+    account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+    if not (account_sid and auth_token):
+        return False
+    try:
+        # urllib is blocking; keep it off the event loop.
+        await asyncio.to_thread(
+            _twilio_post,
+            account_sid,
+            auth_token,
+            f"/Calls/{urllib.parse.quote(sid)}.json",
+            {"Status": "completed"},
+        )
+        return True
+    except urllib.error.HTTPError as exc:
+        # 404 = the leg already ended. That is the common case on a normal
+        # hangup and is not a failure.
+        if exc.code != 404:
+            logger.warning("could not hang up leg %s: HTTP %s", sid, exc.code)
+        return False
+    except Exception as exc:
+        logger.warning("could not hang up leg %s: %s", sid, exc)
+        return False
+
+
 @router.post("/{call_id}/ended")
 async def end_handoff(call_id: int, db: AsyncSession = Depends(get_db)) -> dict:
-    # Only a *live* handoff can be ended, which makes this idempotent.
-    #
-    # Without the state guard the UPDATE always matched, so every call logged
-    # another `handoff_ended` event. The UI reaches here from more than one place
-    # (the End Call button and the softphone's own disconnect handler), so call
-    # 3745 got two identical rows at 13:09:29 and the handoff timeline rendered
-    # each entry twice. A repeat is a no-op success, not an error — the first one
-    # already did the work.
+    """End Call. Actually ends the call.
+
+    This used to write `handoff_state` and nothing else -- it never told Twilio
+    to hang up. On `ivr_human_handoff` that went unnoticed because the operator's
+    browser leg dropping collapses the conference as a side effect. On the
+    ElevenLabs-owned modes there is no conference and no browser leg, so the
+    button did nothing at all: the call ended in the UI while the phone leg ran
+    on. Call 3751 ran 30+ minutes that way, and call 3765 was still connected to
+    Dean Health Plan until it was killed by hand.
+
+    Worse, `handoff_state` is NULL on those modes, so the state guard below
+    matched no rows and the endpoint returned `already_ended` without doing
+    anything whatsoever.
+
+    Hanging up the payer leg is what genuinely ends the call. Twilio's own
+    StatusCallback then fires `/twilio-status`, which runs `_close_call` through
+    the normal path, so status, duration and handoff_state settle exactly as they
+    do for a phone-side hangup -- no second copy of the closing logic, and no
+    import cycle (this module cannot import `_close_call`, since `twilio_compat`
+    imports from here).
+    """
+    row = await db.execute(
+        text(
+            "SELECT twilio_call_sid, human_participant_call_sid, handoff_state, status "
+            "FROM calls WHERE id = :id"
+        ),
+        {"id": call_id},
+    )
+    call = row_to_dict(row.first())
+    if call is None:
+        return {"ok": False, "reason": "not_found"}
+
+    # Hang up before touching the database: if a DB error follows, the phone is
+    # already down, which is the failure mode that costs money.
+    hung_up = False
+    if call.get("status") not in ("completed", "failed"):
+        # The payer leg is the call. The operator's leg is dropped by Twilio when
+        # the conference ends, but terminate it explicitly too rather than rely
+        # on conference semantics that only apply to one of the three modes.
+        hung_up = await _hangup_leg(call.get("twilio_call_sid"))
+        await _hangup_leg(call.get("human_participant_call_sid"))
+
+    # Releasing a live handoff stays idempotent: without this guard the UPDATE
+    # always matched and every request logged another `handoff_ended` event. The
+    # UI reaches here from more than one place (the End Call button and the
+    # softphone's own disconnect handler), so call 3745 got two identical rows.
+    # A repeat is a no-op success -- but note the hangup above runs regardless,
+    # because a call with no live handoff (the ElevenLabs-owned modes) still has
+    # a phone leg that must be terminated.
     result = await db.execute(
         text(
             "UPDATE calls SET handoff_state = 'handoff_ended' "
@@ -323,11 +397,11 @@ async def end_handoff(call_id: int, db: AsyncSession = Depends(get_db)) -> dict:
         {"call_id": call_id},
     )
     if result.rowcount != 1:
-        return {"ok": True, "already_ended": True}
+        return {"ok": True, "already_ended": True, "hungUp": hung_up}
     await _log_event(db, call_id, "handoff_ended", "ended_by_operator")
     await db.commit()
     await publish_invalidation("call", call_id)
-    return {"ok": True}
+    return {"ok": True, "hungUp": hung_up}
 
 
 @router.post("/{call_id}/complete-wrap-up")

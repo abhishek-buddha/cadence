@@ -230,7 +230,7 @@ async def analyze_call(db: AsyncSession, call_id: int, *, force: bool = False) -
             "SELECT c.id, c.claim_id, c.transcript, c.status, c.handoff_state, c.human_transcript, "
             "c.use_case, cl.use_case AS claim_use_case, cl.status AS claim_status, "
             "cl.claim_number, cl.amount, cl.date_of_service, "
-            "p.first_name, p.last_name, ic.name AS insurance_name "
+            "p.first_name, p.last_name, ic.name AS insurance_name, ic.call_connection_type "
             "FROM calls c "
             "LEFT JOIN claims cl ON cl.id = c.claim_id "
             "LEFT JOIN patients p ON p.id = cl.patient_id "
@@ -309,7 +309,11 @@ async def analyze_call(db: AsyncSession, call_id: int, *, force: bool = False) -
             "reason": f"Call handed off to a Cadence operator (handoff_state={call['handoff_state']})",
         }
     else:
-        classification = classify_medical_call_outcome(extraction, extraction.get("claimStatus"))
+        classification = classify_medical_call_outcome(
+            extraction,
+            extraction.get("claimStatus"),
+            call.get("call_connection_type"),
+        )
 
     await db.execute(
         text(

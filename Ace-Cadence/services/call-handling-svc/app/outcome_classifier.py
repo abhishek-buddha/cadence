@@ -76,7 +76,36 @@ def _classify_by_threshold(
     }
 
 
-def classify_medical_call_outcome(call_result: dict | None, call_status: str | None = None) -> dict:
+def classify_medical_call_outcome(
+    call_result: dict | None,
+    call_status: str | None = None,
+    call_connection_type: str | None = None,
+) -> dict:
+    # A cut-at-handoff call reaching only the IVR is the CONFIGURED outcome, not
+    # a failure. `ivr_only_cut_at_handoff` exists to prove the agent can navigate
+    # a payer's real IVR without occupying a human, so it ends at exactly the
+    # point that FAILED_CALL_STATUSES treats as "never reached a rep". Scoring it
+    # `failed` made every such call drag down the reports (call 3750: outcome
+    # failed, reason "Call did not reach a rep (status: ivr_only)").
+    #
+    # Deliberately its own outcome rather than `successful`: no claim data was
+    # retrieved, so counting it as a success would inflate the numbers just as
+    # wrongly. reports.py buckets on failed / successful / transferred_to_human,
+    # so this value is correctly absent from all three.
+    # Scoped to `ivr_only` deliberately, NOT to all of FAILED_CALL_STATUSES:
+    # voicemail, no_answer, busy, error and abandoned are genuine failures even
+    # on a cut-at-handoff payer. Only "reached the IVR and stopped there" is the
+    # designed outcome.
+    if call_connection_type == "ivr_only_cut_at_handoff" and call_status == "ivr_only":
+        return {
+            "outcome": "ivr_navigated",
+            "requiredFieldsRetrieved": [],
+            "missingFields": [],
+            "reason": (
+                "IVR navigated and the call cut before reaching a human - the "
+                "configured behaviour for this payer, not a failure"
+            ),
+        }
     if failed_from_call_status(call_status):
         return {
             "outcome": "failed",

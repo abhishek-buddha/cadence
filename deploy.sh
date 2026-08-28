@@ -31,6 +31,24 @@ fi
 
 if [ "$BACKEND_CHANGED" = true ]; then
   cd "$APP_ROOT/Ace-Cadence"
+
+  # Rebuild the shared base image when it changed — nothing else ever does.
+  #
+  # Every service Dockerfile starts `FROM ace-cadence-base:latest`, and that tag
+  # is produced only by a manual command in Ace-Cadence/README.md. `docker
+  # compose up --build` rebuilds the services against whatever `latest` happens
+  # to be, so an edit to base-image/common/ (the DB session factory, shared
+  # settings, the audit helper, the health router) deployed green while shipping
+  # precisely nothing. Silent no-ops are the worst kind.
+  #
+  # Also builds when the tag is missing entirely, so a fresh host does not need
+  # someone to remember the README step.
+  if echo "$CHANGED" | grep -q '^Ace-Cadence/base-image/' \
+     || ! docker image inspect ace-cadence-base:latest >/dev/null 2>&1; then
+    echo "Rebuilding ace-cadence-base:latest"
+    docker build -t ace-cadence-base:latest ./base-image
+  fi
+
   docker compose up -d --build
   # Restart nginx unconditionally after a backend build, not just when
   # nginx/ changed.

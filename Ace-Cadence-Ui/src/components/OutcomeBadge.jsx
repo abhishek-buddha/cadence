@@ -30,6 +30,16 @@ const outcomeConfig = {
     label: 'Transferred',
     icon: PhoneForwarded,
   },
+  // "IVR -> Real IVR, then Cut Call" payers end at the IVR on purpose, so this
+  // is neither a success (no claim data was retrieved) nor a failure. Given its
+  // own badge rather than falling through to "Unknown".
+  ivr_navigated: {
+    bg: 'bg-cyan/10',
+    text: 'text-cyan',
+    dot: 'bg-cyan',
+    label: 'IVR navigated',
+    icon: PhoneForwarded,
+  },
   unknown: {
     bg: 'bg-gray-500/10',
     text: 'text-gray-500',

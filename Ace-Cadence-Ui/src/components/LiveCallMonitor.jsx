@@ -75,9 +75,8 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const [audioConnected, setAudioConnected] = useState(false);
   const mutedRef = useRef(false);
   const audioCtxRef = useRef(null);
-  const inboundQueueRef = useRef([]);
-  const outboundQueueRef = useRef([]);
-  const audioQueueRef = useRef([]); // mixed output queue
+  const inboundQueueRef = useRef([]); // payer / IVR audio
+  const outboundQueueRef = useRef([]); // ElevenLabs agent audio
   const nextPlayTimeRef = useRef(0);
   const playIntervalRef = useRef(null);
   const wsRef = useRef(null);
@@ -85,7 +84,6 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   useEffect(() => {
     mutedRef.current = muted;
     if (muted) {
-      audioQueueRef.current = [];
       inboundQueueRef.current = [];
       outboundQueueRef.current = [];
       nextPlayTimeRef.current = 0;
@@ -202,30 +200,52 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   // instead of playing an increasingly delayed backlog.
   useEffect(() => {
     const FRAME = 320; // 40ms @ 8kHz
-    const MAX_QUEUE = 8000; // 1s hard live buffer cap
+    // Per-direction caps, because the two directions behave differently.
+    // Inbound is a continuous real-time stream, so a backlog means we have
+    // drifted behind the call and should drop to catch up. Outbound arrives in
+    // multi-second bursts (ElevenLabs sends a whole utterance at once), so a
+    // backlog there is normal and will drain on its own -- capping it at 1s
+    // like the inbound side simply decapitated every sentence the agent spoke.
+    const MAX_QUEUE_INBOUND = 8000;   // 1s
+    const MAX_QUEUE_OUTBOUND = 40000; // 5s, comfortably longer than an utterance
     const MAX_LEAD_SECONDS = 0.3;
 
     playIntervalRef.current = setInterval(() => {
       if (mutedRef.current) return;
       const ctx = audioCtxRef.current;
       if (!ctx || ctx.state !== 'running') return;
-      const queue = audioQueueRef.current;
+      const inbound = inboundQueueRef.current;
+      const outbound = outboundQueueRef.current;
 
-      if (queue.length > MAX_QUEUE) {
-        queue.splice(0, queue.length - MAX_QUEUE);
-        nextPlayTimeRef.current = 0;
+      // Drain each direction independently at real time, then sum. Trimming is
+      // per-queue so a backlog on one side never discards the other's audio.
+      for (const [q, cap] of [[inbound, MAX_QUEUE_INBOUND], [outbound, MAX_QUEUE_OUTBOUND]]) {
+        if (q.length > cap) {
+          q.splice(0, q.length - cap);
+          nextPlayTimeRef.current = 0;
+        }
       }
-      if (queue.length < FRAME) return;
+      // Play as soon as EITHER side has a frame: the agent is silent while the
+      // IVR talks and vice versa, so waiting for both would stall constantly.
+      if (inbound.length < FRAME && outbound.length < FRAME) return;
 
       const now = ctx.currentTime;
       if (nextPlayTimeRef.current < now || nextPlayTimeRef.current > now + MAX_LEAD_SECONDS) {
         nextPlayTimeRef.current = now + 0.005;
-        if (queue.length > FRAME * 4) {
-          queue.splice(0, queue.length - FRAME * 4);
-        }
+        // Catch-up trim applies to the continuous stream only. Dropping the
+        // agent's buffered utterance here would reintroduce the same bug.
+        if (inbound.length > FRAME * 4) inbound.splice(0, inbound.length - FRAME * 4);
       }
 
-      const raw = new Float32Array(queue.splice(0, FRAME));
+      const a = inbound.splice(0, FRAME);
+      const b = outbound.splice(0, FRAME);
+      const raw = new Float32Array(FRAME);
+      for (let i = 0; i < FRAME; i++) {
+        // Sum both directions, clamped -- two people talking at once should
+        // sound like two people, not like clipping noise.
+        const mixed = (a[i] || 0) + (b[i] || 0);
+        raw[i] = mixed > 1 ? 1 : mixed < -1 ? -1 : mixed;
+      }
       const upsampled = upsample8kTo(raw, ctx.sampleRate);
       const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
       buffer.getChannelData(0).set(upsampled);
@@ -238,7 +258,6 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
 
     return () => {
       clearInterval(playIntervalRef.current);
-      audioQueueRef.current = [];
       inboundQueueRef.current = [];
       outboundQueueRef.current = [];
       nextPlayTimeRef.current = 0;
@@ -282,14 +301,25 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
             for (let i = 0; i < binary.length; i++) {
               samples[i] = MULAW_TABLE[binary.charCodeAt(i) & 0xFF];
             }
-            // Live monitor audio is already time-ordered by the bridge. Playing
-            // chunks in arrival order avoids choppy gaps from waiting for a
-            // matching opposite track that may never arrive.
-            audioQueueRef.current.push(...samples);
+            // Keep the two directions in SEPARATE queues and mix them on
+            // playback (see the drain loop above).
+            //
+            // They used to share one queue, appended in arrival order. That
+            // cannot work: both are real-time 8kHz streams, so together they
+            // arrive at ~2x the rate the queue drains, and the overflow trim
+            // then discarded whichever chunks were biggest. The payer's IVR
+            // sends a steady 160-sample frame every 20ms; the agent arrives in
+            // ~18,000-sample bursts. So the agent was reliably the thing thrown
+            // away -- audible on the payer's phone, inaudible in the monitor.
+            const outbound = data.media.track === 'outbound';
+            const queue = outbound ? outboundQueueRef.current : inboundQueueRef.current;
+            queue.push(...samples);
 
-            if (audioQueueRef.current.length > 12000) {
-              audioQueueRef.current.splice(0, audioQueueRef.current.length - 4000);
-              nextPlayTimeRef.current = 0;
+            // Roughly 2s per direction. Enough to absorb a burst, short enough
+            // that the monitor stays live rather than drifting behind the call.
+            const cap = outbound ? 40000 : 16000;
+            if (queue.length > cap) {
+              queue.splice(0, queue.length - cap);
             }
           }
         } catch (err) { console.warn('Audio WS parse error:', err); }
@@ -311,7 +341,6 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       clearTimeout(retryTimeout);
       if (ws) ws.close();
       wsRef.current = null;
-      audioQueueRef.current = [];
       inboundQueueRef.current = [];
       outboundQueueRef.current = [];
     };
@@ -340,7 +369,6 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   }
 
   function handleUnmute() {
-    audioQueueRef.current = [];
     inboundQueueRef.current = [];
     outboundQueueRef.current = [];
     nextPlayTimeRef.current = 0;

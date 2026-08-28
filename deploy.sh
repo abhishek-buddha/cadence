@@ -4,6 +4,22 @@ set -euo pipefail
 APP_ROOT="/home/ec2-user/cadence"
 BRANCH="Ace_Cadence"
 
+# --force / -f: build and restart everything regardless of what changed.
+#
+# The change detection below compares HEAD before and after this script's own
+# fetch, so ANYTHING that already advanced the checkout -- a manual `git pull`,
+# a previous partial run, someone poking around -- makes it conclude there is
+# nothing to do and exit 0. The code then sits on disk, unbuilt, while the
+# deploy reports success. That has caught us repeatedly; this is the escape
+# hatch, and it is also the right thing to reach for whenever you are unsure
+# what is actually running.
+FORCE=false
+case "${1:-}" in
+  --force|-f) FORCE=true ;;
+  "") ;;
+  *) echo "usage: $0 [--force]" >&2; exit 2 ;;
+esac
+
 cd "$APP_ROOT"
 
 BEFORE_SHA="$(git rev-parse HEAD)"
@@ -11,8 +27,8 @@ git fetch origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 AFTER_SHA="$(git rev-parse HEAD)"
 
-if [ "$BEFORE_SHA" = "$AFTER_SHA" ]; then
-  echo "No changes to deploy."
+if [ "$BEFORE_SHA" = "$AFTER_SHA" ] && [ "$FORCE" = false ]; then
+  echo "No changes to deploy. (Re-run with --force to build anyway.)"
   exit 0
 fi
 
@@ -22,6 +38,12 @@ BACKEND_CHANGED=false
 
 echo "$CHANGED" | grep -q '^Ace-Cadence-Ui/' && FRONTEND_CHANGED=true
 echo "$CHANGED" | grep -q '^Ace-Cadence/' && BACKEND_CHANGED=true
+
+if [ "$FORCE" = true ]; then
+  echo "Forced deploy: building frontend and backend regardless of the diff."
+  FRONTEND_CHANGED=true
+  BACKEND_CHANGED=true
+fi
 
 if [ "$FRONTEND_CHANGED" = true ]; then
   cd "$APP_ROOT/Ace-Cadence-Ui"

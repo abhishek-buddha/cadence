@@ -66,14 +66,17 @@ def _fetch_conversation(conversation_id: str) -> dict | None:
         return None
 
 
-def _turn_to_line(turn: dict) -> str | None:
-    """One transcript turn as `role: message`.
+def _turn_message(turn: dict) -> str | None:
+    """What a transcript turn actually says, or None if it says nothing.
 
-    DTMF presses are surfaced as their own line. On this path
-    `play_keypad_touch_tone` actually works (it is an ElevenLabs system tool and
-    needs ElevenLabs to own the leg), so the keys the agent pressed are real
-    navigation steps and belong in the transcript rather than being dropped as
-    empty turns.
+    Single source of truth for reading a turn, used by the stored transcript,
+    the post-call webhook, and the live poll's JSON response. They must not
+    disagree about what a call contained.
+
+    A keypad press carries no `message` -- the content is in `tool_calls`
+    (`play_keypad_touch_tone`). Reading only `message` renders it as an empty
+    agent turn, which is why the agent looked silent while it was navigating
+    menus.
     """
     for call in turn.get("tool_calls") or []:
         if not call.get("tool_has_been_called"):
@@ -86,12 +89,22 @@ def _turn_to_line(turn: dict) -> str | None:
             continue
         tones = params.get("dtmf_tones")
         if tones:
-            return f"agent: [pressed {tones}] {params.get('reason') or ''}".strip()
+            return f"[pressed {tones}] {params.get('reason') or ''}".strip()
 
     message = turn.get("message")
     if not message or message == "...":
         return None
-    return f"{turn.get('role') or 'unknown'}: {message}"
+    return message
+
+
+def _turn_to_line(turn: dict) -> str | None:
+    """One transcript turn as a stored `role: message` line."""
+    message = _turn_message(turn)
+    if message is None:
+        return None
+    # A keypad press is always the agent, whatever role the turn claims.
+    role = "agent" if message.startswith("[pressed ") else (turn.get("role") or "unknown")
+    return f"{role}: {message}"
 
 
 @router.get("/{call_id}/eleven-status")
@@ -175,8 +188,16 @@ async def eleven_status(call_id: int, db: AsyncSession = Depends(get_db)) -> dic
     return {
         "status": status,
         "duration": duration or 0,
+        # Rendered through the same reader as the stored transcript, so keypad
+        # presses show up live instead of only appearing in call history after
+        # the call. The UI drops turns whose message is null, and a DTMF turn
+        # has no `message` of its own.
         "transcript": [
-            {"role": t.get("role"), "message": t.get("message") or None} for t in turns
+            {
+                "role": "agent" if (_turn_message(t) or "").startswith("[pressed ") else t.get("role"),
+                "message": _turn_message(t),
+            }
+            for t in turns
         ],
         "analysis": (
             {

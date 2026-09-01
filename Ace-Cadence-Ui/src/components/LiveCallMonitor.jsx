@@ -71,7 +71,9 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const callDoneDurationRef = useRef(null);
 
   // Audio state
-  const [muted, setMuted] = useState(true);
+  // Speaker on by default: the point of the monitor is to hear the call, and
+  // starting muted meant every call needed a click before anything was audible.
+  const [muted, setMuted] = useState(false);
   const [audioConnected, setAudioConnected] = useState(false);
   const mutedRef = useRef(false);
   const audioCtxRef = useRef(null);
@@ -345,6 +347,32 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       outboundQueueRef.current = [];
     };
   }, [call?._id, isCompleted]);
+
+  // Start the audio context as soon as the monitor mounts, so "unmuted by
+  // default" actually produces sound.
+  //
+  // Browsers refuse to start an AudioContext outside a user gesture, so this
+  // may land in `suspended` -- and the play loop skips a context that is not
+  // running, which would make the default silently cosmetic. When that happens,
+  // resume on the first interaction anywhere on the page rather than requiring
+  // a click on the speaker button specifically.
+  useEffect(() => {
+    ensureAudioContext();
+    const ctx = audioCtxRef.current;
+    if (!ctx || ctx.state === 'running') return;
+
+    const resume = () => {
+      ensureAudioContext();
+      if (audioCtxRef.current?.state === 'running') detach();
+    };
+    const detach = () => {
+      document.removeEventListener('pointerdown', resume);
+      document.removeEventListener('keydown', resume);
+    };
+    document.addEventListener('pointerdown', resume);
+    document.addEventListener('keydown', resume);
+    return detach;
+  }, [call?._id]);
 
   function ensureAudioContext() {
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {

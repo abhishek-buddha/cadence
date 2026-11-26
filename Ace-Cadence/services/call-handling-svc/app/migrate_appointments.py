@@ -23,8 +23,8 @@ async def migrate(path: Path, apply: bool):
             phone = (await db.execute(text("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='patients' AND COLUMN_NAME='phone'"))).scalar()
             if phone and phone != 'varchar(20)':
                 raise RuntimeError('Unexpected patients.phone schema; manual review required')
-            extra = dict((await db.execute(text("SELECT COLUMN_NAME,COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='appointments' AND COLUMN_NAME IN ('confirmed_at','original_scheduled_at','original_timezone')"))).all())
-            expected = {'confirmed_at': 'datetime', 'original_scheduled_at': 'datetime', 'original_timezone': 'varchar(64)'}
+            extra = dict((await db.execute(text("SELECT COLUMN_NAME,COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='appointments' AND COLUMN_NAME IN ('confirmed_at','original_scheduled_at','original_timezone','call_status_override')"))).all())
+            expected = {'confirmed_at': 'datetime', 'original_scheduled_at': 'datetime', 'original_timezone': 'varchar(64)', 'call_status_override': 'varchar(20)'}
             if any(extra[key] != expected[key] for key in extra):
                 raise RuntimeError('Unexpected appointment date schema; manual review required')
             booking_change = (await db.execute(text("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='appointment_calls' AND COLUMN_NAME='pending_booking_change'"))).scalar()

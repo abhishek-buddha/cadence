@@ -150,6 +150,37 @@ async def update_appointment(appointment_id: int, body: dict, _=Depends(staff), 
     return await save(db, body, appointment_id)
 
 
+@router.patch('/appointments/{appointment_id:int}/status')
+async def update_status(appointment_id: int, body: dict, user=Depends(staff), db: AsyncSession = Depends(get_db)):
+    field, value = body.get('field'), body.get('value')
+    options = {'appointment_status': {'scheduled', 'rescheduled', 'cancelled'},
+               'call_status': {'not_called', 'completed', 'no_answer', 'failed', 'callback_needed'}}
+    if not isinstance(field, str) or field not in options or not isinstance(value, str) or value not in options[field]:
+        raise HTTPException(422, 'Choose a valid appointment or call status')
+    previous = await appointment(db, appointment_id, lock=True)
+    active = (await db.execute(text('''SELECT c.id FROM calls c JOIN appointment_calls ac ON ac.call_id=c.id
+        WHERE ac.appointment_id=:id AND c.completed_at IS NULL AND c.status IN ('initiating','in_progress')
+        FOR UPDATE OF c'''), {'id': appointment_id})).first()
+    if active:
+        raise HTTPException(409, 'End the active call before changing statuses')
+    if field == 'appointment_status':
+        await db.execute(text('''UPDATE appointments SET status=:status,
+            confirmed_at=CASE WHEN :previous=:status THEN confirmed_at ELSE NULL END
+            WHERE id=:id'''), {'id': appointment_id, 'status': value, 'previous': previous['status']})
+    else:
+        await db.execute(text('''UPDATE appointments SET call_status_override=:status,
+            callback_requested_at=:requested,callback_reason=:reason WHERE id=:id'''),
+            {'id': appointment_id, 'status': None if value == 'callback_needed' else value,
+             'requested': now() if value == 'callback_needed' else None,
+             'reason': (previous['callback_reason'] or 'Callback requested by staff') if value == 'callback_needed' else None})
+    await write_audit_event(db, action='update', resource_type='appointment', resource_id=str(appointment_id),
+                           user_id=str(user['user_id']), user_role=user['user_role'],
+                           payload_summary=f'Manual {field}: {value}')
+    await db.commit()
+    await publish_invalidation('appointment', appointment_id)
+    return await appointment(db, appointment_id)
+
+
 @router.post('/appointments/operators/presence')
 async def presence(body: dict, user=Depends(staff), db: AsyncSession = Depends(get_db)):
     key = 'appointmentOperator:' + str(user['user_id'])
@@ -193,6 +224,7 @@ async def dial(appointment_id: int, _=Depends(staff), db: AsyncSession = Depends
         VALUES ('appointment','initiating',:now,:token)'''), {'now': now(), 'token': token})
     call_id = result.lastrowid
     await db.execute(text('INSERT INTO appointment_calls (call_id,appointment_id) VALUES (:call,:appointment)'), {'call': call_id, 'appointment': appointment_id})
+    await db.execute(text('UPDATE appointments SET call_status_override=NULL WHERE id=:id'), {'id': appointment_id})
     await db.commit()
     base = settings.public_base_url.rstrip('/')
     try:

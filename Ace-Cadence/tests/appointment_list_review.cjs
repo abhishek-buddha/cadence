@@ -38,7 +38,7 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname));
       await page.getByLabel('Call status', { exact: true }).selectOption(call);
       await page.getByRole('textbox', { name: 'Search patients, providers, or status' }).fill(search);
       const expected = records.filter(r => {
-        const displayStatus = ['initiating', 'ringing', 'in_progress'].includes(r.last_call_status) ? r.last_call_status : r.callback_requested_at ? 'callback_needed' : r.last_call_status || 'not_called';
+        const displayStatus = ['initiating', 'ringing', 'in_progress'].includes(r.last_call_status) ? r.last_call_status : r.call_status_override || (r.callback_requested_at ? 'callback_needed' : r.last_call_status || 'not_called');
         return (!booking || r.status === booking) && (!call || displayStatus === call) && (!search || r.patient_name.includes(search));
       }).map(r => r.id);
       await page.waitForFunction(count => document.querySelectorAll('tbody a').length === count, expected.length);

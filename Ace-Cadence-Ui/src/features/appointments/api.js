@@ -1,7 +1,8 @@
-import { apiGet, apiPost, apiPut } from '../../api/client';
+import { apiGet, apiPost, apiPut, apiPatch } from '../../api/client';
 
 export const getConfig = () => apiGet('/appointments/config');
 export const listAppointments = () => apiGet('/appointments');
+export const updateAppointmentStatus = (id, field, value) => apiPatch(`/appointments/${id}/status`, { field, value });
 export const getAppointment = id => apiGet(`/appointments/${id}`);
 export const saveAppointment = (id, body) => id ? apiPut(`/appointments/${id}`, body) : apiPost('/appointments', body);
 export const getCalls = id => apiGet(`/appointments/${id}/calls`);

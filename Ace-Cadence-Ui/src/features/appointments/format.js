@@ -1,6 +1,6 @@
 export function appointmentCallStatus(record) {
   if (['initiating', 'ringing', 'in_progress'].includes(record.last_call_status)) return record.last_call_status;
-  return record.callback_requested_at ? 'callback_needed' : record.last_call_status || 'not_called';
+  return record.call_status_override || (record.callback_requested_at ? 'callback_needed' : record.last_call_status || 'not_called');
 }
 
 export function patientDate(value) {

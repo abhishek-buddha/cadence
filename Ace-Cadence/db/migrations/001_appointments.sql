@@ -35,3 +35,4 @@ ALTER TABLE appointments ADD COLUMN confirmed_at DATETIME NULL;
 ALTER TABLE appointments ADD COLUMN original_scheduled_at DATETIME NULL;
 ALTER TABLE appointments ADD COLUMN original_timezone VARCHAR(64) NULL;
 ALTER TABLE appointment_calls ADD COLUMN pending_booking_change JSON NULL;
+ALTER TABLE appointments ADD COLUMN call_status_override VARCHAR(20) NULL;

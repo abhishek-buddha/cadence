@@ -76,7 +76,7 @@ async def transcribe(call_id: int):
 
 @router.post('/appointment-voice/recording')
 async def recording(request: Request, callId: int, token: str, tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
-    form = urllib.parse.parse_qs((await request.body()).decode())
+    form = urllib.parse.parse_qs((await request.body()).decode(), keep_blank_values=True)
     url = settings.public_base_url.rstrip('/') + request.url.path + '?' + request.url.query
     if not valid_twilio_signature(url, form, request.headers.get('x-twilio-signature', ''), settings.twilio_auth_token):
         raise HTTPException(403, 'Invalid Twilio signature')

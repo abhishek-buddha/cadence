@@ -196,7 +196,7 @@ def _post_form(url: str, data: dict, auth: str | None = None) -> dict:
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     if auth:
         headers["Authorization"] = auth
-    req = urllib.request.Request(url, data=urllib.parse.urlencode(data).encode(), method="POST", headers=headers)
+    req = urllib.request.Request(url, data=urllib.parse.urlencode(data, doseq=True).encode(), method="POST", headers=headers)
     with urllib.request.urlopen(req, timeout=20) as response:
         return json.loads(response.read().decode() or "{}")
 

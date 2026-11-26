@@ -201,7 +201,7 @@ async def dial(appointment_id: int, _=Depends(staff), db: AsyncSession = Depends
             {'To': row['patient_phone'], 'From': settings.twilio_phone_number,
              'Url': f'{base}/appointment-voice/start?callId={call_id}&token={token}',
              'StatusCallback': f'{base}/appointment-voice/status?callId={call_id}&token={token}',
-             'StatusCallbackEvent': 'initiated ringing answered completed', 'Timeout': '45'},
+             'StatusCallbackEvent': ['initiated', 'ringing', 'answered', 'completed'], 'Timeout': '45'},
             _auth_header(settings.twilio_account_sid, settings.twilio_auth_token))
     except urllib.error.HTTPError as exc:
         if 400 <= exc.code < 500:
@@ -225,7 +225,7 @@ async def dial(appointment_id: int, _=Depends(staff), db: AsyncSession = Depends
 
 @router.api_route('/appointment-voice/start', methods=['POST'])
 async def start(request: Request, callId: int, token: str, db: AsyncSession = Depends(get_db)):
-    form = urllib.parse.parse_qs((await request.body()).decode())
+    form = urllib.parse.parse_qs((await request.body()).decode(), keep_blank_values=True)
     public_url = settings.public_base_url.rstrip('/') + request.url.path + '?' + request.url.query
     if not valid_twilio_signature(public_url, form, request.headers.get('x-twilio-signature', ''), settings.twilio_auth_token):
         raise HTTPException(403, 'Invalid Twilio signature')
@@ -245,7 +245,7 @@ async def start(request: Request, callId: int, token: str, db: AsyncSession = De
 
 @router.post('/appointment-voice/status')
 async def status(request: Request, callId: int, token: str, db: AsyncSession = Depends(get_db)):
-    form = urllib.parse.parse_qs((await request.body()).decode())
+    form = urllib.parse.parse_qs((await request.body()).decode(), keep_blank_values=True)
     url = settings.public_base_url.rstrip('/') + request.url.path + '?' + request.url.query
     if not valid_twilio_signature(url, form, request.headers.get('x-twilio-signature', ''), settings.twilio_auth_token):
         raise HTTPException(403, 'Invalid Twilio signature')

@@ -114,7 +114,7 @@ async def main():
         assert (await client.post(f'/appointments/calls/{cid}/release')).status_code==200
         assert (await client.post(f'/appointments/{aid}/complete-callback')).status_code==200
         path = f'/appointment-voice/status?callId={cid}&token=review-call-token'
-        form = {'CallSid':'CA'+'0'*32,'CallStatus':'no-answer'}
+        form = {'CallSid':'CA'+'0'*32,'CallStatus':'no-answer','CalledZip':'','ToZip':''}
         assert (await client.post(path,data=form)).status_code==403
         payload = 'http://127.0.0.1:18080'+path+''.join(k+form[k] for k in sorted(form))
         signature = base64.b64encode(hmac.new(b'review-signature-token',payload.encode(),hashlib.sha1).digest()).decode()

@@ -7,12 +7,16 @@ from common.health import router as health_router
 
 from .routers import analysis, call_events, call_results, call_sessions, call_settings, calls, claims, eleven_status, elevenlabs_webhook, handoff, ivr_simulator, recordings, twilio_compat
 from .routers.twilio_compat import reconcile_stale_calls
+from .routers import appointments
+from . import appointment_recordings
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="call-handling-svc", version="0.1.0")
 
 app.include_router(health_router)
+app.include_router(appointments.router)
+app.include_router(appointment_recordings.router)
 app.include_router(claims.router)
 app.include_router(call_sessions.router)
 app.include_router(calls.router)

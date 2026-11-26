@@ -1,10 +1,10 @@
 import { Phone, Play } from 'lucide-react';
 import DetailCard from './DetailCard';
 
-export default function CallTranscriptCard({ transcript, hasRecording = true }) {
+export default function CallTranscriptCard({ transcript, hasRecording = true, children }) {
   return (
     <DetailCard icon={Phone} title="Call Transcript & Recording">
-      <div className="space-y-3">
+      {children || <div className="space-y-3">
         {hasRecording && (
           <div className="flex items-center gap-3 bg-surface rounded-lg border border-border px-3 py-2.5">
             <button
@@ -28,7 +28,7 @@ export default function CallTranscriptCard({ transcript, hasRecording = true }) 
         ) : (
           <p className="text-sm text-muted italic">No transcript available yet.</p>
         )}
-      </div>
+      </div>}
     </DetailCard>
   );
 }

@@ -7,6 +7,8 @@ import ListTable from '../components/case/ListTable';
 import ListToolbar from '../components/ListToolbar';
 import EmptyState from '../components/EmptyState';
 import { appointmentScheduling, appointmentReminders } from '../data/staticCaseData';
+import AppointmentGate from '../features/appointments/AppointmentGate';
+import AppointmentList from '../features/appointments/AppointmentList';
 
 function filterRows(rows, searchQuery) {
   if (!searchQuery) return rows;
@@ -51,6 +53,10 @@ const REMINDER_COLUMNS = [
 ];
 
 export default function AppointmentsPage() {
+  return <AppointmentGate fallback={<StaticAppointmentsPage />}><AppointmentList /></AppointmentGate>;
+}
+
+function StaticAppointmentsPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('scheduling');
   const [searchQuery, setSearchQuery] = useState('');

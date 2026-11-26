@@ -2,6 +2,9 @@ from common.config import CommonSettings
 
 
 class Settings(CommonSettings):
+    appointments_enabled: bool = False
+    appointment_agent_id: str = ""
+    appointment_bridge_secret: str = ""
     service_name: str = "call-handling-svc"
     public_base_url: str = "http://localhost"
     bridge_server_url: str = "wss://cadence-bridge.onrender.com"

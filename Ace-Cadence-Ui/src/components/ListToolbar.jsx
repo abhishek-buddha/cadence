@@ -33,11 +33,12 @@ export default function ListToolbar({
   onSearchChange,
   searchPlaceholder = 'Search across all visible columns...',
   onSearchSubmit,
+  filters,
   legend,
   children,
 }) {
   return (
-    <div className="shrink-0 flex items-center justify-between flex-wrap gap-4 bg-toolbar rounded-xl px-4 py-3 shadow-md">
+    <div className={`shrink-0 flex items-center ${filters ? 'justify-start' : 'justify-between'} flex-wrap gap-4 bg-toolbar rounded-xl px-4 py-3 shadow-md`}>
       <div className="relative flex items-center flex-1 max-w-[380px] min-w-[220px]">
         <Search className="absolute left-3.5 w-4 h-4 text-white/50 pointer-events-none" />
         <input
@@ -59,7 +60,8 @@ export default function ListToolbar({
         </button>
       </div>
 
-      <div className="flex items-center gap-3.5 flex-wrap">
+      {filters}
+      <div className={`flex items-center gap-3.5 flex-wrap ${filters ? 'ml-auto' : ''}`}>
         {legend && (
           <div className="flex items-center gap-4 mr-1">
             {legend.map(({ label, dotClass }) => (

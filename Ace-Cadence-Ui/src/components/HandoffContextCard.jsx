@@ -8,6 +8,8 @@
   User,
 } from 'lucide-react';
 
+import AppointmentContext from '../features/appointments/AppointmentContext';
+
 function valueOrDash(value) {
   if (value === null || value === undefined || value === '') return '-';
   return value;
@@ -62,6 +64,7 @@ function CompactPill({ label, value }) {
 }
 
 export default function HandoffContextCard({ call, embedded = false }) {
+  if (call?.use_case === 'appointment') return <AppointmentContext call={call} />;
   const subject = call?.claimNumber
     ? `Claim ${call.claimNumber}`
     : call?.dentalCaseNumber

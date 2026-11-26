@@ -395,10 +395,11 @@ async def _close_call(
     final = "completed" if twilio_status_value == "completed" else "failed"
     await db.execute(
         text(
-            "UPDATE calls SET status = :final, completed_at = COALESCE(completed_at, :now) "
+            "UPDATE calls SET status = CASE WHEN use_case='appointment' AND :twilio_status='no-answer' "
+            "THEN 'no_answer' ELSE :final END, completed_at = COALESCE(completed_at, :now) "
             "WHERE id = :id AND completed_at IS NULL"
         ),
-        {"id": call_id, "final": final, "now": _now()},
+        {"id": call_id, "final": final, "twilio_status": twilio_status_value, "now": _now()},
     )
     # Duration is settled separately from the status, NOT in the same
     # first-close-wins statement.

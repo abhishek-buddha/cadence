@@ -22,4 +22,11 @@ jobs:
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_SSH_KEY }}
           script: |
-            bash /home/ec2-user/cadence/deploy.sh
+            set -e
+            cd /home/ec2-user/cadence
+            git fetch origin Ace_Cadence
+            # Run the new deployment logic while preserving its before/after diff.
+            DEPLOY_SCRIPT=$(mktemp)
+            trap 'rm -f "$DEPLOY_SCRIPT"' EXIT
+            git show origin/Ace_Cadence:deploy.sh > "$DEPLOY_SCRIPT"
+            bash "$DEPLOY_SCRIPT"

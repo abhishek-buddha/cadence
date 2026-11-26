@@ -172,7 +172,7 @@ function timestampToLegacy(value) {
   return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : value + 'Z';
 }
 
-function callToLegacy(row) {
+export function callToLegacy(row) {
   if (!row) return row;
   return {
     ...row,

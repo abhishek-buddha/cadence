@@ -71,7 +71,12 @@ if [ "$BACKEND_CHANGED" = true ]; then
     docker build -t ace-cadence-base:latest ./base-image
   fi
 
-  docker compose up -d --build
+  docker compose build
+  # Opt-in, additive migration must finish before new application containers start.
+  docker compose run --rm --no-deps \
+    -v "$APP_ROOT/Ace-Cadence/db/migrations:/migrations:ro" \
+    call-handling-svc python -m app.migrate_appointments --apply
+  docker compose up -d
   # Restart nginx unconditionally after a backend build, not just when
   # nginx/ changed.
   #

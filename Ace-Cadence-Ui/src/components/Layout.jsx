@@ -6,6 +6,7 @@ import ClaimUserRoutingDrawer from './ClaimUserRoutingDrawer';
 import { Database, UserCog, LogOut, Route } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getPageTitle } from '../utils/pageTitles';
+import AppointmentSidebar from '../features/appointments/AppointmentSidebar';
 
 function HeaderIconLink({ to, icon: Icon, label }) {
   return (
@@ -96,7 +97,7 @@ export default function Layout({ onLogout }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} />
+      <AppointmentSidebar><Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} /></AppointmentSidebar>
       <ClaimRoutingNotch onClick={() => setRoutingDrawerOpen(true)} />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}

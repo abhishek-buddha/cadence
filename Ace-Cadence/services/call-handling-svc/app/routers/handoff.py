@@ -109,12 +109,20 @@ LEFT JOIN providers pr ON pr.id = cl.provider_id
 
 async def _get_call(db: AsyncSession, call_id: int) -> dict | None:
     result = await db.execute(text(_CALL_SELECT + " WHERE c.id = :id"), {"id": call_id})
-    return _decode(row_to_dict(result.first()))
+    row = _decode(row_to_dict(result.first()))
+    if row and row.get('use_case') == 'appointment':
+        from .appointments import enrich_handoff
+        await enrich_handoff(db, [row])
+    return row
 
 
 async def _list_calls(db: AsyncSession, where: str, params: dict | None = None, limit: int = 100) -> list[dict]:
     result = await db.execute(text(_CALL_SELECT + f" WHERE {where} ORDER BY c.started_at DESC LIMIT {limit}"), params or {})
-    return [_decode(r) for r in rows_to_dicts(result)]
+    rows = [_decode(r) for r in rows_to_dicts(result)]
+    if any(r.get('use_case') == 'appointment' for r in rows):
+        from .appointments import enrich_handoff
+        await enrich_handoff(db, rows)
+    return rows
 
 
 def _public_base_url(request: Request) -> str:
@@ -245,6 +253,10 @@ async def get_handoff(call_id: int, db: AsyncSession = Depends(get_db)) -> dict:
 @router.post("/{call_id}/accept")
 async def accept_handoff(call_id: int, body: dict, db: AsyncSession = Depends(get_db)) -> dict:
     agent_id = body.get("agent_user_id")
+    # Appointment retries after a microphone failure may resume their own reservation.
+    current = await _get_call(db, call_id)
+    if current and current.get('use_case') == 'appointment' and current.get('handoff_state') == 'accepting' and not current.get('completed_at') and agent_id is not None and str(current.get('handoff_accepted_by_user_id')) == str(agent_id):
+        return {'ok': True, 'conferenceName': current.get('conference_name')}
     agent = None
     if agent_id is not None:
         agent_result = await db.execute(text("SELECT * FROM users WHERE id = :id"), {"id": agent_id})
@@ -288,8 +300,12 @@ async def accept_handoff(call_id: int, body: dict, db: AsyncSession = Depends(ge
 
 @router.post("/{call_id}/decline")
 async def decline_handoff(call_id: int, body: dict, db: AsyncSession = Depends(get_db)) -> dict:
-    if await _get_call(db, call_id) is None:
+    call = await _get_call(db, call_id)
+    if call is None:
         return {"ok": False, "reason": "not_found"}
+    if call.get('use_case') == 'appointment':
+        # The agent's next request_human check offers a callback after a declined offer.
+        await db.execute(text("UPDATE calls SET handoff_requested_at=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 61 SECOND) WHERE id=:id AND handoff_state='awaiting_human'"), {'id': call_id})
     await _log_event(db, call_id, "handoff_declined", body.get("agent_email") or body.get("agent_name") or "operator")
     await db.commit()
     return {"ok": True}
@@ -435,6 +451,8 @@ async def payer_conference_twiml(call_id: int, request: Request, db: AsyncSessio
     # it is declared here (payer leg) only. recordingStatusCallback fires once
     # when the file is ready — see routers/recordings.py.
     recording_callback = f"{base}/twilio-recording-status?callId={call_id}"
+    if call.get('use_case') == 'appointment':
+        recording_callback = f"{base}/appointment-voice/recording?callId={call_id}&token={call['handoff_token']}"
     # Tell the rep what just happened. Without this the AI simply stops
     # mid-conversation and the line goes quiet while Twilio moves the leg into
     # the conference, which reads as a dropped call. The operator then has to

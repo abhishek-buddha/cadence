@@ -29,6 +29,7 @@ import HandoffTimeline from '../components/HandoffTimeline';
 import HandoffContextCard from '../components/HandoffContextCard';
 import { useSoftphone } from '../hooks/useSoftphone';
 import { formatDuration, callDuration } from '../utils/duration';
+import useAppointmentPresence from '../features/appointments/useAppointmentPresence';
 
 function convexSiteUrl() {
   const explicit = import.meta.env.VITE_CONVEX_SITE_URL;
@@ -51,6 +52,7 @@ function elapsedSince(iso) {
 }
 
 function subjectLabel(call) {
+  if (call.use_case === 'appointment') return 'Appointment confirmation';
   if (call.claimNumber) return `Claim ${call.claimNumber}`;
   if (call.dentalCaseNumber) return `Case ${call.dentalCaseNumber}`;
   return 'Verification call';
@@ -346,6 +348,7 @@ export default function LiveCallsPage() {
   const awaiting = useQuery(api.handoff.listAwaitingHandoff);
   const live = useQuery(api.handoff.listLive);
   const softphone = useSoftphone();
+  useAppointmentPresence(softphone.status);
 
   // Warm up the device once so the first Accept connects fast (safe no-op if
   // unconfigured).

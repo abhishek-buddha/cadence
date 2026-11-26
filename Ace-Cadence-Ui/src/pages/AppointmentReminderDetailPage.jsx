@@ -6,6 +6,8 @@ import InfoRow from '../components/case/InfoRow';
 import CallTranscriptCard from '../components/case/CallTranscriptCard';
 import EmptyState from '../components/EmptyState';
 import { appointmentReminders } from '../data/staticCaseData';
+import AppointmentGate from '../features/appointments/AppointmentGate';
+import AppointmentDetails from '../features/appointments/AppointmentDetails';
 
 const RISK_STYLE = {
   Low: 'text-success bg-success/10',
@@ -14,6 +16,10 @@ const RISK_STYLE = {
 };
 
 export default function AppointmentReminderDetailPage() {
+  return <AppointmentGate fallback={<StaticAppointmentDetails />}><AppointmentDetails variant="reminder" /></AppointmentGate>;
+}
+
+function StaticAppointmentDetails() {
   const { id } = useParams();
   const record = appointmentReminders.find((r) => r.id === id);
 

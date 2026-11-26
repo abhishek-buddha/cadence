@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.audit import write_audit_event
 from common.db import get_db
 from common.serialize import row_to_dict, rows_to_dicts
+from ..config import settings
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -12,6 +14,17 @@ _UPDATABLE_FIELDS = {
     "first_name", "last_name", "date_of_birth", "member_id",
     "group_number", "policy_number", "subscriber_name", "relationship",
 }
+
+
+def patient_phone(body):
+    if not settings.appointments_enabled:
+        raise HTTPException(422, 'Patient mobile editing is not enabled')
+    value = body.get('phone')
+    if value is None or value == '':
+        return None
+    if not isinstance(value, str) or not re.fullmatch(r'\+[1-9][0-9]{7,14}', value.strip()):
+        raise HTTPException(422, 'Use a mobile number with country code, for example +14155550123')
+    return value.strip()
 
 
 @router.get("")
@@ -37,6 +50,7 @@ async def get_patient(patient_id: int, db: AsyncSession = Depends(get_db)) -> di
 
 @router.post("", status_code=201)
 async def create_patient(body: dict, db: AsyncSession = Depends(get_db)) -> dict:
+    phone = patient_phone(body) if 'phone' in body else None
     for field in ("first_name", "last_name", "date_of_birth", "member_id"):
         if field not in body:
             raise HTTPException(status_code=422, detail=f"Missing field: {field}")
@@ -53,6 +67,8 @@ async def create_patient(body: dict, db: AsyncSession = Depends(get_db)) -> dict
         ),
         {field: body.get(field) for field in _UPDATABLE_FIELDS},
     )
+    if 'phone' in body:
+        await db.execute(text('UPDATE patients SET phone=:phone WHERE id=:id'), {'phone': phone, 'id': result.lastrowid})
     await write_audit_event(db, action="create", resource_type="patient", resource_id=str(result.lastrowid))
     await db.commit()
     return await get_patient(result.lastrowid, db)
@@ -64,6 +80,8 @@ async def update_patient(patient_id: int, body: dict, db: AsyncSession = Depends
     if existing.first() is None:
         raise HTTPException(status_code=404, detail="Patient not found")
     updates = {k: v for k, v in body.items() if k in _UPDATABLE_FIELDS}
+    if 'phone' in body:
+        updates['phone'] = patient_phone(body)
     if not updates:
         return await get_patient(patient_id, db)
     set_clause = ", ".join(f"{field} = :{field}" for field in updates)

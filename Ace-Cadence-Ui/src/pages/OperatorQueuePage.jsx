@@ -32,6 +32,7 @@ import PostCallWorkspace from '../components/operator/PostCallWorkspace';
 import CallSafeBoundary from '../components/CallSafeBoundary';
 import { useSoftphone } from '../hooks/useSoftphone';
 import { useAuth } from '../context/AuthContext';
+import useAppointmentPresence from '../features/appointments/useAppointmentPresence';
 
 function convexSiteUrl() {
   const explicit = import.meta.env.VITE_CONVEX_SITE_URL;
@@ -53,6 +54,7 @@ function elapsedSince(iso) {
 }
 
 function subjectLabel(call) {
+  if (call.use_case === 'appointment') return 'Appointment confirmation';
   if (call.claimNumber) return `Claim ${call.claimNumber}`;
   if (call.dentalCaseNumber) return `Case ${call.dentalCaseNumber}`;
   return 'Verification call';
@@ -197,7 +199,7 @@ function IncomingCallPanel({ call, softphone }) {
               <PhoneIncoming className="w-5 h-5 text-accent animate-pulse" />
             </div>
             <div>
-              <p className="font-display font-semibold text-lg text-gray-900">{call.insuranceCompany || 'Payer'}</p>
+              <p className="font-display font-semibold text-lg text-gray-900">{call.use_case === 'appointment' ? call.patientName : call.insuranceCompany || 'Payer'}</p>
               <p className="text-sm text-gray-600">
                 {subjectLabel(call)}
                 {call.patientName ? ` · ${call.patientName}` : ''}
@@ -309,7 +311,7 @@ function OnCallPanel({ call, softphone }) {
 
       {/* Claim grouping + disposition workspace — same-payer claims the operator
           can process while the payer rep is still on the line. */}
-      <CallSafeBoundary label="Post-call workspace"><PostCallWorkspace call={c} /></CallSafeBoundary>
+      {c.use_case !== 'appointment' && <CallSafeBoundary label="Post-call workspace"><PostCallWorkspace call={c} /></CallSafeBoundary>}
     </div>
   );
 }
@@ -403,7 +405,7 @@ function EndedPanel({ call }) {
 
       {/* Post-call: set the disposition for the handed-off claim and process any
           other open claims for the same payer. */}
-      <CallSafeBoundary label="Post-call workspace"><PostCallWorkspace call={call} /></CallSafeBoundary>
+      {call.use_case !== 'appointment' && <CallSafeBoundary label="Post-call workspace"><PostCallWorkspace call={call} /></CallSafeBoundary>}
     </div>
   );
 }
@@ -415,6 +417,7 @@ export default function OperatorQueuePage() {
   const auth = useAuth();
   const status = useQuery(api.handoff.getMyRoutingStatus, auth?.userId ? { userId: auth.userId } : 'skip');
   const softphone = useSoftphone();
+  useAppointmentPresence(softphone.status);
 
   useEffect(() => {
     softphone.ensureDevice();

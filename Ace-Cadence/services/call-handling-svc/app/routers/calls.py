@@ -57,7 +57,8 @@ async def list_calls(
     assigned_agent_user_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    clauses, params = [], {}
+    # Appointment history is served by /appointments/{id}/calls, keeping claim reports unchanged.
+    clauses, params = ["(use_case IS NULL OR use_case != 'appointment')"], {}
     for field, value in (
         ("claim_id", claim_id), ("status", status), ("handoff_state", handoff_state),
         ("assigned_agent_user_id", assigned_agent_user_id),

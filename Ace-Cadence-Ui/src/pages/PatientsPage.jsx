@@ -7,6 +7,7 @@ import { useProviderFilter } from '../context/ProviderFilterContext';
 import { listPatients, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient } from '../api/masterData';
 import { listClaims } from '../api/claims';
 import { useLiveQuery } from '../hooks/useLiveQuery';
+import { getConfig } from '../features/appointments/api';
 
 const EMPTY_FORM = {
   firstName: '',
@@ -17,17 +18,21 @@ const EMPTY_FORM = {
   policyNumber: '',
   subscriberName: '',
   relationship: 'self',
+  phone: '',
 };
 
 export default function PatientsPage() {
   const { selectedProviderId } = useProviderFilter();
   const { data: allPatients, loading: isLoading, refetch } = useLiveQuery(listPatients, [], 'patient');
   const { data: allClaims } = useLiveQuery(listClaims, [], 'claim');
+  const { data: appointmentConfig } = useLiveQuery(getConfig, [], 'appointment-config');
+  const phoneEnabled = appointmentConfig?.enabled;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [piiVisible, setPiiVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -47,12 +52,14 @@ export default function PatientsPage() {
   });
 
   function openCreate() {
+    setSaveError('');
     setEditing(null);
     setForm(EMPTY_FORM);
     setModalOpen(true);
   }
 
   function openEdit(patient) {
+    setSaveError('');
     setEditing(patient);
     setForm({
       firstName: patient.first_name,
@@ -63,6 +70,7 @@ export default function PatientsPage() {
       policyNumber: patient.policy_number ?? '',
       subscriberName: patient.subscriber_name ?? '',
       relationship: patient.relationship ?? 'self',
+      phone: patient.phone ?? '',
     });
     setModalOpen(true);
   }
@@ -80,6 +88,7 @@ export default function PatientsPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
+    setSaveError('');
     try {
       const payload = {
         first_name: form.firstName,
@@ -90,6 +99,7 @@ export default function PatientsPage() {
         policy_number: form.policyNumber || null,
         subscriber_name: form.subscriberName || null,
         relationship: form.relationship || null,
+        ...(phoneEnabled ? { phone: form.phone.trim() || null } : {}),
       };
 
       if (editing) {
@@ -99,6 +109,8 @@ export default function PatientsPage() {
       }
       await refetch();
       closeModal();
+    } catch (error) {
+      setSaveError(error.message);
     } finally {
       setSaving(false);
     }
@@ -181,6 +193,7 @@ export default function PatientsPage() {
                 <tr className="sticky top-0 z-10 bg-table-header">
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Name</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">DOB</th>
+                  {phoneEnabled && <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Mobile</th>}
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Member ID</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Group #</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-table-header-text font-semibold">Relationship</th>
@@ -194,6 +207,7 @@ export default function PatientsPage() {
                       <span className="font-medium text-gray-900">{mask(patient.first_name)} {mask(patient.last_name)}</span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{maskDOB(patient.date_of_birth)}</td>
+                    {phoneEnabled && <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{mask(patient.phone) || '--'}</td>}
                     <td className="px-4 py-3 text-sm text-gray-600">
                       <span className="font-data text-accent">{mask(patient.member_id)}</span>
                     </td>
@@ -228,6 +242,12 @@ export default function PatientsPage() {
       {/* Add/Edit Modal */}
       <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Patient' : 'Add Patient'} wide>
         <form onSubmit={handleSubmit} className="space-y-5">
+          {phoneEnabled && <div>
+            <label htmlFor="patient-mobile" className={labelClass}>Mobile number (with country code)</label>
+            <input id="patient-mobile" type="tel" maxLength={20} pattern="\+[1-9][0-9]{7,14}" value={form.phone}
+              onChange={event => setField('phone', event.target.value)} className={inputClass} placeholder="+14155550123" />
+            <p className="mt-1 text-xs text-muted">Used to prefill new appointments. Existing appointment phone numbers can be edited on their details page.</p>
+          </div>}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>First Name</label>
@@ -330,6 +350,7 @@ export default function PatientsPage() {
           </div>
 
           {/* Actions */}
+          {saveError && <p role="alert" className="text-sm text-danger">{saveError}</p>}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
             <button
               type="button"

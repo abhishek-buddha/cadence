@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import HandoffNotifier from './HandoffNotifier';
 import { getPageTitle } from '../utils/pageTitles';
+import AppointmentSidebar from '../features/appointments/AppointmentSidebar';
 
 // Same module set as the admin Sidebar, minus Call Audit / Reports / Master
 // Data / User Management / Claim User Routing — those stay admin-only (Claim
@@ -107,7 +108,7 @@ export default function OperatorLayout({ onLogout }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <OperatorSidebar />
+      <AppointmentSidebar><OperatorSidebar /></AppointmentSidebar>
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <header className="shrink-0 h-14 bg-white/80 backdrop-blur-md border-b border-border flex items-center justify-between px-6 lg:px-8 gap-3 relative z-20">

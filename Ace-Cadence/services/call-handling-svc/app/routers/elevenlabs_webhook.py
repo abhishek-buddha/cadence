@@ -176,7 +176,7 @@ async def elevenlabs_webhook(request: Request, db: AsyncSession = Depends(get_db
         )
 
     existing = await db.execute(
-        text("SELECT id, handoff_state FROM calls WHERE id = :id"), {"id": call_id}
+        text("SELECT id, handoff_state, use_case FROM calls WHERE id = :id"), {"id": call_id}
     )
     call = row_to_dict(existing.first())
     if call is None:
@@ -207,7 +207,7 @@ async def elevenlabs_webhook(request: Request, db: AsyncSession = Depends(get_db
     # the real end-signals for that mode. For the ElevenLabs-owned modes
     # (ivr_only_cut_at_handoff, direct_to_agent) no handoff is live and this
     # remains the only close path, so it still runs.
-    if call.get("handoff_state") not in _LIVE_HANDOFF_STATES:
+    if call.get('use_case') != 'appointment' and call.get("handoff_state") not in _LIVE_HANDOFF_STATES:
         await _close_call(db, call_id=call_id, twilio_status_value="completed", duration=duration)
     await db.commit()
 

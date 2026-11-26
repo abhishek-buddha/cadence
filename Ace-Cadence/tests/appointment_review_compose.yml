@@ -1,0 +1,57 @@
+# Isolated review environment. No production credentials or external phone calls.
+services:
+  api:
+    image: ace-cadence-call-handling-svc:latest
+    mem_limit: 256m
+    environment: &env
+      DATABASE_URL: mysql+asyncmy://root:review-only-password@cadence-appointments-review-db:3306/cadence_review
+      REDIS_PUBSUB_URL: redis://redis:6379/1
+      APPOINTMENTS_ENABLED: "true"
+      APPOINTMENT_AGENT_ID: ${APPOINTMENT_AGENT_ID:-review-agent}
+      APPOINTMENT_BRIDGE_SECRET: review-bridge-secret
+      PUBLIC_BASE_URL: http://127.0.0.1:18080
+      ACCESS_CODE: "111111"
+      TWILIO_AUTH_TOKEN: review-signature-token
+    volumes:
+      - ../services/call-handling-svc/app:/app/app:ro
+      - ../db:/review-db:ro
+      - .:/review-tests:ro
+    networks: [review]
+  master:
+    image: ace-cadence-master-data-svc:latest
+    mem_limit: 128m
+    environment: *env
+    volumes:
+      - ../services/master-data-svc/app:/app/app:ro
+    networks: [review]
+  login:
+    image: ace-cadence-login-svc:latest
+    mem_limit: 128m
+    environment: *env
+    networks: [review]
+  users:
+    image: ace-cadence-user-management-svc:latest
+    mem_limit: 128m
+    environment: *env
+    networks: [review]
+  redis:
+    image: redis:7-alpine
+    mem_limit: 32m
+    networks: [review]
+  updates:
+    image: ace-cadence-ui-data-loading-svc:latest
+    mem_limit: 128m
+    environment: *env
+    networks: [review]
+  web:
+    image: nginx:1.27-alpine
+    mem_limit: 32m
+    ports: ["127.0.0.1:18080:80"]
+    volumes:
+      - ../../Ace-Cadence-Ui/dist:/usr/share/nginx/html:ro
+      - ./appointment_review_nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [review]
+networks:
+  review:
+    external: true
+    name: cadence-appointments-review

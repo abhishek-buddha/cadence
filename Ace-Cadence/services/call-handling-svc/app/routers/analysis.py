@@ -214,6 +214,9 @@ async def analyze_call(db: AsyncSession, call_id: int, *, force: bool = False) -
     `force=True` is for the manual /calls/{id}/analyze endpoint, whose entire
     purpose is re-running analysis on an existing transcript.
     """
+    use_case = (await db.execute(text('SELECT use_case FROM calls WHERE id=:id'), {'id': call_id})).scalar()
+    if use_case == 'appointment':
+        return {'callId': call_id, 'outcome': None, 'skipped': 'appointment_uses_explicit_tools'}
     if not settings.openai_api_key:
         raise HTTPException(status_code=503, detail="OpenAI not configured")
 

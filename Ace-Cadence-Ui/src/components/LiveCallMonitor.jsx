@@ -61,6 +61,7 @@ function useElapsedTimer(startIso, frozenDuration) {
 // LiveCallMonitor
 // ---------------------------------------------------------------------------
 export default function LiveCallMonitor({ call, insurance, onComplete }) {
+  const isAppointment = call?.use_case === 'appointment';
   const getCallStatus = useAction(api.callActions.getCallStatus);
   const endCallAction = useAction(api.callActions.endCall);
   const [ending, setEnding] = useState(false);
@@ -410,6 +411,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   }
 
   function getLabel(entry) {
+    if (isAppointment) return entry.role === 'agent' ? 'Voice agent' : 'Patient';
     return entry.role === 'agent' ? 'Thomas' : 'Phone';
   }
 
@@ -554,7 +556,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
             <span className="text-sm font-medium text-gray-900">Call Completed</span>
           </div>
           <p className="text-xs text-gray-600 leading-relaxed">
-            Transcript analysis is processing. Results will appear in the claim details shortly.
+            {isAppointment ? 'The transcript and recording will appear in appointment call history when processing finishes.' : 'Transcript analysis is processing. Results will appear in the claim details shortly.'}
           </p>
         </div>
       )}
@@ -562,7 +564,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       {/* Status message during call */}
       {!isCompleted && (
         <p className="text-xs text-muted text-center">
-          Thomas is navigating the IVR, waiting on hold, and will speak with the insurance rep automatically.
+          {isAppointment ? 'The voice agent is calling the patient to confirm the appointment. You can take over this call when needed.' : 'Thomas is navigating the IVR, waiting on hold, and will speak with the insurance rep automatically.'}
         </p>
       )}
     </div>

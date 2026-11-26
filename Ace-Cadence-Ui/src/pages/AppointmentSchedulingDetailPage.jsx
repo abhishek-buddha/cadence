@@ -7,8 +7,14 @@ import AttemptHistoryCard from '../components/case/AttemptHistoryCard';
 import CallTranscriptCard from '../components/case/CallTranscriptCard';
 import EmptyState from '../components/EmptyState';
 import { appointmentScheduling } from '../data/staticCaseData';
+import AppointmentGate from '../features/appointments/AppointmentGate';
+import AppointmentDetails from '../features/appointments/AppointmentDetails';
 
 export default function AppointmentSchedulingDetailPage() {
+  return <AppointmentGate fallback={<StaticAppointmentDetails />}><AppointmentDetails /></AppointmentGate>;
+}
+
+function StaticAppointmentDetails() {
   const { id } = useParams();
   const record = appointmentScheduling.find((r) => r.id === id);
 

@@ -38,6 +38,7 @@ services:
     environment:
       <<: *common-env
       SERVICE_NAME: master-data-svc
+      APPOINTMENTS_ENABLED: ${APPOINTMENTS_ENABLED:-false}
     depends_on: [redis]
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -48,6 +49,9 @@ services:
     environment:
       <<: *common-env
       SERVICE_NAME: call-handling-svc
+      APPOINTMENTS_ENABLED: ${APPOINTMENTS_ENABLED:-false}
+      APPOINTMENT_AGENT_ID: ${APPOINTMENT_AGENT_ID:-}
+      APPOINTMENT_BRIDGE_SECRET: ${APPOINTMENT_BRIDGE_SECRET:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}

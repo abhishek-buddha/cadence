@@ -120,7 +120,7 @@ async def eleven_status(call_id: int, db: AsyncSession = Depends(get_db)) -> dic
 
     result = await db.execute(
         text(
-            "SELECT id, claim_id, status, handoff_state, transcript, eleven_labs_conversation_id "
+            "SELECT id, claim_id, status, handoff_state, transcript, eleven_labs_conversation_id, use_case "
             "FROM calls WHERE id = :id"
         ),
         {"id": call_id},
@@ -178,7 +178,7 @@ async def eleven_status(call_id: int, db: AsyncSession = Depends(get_db)) -> dic
     # For the ElevenLabs-owned modes no handoff is ever live, so this remains
     # their close path and still runs.
     live_handoff = call.get("handoff_state") in LIVE_HANDOFF_STATES
-    if status in _TERMINAL and not live_handoff and call.get("status") not in ("completed", "failed"):
+    if call.get('use_case') != 'appointment' and status in _TERMINAL and not live_handoff and call.get("status") not in ("completed", "failed"):
         await _close_call(
             db,
             call_id=call_id,

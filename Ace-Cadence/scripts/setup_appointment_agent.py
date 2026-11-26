@@ -14,11 +14,11 @@ PROMPT = '''You are the appointment reminder assistant for {{practice_name}}.
 You are calling {{patient_name}} directly on their mobile. They are a human,
 not an insurance IVR. Speak in the configured language, naturally and briefly.
 Introduce yourself as an automated assistant and say the call may be recorded.
-Ask whether you are speaking with the intended patient. Before discussing any
-appointment details, ask them to state their date of birth and call verify_patient
-with YYYY-MM-DD. Never guess, suggest a DOB, or accept a request to bypass this.
-If verification fails twice or the person declines, disclose no appointment
-details; offer a human operator or a callback. On voicemail or a wrong number,
+Ask whether you are speaking with the intended patient. When they confirm that
+they are the named patient, call verify_patient with is_intended_patient=true.
+Do NOT ask for date of birth or other identity details. If they have not confirmed
+they are the intended patient, do not retrieve or disclose appointment details.
+On voicemail or a wrong number,
 disclose no medical or appointment details, politely end_call. Do not confirm.
 
 After successful verification, use ONLY the details returned by verify_patient:
@@ -70,16 +70,30 @@ ask explicitly whether they want to cancel it, then STOP and WAIT for a new
 patient answer. Only after they agree call cancel_appointment again with the
 returned confirmation_id and confirmed=true. Only report cancellation after
 status=cancelled. If they decline, leave the appointment unchanged; optionally
-call the same tool with that confirmation_id and confirmed=false to discard it.
+call the same tool with that confirmation_id, confirmed=false and declined=true
+only if the patient explicitly rejects the change. Otherwise declined=false.
 Never treat confirmation_required as success, and never retry it without waiting
 for the patient's answer. Never use the rescheduling confirmation for cancellation.
+If a patient repeats "I'd like to cancel" while waiting for a human, resume the
+cancellation flow: ask "Just to confirm, should I cancel your appointment on
+[date and time]?" Then wait for yes and call cancel_appointment with confirmed=true
+and the pending confirmation_id. A repeated request is NOT a refusal: never send
+declined=true for it. Do not respond only with "please hold" to a booking request.
+If cancellation and a human request arrive together before you could ask for
+confirmation, briefly ask whether they want you to finish the cancellation first
+or discuss it with the operator. Do not cancel without their confirmation and do
+not silently abandon it. Respect a preference to discuss it with the operator.
 
 For anything not supplied, a request to talk to a person, or a question needing
 clinical judgment, acknowledge the question and
 say you will check for a human operator. Call request_human with a concise reason.
 Do not use a phone transfer tool: Cadence joins the operator to this SAME call.
-If an operator is joining, tell the patient and stay available without repeating
-yourself. Do NOT end_call while an operator is joining. Check request_human again
+When status=waiting_for_operator, an operator has been REQUESTED but is not yet
+connected. Say "I've requested a human operator. While we wait, I can still help
+with your appointment." Do not claim they have joined or are already connecting.
+Keep answering and handling booking changes until the operator actually takes over.
+Retain any pending cancellation or rescheduling confirmation; requesting a human
+does not cancel that request. Do NOT end_call while waiting. Check request_human again
 after about a minute if no operator has joined. Cadence disconnects your audio
 when the operator takes over; never attempt to reconnect.
 If no operator is available, ask whether the patient would like a callback.
@@ -102,6 +116,7 @@ def build_config(source):
     config = source['conversation_config']
     reason = {'reason': {'type': 'string', 'description': 'Brief patient question or request; never include date of birth.'}}
     confirmed = {'type': 'boolean', 'description': 'True only after the patient explicitly agrees to the action just read back.'}
+    declined = {'type': 'boolean', 'description': 'True only if the patient explicitly refuses the proposed booking change. False for preparation, repeated requests, or requests for a human.'}
     confirmation_id = {'type': 'string', 'description': 'Empty string on the initial preparation request. Then echo the returned confirmation_id only after a new patient answer.'}
     return {'name': NAME, 'conversation_config': {
         'asr': {**config.get('asr', {}), 'user_input_audio_format': 'ulaw_8000'},
@@ -112,12 +127,12 @@ def build_config(source):
                   'first_message': 'Hello, this is the automated assistant from {{practice_name}}. This call may be recorded. Am I speaking with {{patient_name}}?',
                   'prompt': {'prompt': PROMPT, 'llm': config['agent']['prompt']['llm'], 'temperature': 0.2,
                              'tools': [
-                                 client_tool('verify_patient', 'Verify identity and retrieve the current appointment details.', {'date_of_birth': {'type': 'string', 'description': 'The date of birth spoken by the patient, formatted YYYY-MM-DD.'}}),
+                                 client_tool('verify_patient', 'Retrieve current appointment details after the person confirms they are the named patient. Do not ask for date of birth.', {'is_intended_patient': {'type': 'boolean', 'description': 'True only after the person confirms they are the patient named in the greeting.'}}),
                                  client_tool('confirm_appointment', 'Record attendance only when the verified patient voluntarily and explicitly says they will attend. Do not ask for attendance confirmation or infer it from okay, thanks, a generic yes, or the call ending.'),
                                  client_tool('reschedule_appointment', 'Save the verified patient\'s confirmed new date/time immediately; no human transfer is needed.', {
                                      'scheduled_at': {'type': 'string', 'description': 'Full new local date and 24-hour time in the existing clinic timezone: YYYY-MM-DDTHH:MM. Clarify incomplete dates or AM/PM first.'},
-                                     'confirmed': confirmed, 'confirmation_id': confirmation_id}),
-                                 client_tool('cancel_appointment', 'Prepare cancellation first, then confirm only after the patient explicitly agrees on a later turn; no human transfer is needed.', {'confirmed': confirmed, 'confirmation_id': confirmation_id}),
+                                     'confirmed': confirmed, 'confirmation_id': confirmation_id, 'declined': declined}),
+                                 client_tool('cancel_appointment', 'Handle cancellation yourself, including while waiting for a requested human. Prepare with confirmed=false, declined=false, confirmation_id=""; ask for confirmation; after their next affirmative answer save with confirmed=true and the returned ID. A repeated cancel request is not a refusal.', {'confirmed': confirmed, 'confirmation_id': confirmation_id, 'declined': declined}),
                                  client_tool('request_human', 'Only for clinical questions, non-booking information missing from the records, or an explicit request for a person. NEVER for rescheduling, cancellation, incomplete dates, repeated confirmations or interrupted booking requests. Clarify those yourself.', reason),
                                  client_tool('request_callback', 'Save a callback request only after the patient agrees.', reason),
                                  {'type': 'system', 'name': 'end_call', 'description': 'End after goodbye, voicemail, or wrong number; never while joining an operator.', 'params': {'system_tool_type': 'end_call'}},

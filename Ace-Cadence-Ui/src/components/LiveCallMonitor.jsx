@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Phone, PhoneOff, Clock, CheckCircle2, MessageSquare, Volume2, VolumeX, Loader2 } from 'lucide-react';
@@ -83,15 +83,26 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
   const nextPlayTimeRef = useRef(0);
   const playIntervalRef = useRef(null);
   const wsRef = useRef(null);
+  const audioSourcesRef = useRef(new Map());
+  const stopAudio = useCallback((track) => {
+    for (const [source, direction] of audioSourcesRef.current) {
+      if (!track || direction === track) {
+        source.stop();
+        source.disconnect();
+        audioSourcesRef.current.delete(source);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     mutedRef.current = muted;
     if (muted) {
+      stopAudio();
       inboundQueueRef.current = [];
       outboundQueueRef.current = [];
       nextPlayTimeRef.current = 0;
     }
-  }, [muted]);
+  }, [muted, stopAudio]);
 
   // onComplete lives in a ref, and is deliberately NOT a dependency of the poll
   // effect below.
@@ -231,25 +242,27 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
 
       const a = inbound.splice(0, frameLength);
       const b = outbound.splice(0, frameLength);
-      const raw = new Float32Array(frameLength);
-      for (let i = 0; i < frameLength; i++) {
-        // Sum both directions, clamped -- two people talking at once should
-        // sound like two people, not like clipping noise.
-        const mixed = (a[i] || 0) + (b[i] || 0);
-        raw[i] = mixed > 1 ? 1 : mixed < -1 ? -1 : mixed;
+      // Separate sources let an interruption stop the agent without cutting the patient.
+      for (const [samples, track] of [[a, 'inbound'], [b, 'outbound']]) {
+        if (!samples.length) continue;
+        const raw = new Float32Array(frameLength);
+        raw.set(samples);
+        const upsampled = upsample8kTo(raw, ctx.sampleRate);
+        const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
+        buffer.getChannelData(0).set(upsampled);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.onended = () => { audioSourcesRef.current.delete(source); source.disconnect(); };
+        source.start(nextPlayTimeRef.current);
+        audioSourcesRef.current.set(source, track);
       }
-      const upsampled = upsample8kTo(raw, ctx.sampleRate);
-      const buffer = ctx.createBuffer(1, upsampled.length, ctx.sampleRate);
-      buffer.getChannelData(0).set(upsampled);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.start(nextPlayTimeRef.current);
-      nextPlayTimeRef.current += buffer.duration;
+      nextPlayTimeRef.current += Math.ceil(frameLength * ctx.sampleRate / 8000) / ctx.sampleRate;
     }, 20);
 
     return () => {
       clearInterval(playIntervalRef.current);
+      stopAudio();
       inboundQueueRef.current = [];
       outboundQueueRef.current = [];
       nextPlayTimeRef.current = 0;
@@ -258,7 +271,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
         audioCtxRef.current = null;
       }
     };
-  }, []);
+  }, [stopAudio]);
   // WebSocket for audio from bridge monitor
   useEffect(() => {
     if (!call?._id) return;
@@ -275,6 +288,11 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data.event === 'clear' && data.track === 'outbound') {
+            outboundQueueRef.current = [];
+            stopAudio('outbound');
+            return;
+          }
           if (data.event === 'transcript' && data.text) {
             const message = String(data.text).trim();
             if (message && message !== '...') {
@@ -334,7 +352,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       inboundQueueRef.current = [];
       outboundQueueRef.current = [];
     };
-  }, [call?._id, isCompleted]);
+  }, [call?._id, isCompleted, stopAudio]);
 
   // Start the audio context as soon as the monitor mounts, so "unmuted by
   // default" actually produces sound.

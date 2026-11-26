@@ -319,12 +319,13 @@ async def operator_candidates(db, user_id=None):
 async def request_operator(db, call, reason, candidates, user_id=None):
     if call.get('completed_at') or call['status'] not in {'initiating', 'in_progress'}:
         raise HTTPException(409, 'Call already ended')
+    waiting = {'status': 'waiting_for_operator', 'message': 'An operator has been requested but has not connected yet. Say this once. Continue helping with cancellation or rescheduling if the patient asks while waiting; ask for confirmation and save the change before reporting success. Do not discard a pending booking request merely because a human was requested.'}
     if call.get('handoff_state') in LIVE_HANDOFF_STATES:
         requested = call.get('handoff_requested_at')
         if call['handoff_state'] == 'awaiting_human' and requested and datetime.fromisoformat(requested) < now()-timedelta(seconds=60):
             await db.execute(text("UPDATE calls SET handoff_state=NULL,assigned_agent_user_id=NULL,assigned_agent_email=NULL,assigned_agent_name=NULL WHERE id=:id"), {'id': call['id']})
             return {'status': 'no_operator', 'message': 'The operator did not answer. Offer a callback and record it if the patient agrees.'}
-        return {'status': 'waiting_for_operator', 'message': 'An operator has already been requested'}
+        return waiting
     chosen = None
     for user in candidates:
         if user_id is not None and str(user['id']) != str(user_id):
@@ -348,7 +349,7 @@ async def request_operator(db, call, reason, candidates, user_id=None):
         {'now': now(), 'reason': reason[:255], 'agent': chosen['id'], 'email': chosen['email'],
          'name': chosen.get('name') or chosen['email'], 'conference': f"cadence-{call['id']}", 'id': call['id']})
     await _log_event(db, call['id'], 'handoff_requested', reason[:255])
-    return {'status': 'waiting_for_operator', 'message': 'Tell the patient an operator is joining. Stay on the line until takeover.'}
+    return waiting
 
 
 @router.post('/appointments/calls/{call_id:int}/takeover')
@@ -392,8 +393,10 @@ async def tool(request: Request, body: dict, db: AsyncSession = Depends(get_db))
     # Booking mutations need a slot lock; operator reservation has its own locks.
     row = await appointment(db, call['appointment_id'], lock=name in {'confirm_appointment', 'reschedule_appointment', 'cancel_appointment'})
     if name == 'verify_patient':
-        if not dob_matches(row['date_of_birth'], args.get('date_of_birth')):
-            return {'verified': False, 'message': 'Do not disclose appointment details. Offer an operator or a callback.'}
+        # Keep DOB compatibility for calls already using the previous agent tools.
+        identified = args.get('is_intended_patient') is True if 'is_intended_patient' in args else dob_matches(row['date_of_birth'], args.get('date_of_birth'))
+        if not identified:
+            return {'verified': False, 'message': 'Do not disclose appointment details to a wrong recipient. Ask whether this is the intended patient; do not ask for date of birth.'}
         await db.execute(text('UPDATE appointment_calls SET identity_verified=TRUE WHERE call_id=:id'), {'id': call['id']})
         result = {'verified': True, 'patient_name': row['patient_name'], 'provider': row['provider_name'],
                   'scheduled_at': str(row['scheduled_at']), 'timezone': row['timezone'], 'location': row['location'],
@@ -436,6 +439,9 @@ async def tool(request: Request, body: dict, db: AsyncSession = Depends(get_db))
         if turn <= pending['turn']:
             return {'status': 'confirmation_required', 'confirmation_id': pending['id'], 'message': 'Wait for a new patient answer. No change has been saved.'}
         if args.get('confirmed') is not True:
+            if args.get('declined') is not True:
+                return {'status': 'confirmation_required', 'confirmation_id': pending['id'],
+                        'message': 'The booking is unchanged and the request is still pending. Ask the patient explicitly whether to proceed, then wait for their answer. A repeated cancellation request or a request for a human is not a refusal.'}
             await db.execute(text('UPDATE appointment_calls SET pending_booking_change=NULL WHERE call_id=:id'), {'id':call['id']})
             await db.commit()
             return {'status': 'unchanged', 'message': 'The booking has not changed. Ask again before any future change.'}

@@ -16,6 +16,7 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname));
     await page.addInitScript(() => {
       const RealAudioContext = window.AudioContext;
       window.audioFrames = [];
+      window.stoppedAudio = [];
       window.AudioContext = class extends RealAudioContext {
         constructor() {
           super({ sampleRate: 8000 });
@@ -24,6 +25,8 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname));
         createBufferSource() {
           const source = super.createBufferSource();
           const start = source.start.bind(source);
+          const stop = source.stop.bind(source);
+          source.stop = (...args) => { window.stoppedAudio.push(source.buffer.getChannelData(0)[0]); stop(...args); };
           source.start = when => {
             window.audioFrames.push({ when, duration: source.buffer.duration, samples: Array.from(source.buffer.getChannelData(0)) });
             start(when);
@@ -62,8 +65,23 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname));
     for (let i = 1; i < frames.length; i++) {
       assert(frames[i].when >= frames[i - 1].when + frames[i - 1].duration - 1e-6, 'Scheduled audio must never overlap');
     }
+    const decode = value => {
+      const code = ~value & 255;
+      return ((code & 128) ? -1 : 1) * (((2 * (code & 15) + 33) << ((code >> 4) & 7)) - 33) / 32768;
+    };
+    await page.evaluate(() => { window.audioFrames = []; });
+    socket.send(JSON.stringify({ event: 'audio', media: { track: 'outbound', payload: Buffer.alloc(64000, 145).toString('base64') } }));
+    socket.send(JSON.stringify({ event: 'audio', media: { track: 'inbound', payload: Buffer.alloc(1280, 170).toString('base64') } }));
+    await page.waitForFunction(() => window.audioFrames.length >= 4);
+    socket.send(JSON.stringify({ event: 'clear', track: 'outbound' }));
+    await page.waitForFunction(() => window.stoppedAudio.length > 0);
+    const stopped = await page.evaluate(() => window.stoppedAudio);
+    assert(stopped.every(sample => sample === decode(145)), 'Interruption must stop agent sources, never patient sources');
+    // A new reply must not have eight seconds of interrupted speech in front of it.
+    socket.send(JSON.stringify({ event: 'audio', media: { track: 'outbound', payload: Buffer.alloc(320, 205).toString('base64') } }));
+    await page.waitForFunction(sample => window.audioFrames.some(frame => frame.samples[0] === sample), decode(205), { timeout: 1500 });
     await page.evaluate(() => window.monitorRoot.unmount());
     assert.deepEqual(errors, []);
-    console.log('PASS: real Chrome audio preserves a 20-second agent burst and partial tail without overlapping playback');
+    console.log('PASS: full 20-second agent burst, non-overlapping playback, interruption stops only agent audio, fresh reply has no stale backlog');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exit(1); });

@@ -62,7 +62,8 @@ async def main():
         assert (await tool('reschedule_appointment', {'scheduled_at':'2090-01-20T14:30','confirmed':True})).status_code == 403
         assert (await tool('cancel_appointment', {'confirmed':True})).status_code == 403
         assert (await tool('verify_patient',{'date_of_birth':'1981-02-03'})).json()['verified'] is False
-        verified = (await tool('verify_patient',{'date_of_birth':'1980-02-03'})).json()
+        assert (await tool('verify_patient',{'is_intended_patient':False})).json()['verified'] is False
+        verified = (await tool('verify_patient',{'is_intended_patient':True})).json()
         assert verified['verified'] and verified['location']=='Updated clinic'
         assert 'date_of_birth' not in verified and 'notes' not in verified
         assert (await tool('confirm_appointment')).json()['status']=='confirmed'
@@ -84,7 +85,8 @@ async def main():
         assert (await client.get(f'/appointments/{aid}')).json()['status']=='rescheduled', 'Attendance must not erase the rescheduled tag'
         prepared = (await tool('cancel_appointment', {'confirmed':False}, patient_turn=3)).json()
         assert prepared['status']=='confirmation_required'
-        assert (await tool('cancel_appointment', {'confirmed':False,'confirmation_id':prepared['confirmation_id']}, patient_turn=4)).json()['status']=='unchanged'
+        assert (await tool('cancel_appointment', {'confirmed':False,'confirmation_id':prepared['confirmation_id']}, patient_turn=4)).json()['status']=='confirmation_required'
+        assert (await tool('cancel_appointment', {'confirmed':False,'declined':True,'confirmation_id':prepared['confirmation_id']}, patient_turn=4)).json()['status']=='unchanged'
         assert (await client.get(f'/appointments/{aid}')).json()['status']=='rescheduled'
         prepared = (await tool('cancel_appointment', {'confirmed':False}, patient_turn=5)).json()
         assert (await tool('cancel_appointment', {'confirmed':True,'confirmation_id':prepared['confirmation_id']}, patient_turn=6)).json()['status']=='cancelled'

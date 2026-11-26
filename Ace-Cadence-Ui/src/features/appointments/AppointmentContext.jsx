@@ -13,6 +13,6 @@ export default function AppointmentContext({ call }) {
     {record.instructions && <p className="text-sm whitespace-pre-wrap">{record.instructions}</p>}
     {call.handoffReason && <p className="text-sm"><strong>Patient needs help with:</strong> {call.handoffReason}</p>}
     {call.transcript && <details><summary className="cursor-pointer text-sm text-accent">Conversation so far</summary><p className="mt-2 text-sm whitespace-pre-wrap max-h-64 overflow-auto">{call.transcript}</p></details>}
-    <Link to={`/appointments/scheduling/${record.id}`} target="_blank" rel="noreferrer" className="inline-block text-sm text-accent underline">Open appointment in a new tab</Link>
+    <Link to={`/appointments/${record.id}`} target="_blank" rel="noreferrer" className="inline-block text-sm text-accent underline">Open appointment in a new tab</Link>
   </section>;
 }

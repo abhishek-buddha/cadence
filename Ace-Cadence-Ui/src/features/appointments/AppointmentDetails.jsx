@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { Phone, Pencil, MessageSquare, ArrowRight } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { Phone, Pencil, MessageSquare, History } from 'lucide-react';
 import { useLiveQuery } from '../../hooks/useLiveQuery';
 import { useSoftphone } from '../../hooks/useSoftphone';
 import { useAuth } from '../../context/AuthContext';
@@ -10,7 +10,6 @@ import { callToLegacy } from '../../convexCompat/react';
 import LiveCallMonitor from '../../components/LiveCallMonitor';
 import CaseBackHeader from '../../components/case/CaseBackHeader';
 import DetailCard from '../../components/case/DetailCard';
-import CallTranscriptCard from '../../components/case/CallTranscriptCard';
 import StatusBadge from '../../components/StatusBadge';
 import Modal from '../../components/Modal';
 import PatientEditor from '../../components/PatientEditor';
@@ -23,13 +22,14 @@ import { getAppointment, getCalls, callPatient, requestTakeover, completeCallbac
 const actionClass = 'inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-accent';
 
 function CallHistory({ calls, retryTranscript, busy, timezone }) {
-  return <CallTranscriptCard>
-    {!calls.length && <p className="text-sm text-muted">No calls yet. Call the patient to confirm this appointment.</p>}
+  return <DetailCard icon={History} title="Call History, Transcripts & Recordings">
+    <p className="text-sm text-muted">{calls.length ? `${calls.length} call attempt${calls.length === 1 ? '' : 's'}. Open an attempt to view its transcript and recordings.` : 'No calls yet. Call the patient with an appointment reminder.'}</p>
     <div className="divide-y divide-border">{calls.map(call => <details key={call.id} className="py-3">
       <summary className="cursor-pointer flex gap-3 items-center flex-wrap text-sm">
         <span>Call #{call.id} · {callTime(call.started_at, timezone)}</span>
         <StatusBadge status={call.status} />
         {call.outcome && <span>{call.outcome.replaceAll('_', ' ')}</span>}
+        {call.assigned_agent_name && <span className="text-muted">Assigned to {call.assigned_agent_name}</span>}
       </summary>
       <div className="pt-4 space-y-4">
         {!!call.booking_changes?.length && <div><h3 className="font-medium text-sm mb-2">Appointment changes</h3><ul className="list-disc pl-5 text-sm space-y-1">{call.booking_changes.map((change, i) => <li key={i}>{change.message}</li>)}</ul></div>}
@@ -42,10 +42,10 @@ function CallHistory({ calls, retryTranscript, busy, timezone }) {
         {call.human_recording_path && !call.human_transcript && <button className={actionClass} disabled={busy} onClick={() => retryTranscript(call.id)}>Generate operator transcript</button>}
       </div>
     </details>)}</div>
-  </CallTranscriptCard>;
+  </DetailCard>;
 }
 
-export default function AppointmentDetails({ variant = 'scheduling' }) {
+export default function AppointmentDetails() {
   const { id } = useParams();
   const auth = useAuth();
   const record = useLiveQuery(() => getAppointment(id), [id], 'appointment');
@@ -108,17 +108,12 @@ export default function AppointmentDetails({ variant = 'scheduling' }) {
   if (record.error) return <p role="alert" className="text-danger">{record.error.message} <button className="underline" onClick={record.refetch}>Retry</button></p>;
   const appointment = record.data;
   return <div className="space-y-4">
-    <CaseBackHeader backTo={`/appointments?tab=${variant}`} backLabel="Back to Appointments" title={appointment.patient_name} subtitle={`${variant === 'reminder' ? 'Reminder for ' : ''}${appointment.appointment_type} · ${appointment.provider_name}`} status={appointment.status}
+    <CaseBackHeader backTo="/appointments" backLabel="Back to Appointments" title={appointment.patient_name} subtitle={`${appointment.appointment_type} · ${appointment.provider_name}`} status={appointment.status}
       rightSlot={<div className="flex gap-2 flex-wrap">
         <button className={actionClass} disabled={busy || !!active || editing || !!editingPatient || history.loading || !!history.error}
           onClick={() => act(async () => setEditingPatient(await getPatient(appointment.patient_id)))}><Pencil size={16} />Edit patient</button>
-        {variant === 'scheduling' ? <>
-          <button className={actionClass} disabled={!!active || editing || history.loading || !!history.error} onClick={() => setEditing(true)}><Pencil size={16} />Edit appointment</button>
-          <Link className={`${actionClass} bg-accent text-white`} to={`/appointments/reminder/${id}`}><Phone size={16} />Open reminder & call</Link>
-        </> : <>
-          <Link className={actionClass} to={`/appointments/scheduling/${id}`}><Pencil size={16} />Open scheduling</Link>
-          <button className={`${actionClass} bg-accent text-white`} disabled={busy || !!active || !!wrapUp || appointment.status === 'cancelled' || history.loading || !!history.error} onClick={() => act(() => callPatient(id))}><Phone size={16} />{busy ? 'Working…' : 'Call patient'}</button>
-        </>}
+          <button className={actionClass} disabled={busy || !!active || editing || !!editingPatient || history.loading || !!history.error} onClick={() => setEditing(true)}><Pencil size={16} />Edit appointment</button>
+          <button className={`${actionClass} bg-accent text-white`} disabled={busy || editing || !!editingPatient || !!active || !!wrapUp || appointment.status === 'cancelled' || history.loading || !!history.error} onClick={() => act(() => callPatient(id))}><Phone size={16} />{busy ? 'Working…' : 'Call patient'}</button>
       </div>} />
     <div className="flex items-center gap-2 text-sm text-muted"><span>Latest call</span><StatusBadge status={calls[0]?.status || 'not_called'} /></div>
     {(notice || softphone.error) && <p role="alert" className="text-danger text-sm">{notice || softphone.error}</p>}
@@ -127,7 +122,7 @@ export default function AppointmentDetails({ variant = 'scheduling' }) {
       {editingPatient && <PatientEditor key={editingPatient.id} patient={editingPatient} phoneEnabled
         onCancel={() => setEditingPatient(null)} onSaved={async () => { await record.refetch(); setEditingPatient(null); }} />}
     </Modal>
-    <AppointmentSummary appointment={appointment} calls={calls} variant={variant} />
+    <AppointmentSummary appointment={appointment} />
     <DetailCard icon={MessageSquare} title="Patient instructions"><p className="text-sm whitespace-pre-wrap">{appointment.instructions || 'No additional instructions.'}</p></DetailCard>
     {appointment.callback_requested_at && <div className="rounded-xl border border-border p-4 bg-white space-y-2"><h2 className="font-semibold">Callback requested</h2><p className="text-sm">{appointment.callback_reason}</p><button disabled={busy} onClick={() => act(() => completeCallback(id))} className={actionClass}>Mark callback complete</button></div>}
     {active && <section className="space-y-3">
@@ -141,7 +136,6 @@ export default function AppointmentDetails({ variant = 'scheduling' }) {
     <CallHistory calls={calls} busy={busy} timezone={appointment.timezone} retryTranscript={callId => act(() => apiPost(`/appointments/calls/${callId}/transcribe`))} />
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <DetailCard icon={MessageSquare} title="Notes"><p className="text-sm whitespace-pre-wrap">{appointment.notes || 'No internal notes.'}</p></DetailCard>
-      {variant === 'scheduling' && <DetailCard icon={ArrowRight} title="Next Action"><p className="text-sm">{appointment.callback_requested_at ? 'Follow up on the patient’s callback request.' : appointment.status === 'cancelled' ? 'Appointment cancelled. Call history remains available.' : 'Open Reminder to call the patient or review the latest call outcome.'}</p></DetailCard>}
     </div>
   </div>;
 }

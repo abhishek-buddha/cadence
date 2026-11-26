@@ -564,7 +564,7 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       {/* Status message during call */}
       {!isCompleted && (
         <p className="text-xs text-muted text-center">
-          {isAppointment ? 'The voice agent is calling the patient to confirm the appointment. You can take over this call when needed.' : 'Thomas is navigating the IVR, waiting on hold, and will speak with the insurance rep automatically.'}
+          {isAppointment ? 'The voice agent is calling with an appointment reminder. You can take over this call when needed.' : 'Thomas is navigating the IVR, waiting on hold, and will speak with the insurance rep automatically.'}
         </p>
       )}
     </div>

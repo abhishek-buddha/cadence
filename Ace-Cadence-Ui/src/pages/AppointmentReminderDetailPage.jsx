@@ -16,7 +16,7 @@ const RISK_STYLE = {
 };
 
 export default function AppointmentReminderDetailPage() {
-  return <AppointmentGate fallback={<StaticAppointmentDetails />}><AppointmentDetails variant="reminder" /></AppointmentGate>;
+  return <AppointmentGate fallback={<StaticAppointmentDetails />}><AppointmentDetails /></AppointmentGate>;
 }
 
 function StaticAppointmentDetails() {

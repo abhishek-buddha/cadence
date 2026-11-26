@@ -98,6 +98,7 @@ export default function App() {
                   <Route index element={<OperatorQueuePage />} />
                   <Route path="dashboard" element={<OperatorDashboardPage />} />
                   <Route path="appointments" element={<AppointmentsPage />} />
+                  <Route path="appointments/:id" element={<AppointmentSchedulingDetailPage />} />
                   <Route path="appointments/scheduling/:id" element={<AppointmentSchedulingDetailPage />} />
                   <Route path="appointments/reminder/:id" element={<AppointmentReminderDetailPage />} />
                   <Route path="benefit-verification" element={<BenefitVerificationPage />} />
@@ -143,6 +144,7 @@ export default function App() {
 
                   {/* Static placeholder modules - list + case view, no backend wiring by design */}
                   <Route path="appointments" element={<AppointmentsPage />} />
+                  <Route path="appointments/:id" element={<AppointmentSchedulingDetailPage />} />
                   <Route path="appointments/scheduling/:id" element={<AppointmentSchedulingDetailPage />} />
                   <Route path="appointments/reminder/:id" element={<AppointmentReminderDetailPage />} />
                   <Route path="benefit-verification" element={<BenefitVerificationPage />} />

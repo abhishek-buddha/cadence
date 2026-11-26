@@ -1,7 +1,7 @@
-# Appointment confirmation calls
+# Appointment reminder calls
 
 This optional module creates and edits SQL appointments, calls the patient's mobile,
-confirms attendance, reschedules or cancels after patient confirmation, and
+delivers a reminder, reschedules or cancels after patient confirmation, and
 transfers the same call to a Cadence operator for other assistance when needed.
 
 ## Using it
@@ -9,7 +9,7 @@ transfers the same call to a Cadence operator for other assistance when needed.
 1. In **Master Data → Patients**, edit the patient and enter **Mobile number (with
    country code)**, for example `+14155550123`. The field is optional for existing
    patients and follows the table's existing PII masking.
-2. In **Appointments → Scheduling**, create an appointment using an existing patient and provider.
+2. In **Appointments**, create an appointment using an existing patient and provider.
    The patient's saved mobile prefills the form. Confirm the local appointment
    date/time, IANA clinic timezone, location, and patient instructions.
 3. Open the patient from the appointments list. **Edit patient** uses the same editor
@@ -21,9 +21,12 @@ transfers the same call to a Cadence operator for other assistance when needed.
    statuses and call history are preserved; an already connected call stays on its
    original number. Clearing the master number is rejected while appointments exist;
    enter a replacement number instead. Open appointment pages refresh within five seconds.
-4. Open **Reminder** (or **Open reminder & call** from Scheduling) and click
-   **Call patient** explicitly. Loading or refreshing a page never dials.
-   The detail page shows live audio/transcript, call history, and recordings.
+4. Open an appointment and click **Call patient** explicitly. Loading or refreshing
+   a page never dials. Editing and calling share one detail page; Scheduling and
+   Reminder are no longer separate tabs. Old detail links still work.
+   The detail page shows live audio/transcript and one **Call History, Transcripts
+   & Recordings** section containing every attempt, outcome, assigned operator and
+   available transcript/recording. There is no separate attempt-history or no-show-risk card.
 5. Operators prepare the existing browser phone on **My Queue** or **Live Sessions**.
    Only ready phones with a recent appointment heartbeat receive automatic offers.
    A monitoring operator can also click **Take over call** on the appointment.
@@ -37,11 +40,13 @@ cancellation are handled directly by the agent; they do not request an operator.
 No available operator means offering a callback and recording it only after consent.
 The callback request appears on the appointment until marked complete.
 
-Scheduling and Reminder retain their existing tab, table and detail-card patterns.
-Both show the same SQL appointments, including cancelled records. Scheduling owns
-creation/editing; Reminder owns dialing. Existing transcript cards now display real
-appointment history and audio players. Unrecorded insurance-plan names, time
-preferences and no-show risk are shown honestly as unavailable, without demo data.
+One appointment list includes all SQL appointments, including cancelled records.
+Its detail page combines patient editing, booking editing, reminder calls and history.
+The agent delivers a friendly reminder without asking for attendance confirmation.
+It records attendance only if the patient independently says they will attend;
+"okay", "thanks", silence or ending the call do not count as confirmation.
+Rescheduling and cancellation still require explicit confirmation of the requested
+change. The outbound goodbye thanks the patient for their time.
 
 **Booking tags:** Scheduled, Rescheduled, Cancelled. Attendance confirmation is
 stored separately and never overwrites Rescheduled. **Call tags:** Not Called,

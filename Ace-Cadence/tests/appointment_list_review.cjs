@@ -43,13 +43,31 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname));
     }
     await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
     assert.deepEqual(await ids(), allIds);
-    await page.getByRole('tab', { name: 'Reminder', exact: true }).click();
+    assert.equal(await page.getByRole('tablist', { name: 'Appointment views' }).count(), 0);
     assert.deepEqual(await ids(), allIds);
     await page.screenshot({ path: path.join(process.env.TEMP, 'cadence-appointment-tags-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Toolbar must wrap within mobile width');
     await page.screenshot({ path: path.join(process.env.TEMP, 'cadence-appointment-tags-mobile.png'), fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.getByRole('link', { name: 'Maria Alvarez', exact: true }).click();
+    assert.match(page.url(), /\/appointments\/\d+$/);
+    await page.getByRole('heading', { name: 'Call History, Transcripts & Recordings', exact: true }).waitFor();
+    assert(await page.getByRole('button', { name: 'Call patient', exact: true }).isVisible());
+    assert(await page.getByRole('button', { name: 'Edit appointment', exact: true }).isVisible());
+    assert.equal(await page.getByRole('heading', { name: /No-Show Risk|Call Attempt History|Preferred Date\/Time Options|Confirmed Appointment/ }).count(), 0);
+    await page.locator('details summary').first().click();
+    await page.getByRole('heading', { name: 'Voice agent transcript', exact: true }).first().waitFor();
+    await page.screenshot({ path: path.join(process.env.TEMP, 'cadence-unified-appointment-desktop.png'), fullPage: true, animations: 'disabled' });
+    const id = page.url().split('/').pop();
+    for (const route of ['scheduling', 'reminder']) {
+      await page.goto(`${baseURL}/appointments/${route}/${id}`);
+      await page.getByRole('heading', { name: 'Appointment Details', exact: true }).waitFor();
+      assert(await page.getByRole('button', { name: 'Call patient', exact: true }).isVisible());
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: path.join(process.env.TEMP, 'cadence-unified-appointment-mobile.png'), fullPage: true, animations: 'disabled' });
     assert.deepEqual(errors, []);
-    console.log('PASS: realistic review data, date format, front status columns, booking/call/search combinations, empty/reset, both tabs and mobile layout');
+    console.log('PASS: filters, date format, front statuses, unified list/detail, merged transcript history, legacy links and mobile layout');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exit(1); });

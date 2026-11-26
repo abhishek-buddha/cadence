@@ -97,7 +97,10 @@ async def main():
         assert any(e['type']=='reschedule_appointment' and '2090-01-20T14:30' in e['message'] for e in call['booking_changes'])
         listed = next(a for a in (await client.get('/appointments')).json() if a['id']==aid)
         assert listed['status']=='cancelled' and listed['call_attempts']==1 and listed['last_outcome']=='cancelled'
-        assert (await tool('request_human',{'reason':'Clinical question'})).json()['status']=='no_operator'
+        assert (await tool('request_human',{'reason':'Clinical question'})).json()['status']=='waiting_for_operator', 'Available operators must be assigned without a browser heartbeat'
+        async with engine.begin() as db:
+            await db.execute(text('UPDATE calls SET handoff_requested_at=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 61 SECOND) WHERE id=:id'), {'id':cid})
+        assert (await tool('request_human',{'reason':'Still waiting'})).json()['status']=='no_operator'
         assert (await tool('request_callback',{'reason':'Please help with a clinical question'})).json()['status']=='callback_recorded'
         assert (await client.get(f'/appointments/{aid}')).json()['callback_requested_at']
         assert (await client.post('/appointments/operators/presence',json={'ready':True})).status_code==200

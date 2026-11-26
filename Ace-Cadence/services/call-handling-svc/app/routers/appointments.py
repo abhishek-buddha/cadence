@@ -290,7 +290,7 @@ async def metadata(request: Request, callId: int, token: str, db: AsyncSession =
 
 async def operator_candidates(db, user_id=None):
     # Reserve users before calls: occupancy reads can scan other incoming calls.
-    return rows_to_dicts(await db.execute(text("SELECT * FROM users WHERE status!='disabled' AND (role='operator' OR id=:id) ORDER BY id FOR UPDATE"), {'id': user_id or -1}))
+    return rows_to_dicts(await db.execute(text("SELECT * FROM users WHERE status!='disabled' AND (role='operator' OR id=:id) ORDER BY name,email,id FOR UPDATE"), {'id': user_id or -1}))
 
 
 async def request_operator(db, call, reason, candidates, user_id=None):
@@ -306,9 +306,12 @@ async def request_operator(db, call, reason, candidates, user_id=None):
     for user in candidates:
         if user_id is not None and str(user['id']) != str(user_id):
             continue
-        ready = (await db.execute(text('SELECT value FROM call_settings WHERE `key`=:key'), {'key': 'appointmentOperator:'+str(user['id'])})).scalar()
-        if not ready or ready < (now()-timedelta(seconds=45)).isoformat():
-            continue
+        # Automatic assignment uses the same availability as claims; explicit
+        # takeover still requires the requesting browser's phone to be ready.
+        if user_id is not None:
+            ready = (await db.execute(text('SELECT value FROM call_settings WHERE `key`=:key'), {'key': 'appointmentOperator:'+str(user['id'])})).scalar()
+            if not ready or ready < (now()-timedelta(seconds=45)).isoformat():
+                continue
         # A locking read sees a reservation committed while we waited for the user lock.
         calls = rows_to_dicts(await db.execute(text('SELECT * FROM calls WHERE assigned_agent_user_id=:id ORDER BY id DESC LIMIT 25 FOR UPDATE'), {'id': user['id']}))
         if not any(_is_active_call(c) for c in calls if c['id'] != call['id']):

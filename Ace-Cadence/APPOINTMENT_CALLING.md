@@ -13,7 +13,11 @@ transfers the same call to a Cadence operator for other assistance when needed.
    The patient's saved mobile prefills the form. Confirm the local appointment
    date/time, IANA clinic timezone, location, and patient instructions.
 3. Open the patient from the appointments list. **Edit appointment** can change
-   its phone number; changing Master Data does not rewrite existing appointments.
+   its phone number. Changing a mobile number in Master Data updates all existing
+   appointments for that patient, including appointment-specific numbers. Booking
+   statuses and call history are preserved; an already connected call stays on its
+   original number. Clearing the master number is rejected while appointments exist;
+   enter a replacement number instead. Open appointment pages refresh within five seconds.
 4. Open **Reminder** (or **Open reminder & call** from Scheduling) and click
    **Call patient** explicitly. Loading or refreshing a page never dials.
    The detail page shows live audio/transcript, call history, and recordings.
@@ -99,7 +103,7 @@ non-nullable. `db/migrations/001_appointments.sql` makes these changes:
 
 | Change | Purpose |
 |---|---|
-| `appointments` | Patient/provider references, phone snapshot, slot/timezone, original slot/timezone, attendance confirmation timestamp, instructions, notes, status, callback request |
+| `appointments` | Patient/provider references, editable phone synchronized on master-data phone updates, slot/timezone, original slot/timezone, attendance confirmation timestamp, instructions, notes, status, callback request |
 | `appointment_calls` | Links existing call artifacts to the appointment; stores identity verification, pending booking confirmation and transcription errors |
 | Nullable `calls.insurance_contact_id` | A direct patient call has no payer contact; existing values are retained |
 | Nullable `patients.phone VARCHAR(20)` | Optional editable master-data mobile number |

@@ -76,8 +76,8 @@ async def create_patient(body: dict, db: AsyncSession = Depends(get_db)) -> dict
 
 @router.patch("/{patient_id}")
 async def update_patient(patient_id: int, body: dict, db: AsyncSession = Depends(get_db)) -> dict:
-    existing = await db.execute(text("SELECT id FROM patients WHERE id = :id"), {"id": patient_id})
-    if existing.first() is None:
+    existing = row_to_dict((await db.execute(text("SELECT * FROM patients WHERE id = :id FOR UPDATE"), {"id": patient_id})).first())
+    if existing is None:
         raise HTTPException(status_code=404, detail="Patient not found")
     updates = {k: v for k, v in body.items() if k in _UPDATABLE_FIELDS}
     if 'phone' in body:
@@ -87,6 +87,12 @@ async def update_patient(patient_id: int, body: dict, db: AsyncSession = Depends
     set_clause = ", ".join(f"{field} = :{field}" for field in updates)
     updates["id"] = patient_id
     await db.execute(text(f"UPDATE patients SET {set_clause} WHERE id = :id"), updates)
+    if 'phone' in updates and updates['phone'] != existing.get('phone'):
+        appointments = await db.execute(text('SELECT id FROM appointments WHERE patient_id=:id FOR UPDATE'), {'id': patient_id})
+        if appointments.first() is not None and updates['phone'] is None:
+            raise HTTPException(422, 'This patient has appointments. Enter a replacement mobile number instead of clearing it.')
+        await db.execute(text('UPDATE appointments SET patient_phone=:phone WHERE patient_id=:id'),
+                         {'phone': updates['phone'] or '', 'id': patient_id})
     await write_audit_event(db, action="update", resource_type="patient", resource_id=str(patient_id))
     await db.commit()
     return await get_patient(patient_id, db)

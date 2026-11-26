@@ -34,8 +34,6 @@ async def main():
         updated = await master.patch('/patients/1',json={'phone':'+14155550123'})
         assert updated.status_code==200, updated.text
         assert updated.json()['phone']=='+14155550123' and updated.json()['member_id']=='REVIEW-1'
-        assert (await master.patch('/patients/1',json={'phone':None})).json()['phone'] is None
-        assert (await master.patch('/patients/1',json={'phone':'+14155550123'})).status_code==200
     async with httpx.AsyncClient(base_url='http://127.0.0.1:8004', timeout=15) as client:
         assert (await client.get('/appointments')).status_code == 403
         client.headers['Authorization'] = 'Bearer review-session'

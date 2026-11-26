@@ -246,7 +246,7 @@ export default function PatientsPage() {
             <label htmlFor="patient-mobile" className={labelClass}>Mobile number (with country code)</label>
             <input id="patient-mobile" type="tel" maxLength={20} pattern="\+[1-9][0-9]{7,14}" value={form.phone}
               onChange={event => setField('phone', event.target.value)} className={inputClass} placeholder="+14155550123" />
-            <p className="mt-1 text-xs text-muted">Used to prefill new appointments. Existing appointment phone numbers can be edited on their details page.</p>
+            <p className="mt-1 text-xs text-muted">Changing this number updates all existing appointments for this patient and prefills new ones. Replace rather than clear a number while appointments exist.</p>
           </div>}
           <div className="grid grid-cols-2 gap-4">
             <div>

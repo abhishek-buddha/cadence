@@ -12,9 +12,12 @@ transfers the same call to a Cadence operator for other assistance when needed.
 2. In **Appointments → Scheduling**, create an appointment using an existing patient and provider.
    The patient's saved mobile prefills the form. Confirm the local appointment
    date/time, IANA clinic timezone, location, and patient instructions.
-3. Open the patient from the appointments list. **Edit appointment** can change
-   its phone number. Changing a mobile number in Master Data updates all existing
-   appointments for that patient, including appointment-specific numbers. Booking
+3. Open the patient from the appointments list. **Edit patient** uses the same editor
+   as Master Data for names, date of birth, mobile, member ID, group/policy numbers,
+   subscriber name and relationship. Both screens update the same patient record.
+   Changing a mobile number in either editor or **Edit appointment** updates Master
+   Data and all existing appointments for that patient. A new appointment's mobile
+   is also saved to the patient and their other appointments. Booking
    statuses and call history are preserved; an already connected call stays on its
    original number. Clearing the master number is rejected while appointments exist;
    enter a replacement number instead. Open appointment pages refresh within five seconds.
@@ -103,7 +106,7 @@ non-nullable. `db/migrations/001_appointments.sql` makes these changes:
 
 | Change | Purpose |
 |---|---|
-| `appointments` | Patient/provider references, editable phone synchronized on master-data phone updates, slot/timezone, original slot/timezone, attendance confirmation timestamp, instructions, notes, status, callback request |
+| `appointments` | Patient/provider references, editable phone synchronized in both directions with Master Data, slot/timezone, original slot/timezone, attendance confirmation timestamp, instructions, notes, status, callback request |
 | `appointment_calls` | Links existing call artifacts to the appointment; stores identity verification, pending booking confirmation and transcription errors |
 | Nullable `calls.insurance_contact_id` | A direct patient call has no payer contact; existing values are retained |
 | Nullable `patients.phone VARCHAR(20)` | Optional editable master-data mobile number |

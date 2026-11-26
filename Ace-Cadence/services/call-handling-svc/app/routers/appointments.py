@@ -49,7 +49,7 @@ async def staff(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
 
 
 async def appointment(db, appointment_id, lock=False):
-    row = row_to_dict((await db.execute(text(_SELECT + ' WHERE a.id=:id' + (' FOR UPDATE' if lock else '')), {'id': appointment_id})).first())
+    row = row_to_dict((await db.execute(text(_SELECT + ' WHERE a.id=:id' + (' FOR UPDATE OF a' if lock else '')), {'id': appointment_id})).first())
     if row is None:
         raise HTTPException(404, 'Appointment not found')
     return row
@@ -102,11 +102,15 @@ async def save(db, body, appointment_id=None):
         values = validate_appointment(body)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    # Match Master Data's patient-before-appointments lock order for phone sync.
     for table, field in (('patients', 'patient_id'), ('providers', 'provider_id')):
-        if not (await db.execute(text(f'SELECT id FROM {table} WHERE id=:id'), {'id': values[field]})).first():
+        lock = ' FOR UPDATE' if table == 'patients' else ''
+        if not (await db.execute(text(f'SELECT id FROM {table} WHERE id=:id' + lock), {'id': values[field]})).first():
             raise HTTPException(422, f'{field} does not exist')
+    sync_phone = appointment_id is None
     if appointment_id is not None:
         previous = await appointment(db, appointment_id, lock=True)
+        sync_phone = any(previous[key] != values[key] for key in ('patient_id', 'patient_phone'))
         active = (await db.execute(text('''SELECT c.id FROM calls c JOIN appointment_calls ac ON ac.call_id=c.id
             WHERE ac.appointment_id=:id AND c.completed_at IS NULL AND c.status IN ('initiating','in_progress')'''), {'id': appointment_id})).first()
         if active:
@@ -125,6 +129,11 @@ async def save(db, body, appointment_id=None):
     else:
         result = await db.execute(text('INSERT INTO appointments (' + ','.join(values) + ') VALUES (' + ','.join(':'+k for k in values) + ')'), values)
         appointment_id = result.lastrowid
+    if sync_phone:
+        phone = {'phone': values['patient_phone'], 'patient': values['patient_id']}
+        await db.execute(text('UPDATE patients SET phone=:phone WHERE id=:patient'), phone)
+        await db.execute(text('UPDATE appointments SET patient_phone=:phone WHERE patient_id=:patient'), phone)
+        await write_audit_event(db, action='update', resource_type='patient', resource_id=str(values['patient_id']))
     await write_audit_event(db, action=action, resource_type='appointment', resource_id=str(appointment_id))
     await db.commit()
     await publish_invalidation('appointment', appointment_id)

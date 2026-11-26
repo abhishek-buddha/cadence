@@ -1,25 +1,14 @@
 import { useState } from 'react';
-import { Users, Plus, Pencil, Trash2, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
 import Modal from '../components/Modal';
+import PatientEditor from '../components/PatientEditor';
 import EmptyState from '../components/EmptyState';
 import ListToolbar, { ListToolbarButton } from '../components/ListToolbar';
 import { useProviderFilter } from '../context/ProviderFilterContext';
-import { listPatients, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient } from '../api/masterData';
+import { listPatients, deletePatient as apiDeletePatient } from '../api/masterData';
 import { listClaims } from '../api/claims';
 import { useLiveQuery } from '../hooks/useLiveQuery';
 import { getConfig } from '../features/appointments/api';
-
-const EMPTY_FORM = {
-  firstName: '',
-  lastName: '',
-  dateOfBirth: '',
-  memberId: '',
-  groupNumber: '',
-  policyNumber: '',
-  subscriberName: '',
-  relationship: 'self',
-  phone: '',
-};
 
 export default function PatientsPage() {
   const { selectedProviderId } = useProviderFilter();
@@ -30,9 +19,6 @@ export default function PatientsPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState('');
   const [piiVisible, setPiiVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -52,68 +38,18 @@ export default function PatientsPage() {
   });
 
   function openCreate() {
-    setSaveError('');
     setEditing(null);
-    setForm(EMPTY_FORM);
     setModalOpen(true);
   }
 
   function openEdit(patient) {
-    setSaveError('');
     setEditing(patient);
-    setForm({
-      firstName: patient.first_name,
-      lastName: patient.last_name,
-      dateOfBirth: patient.date_of_birth,
-      memberId: patient.member_id,
-      groupNumber: patient.group_number ?? '',
-      policyNumber: patient.policy_number ?? '',
-      subscriberName: patient.subscriber_name ?? '',
-      relationship: patient.relationship ?? 'self',
-      phone: patient.phone ?? '',
-    });
     setModalOpen(true);
   }
 
   function closeModal() {
     setModalOpen(false);
     setEditing(null);
-    setForm(EMPTY_FORM);
-  }
-
-  function setField(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setSaving(true);
-    setSaveError('');
-    try {
-      const payload = {
-        first_name: form.firstName,
-        last_name: form.lastName,
-        date_of_birth: form.dateOfBirth,
-        member_id: form.memberId,
-        group_number: form.groupNumber || null,
-        policy_number: form.policyNumber || null,
-        subscriber_name: form.subscriberName || null,
-        relationship: form.relationship || null,
-        ...(phoneEnabled ? { phone: form.phone.trim() || null } : {}),
-      };
-
-      if (editing) {
-        await apiUpdatePatient(editing.id, payload);
-      } else {
-        await apiCreatePatient(payload);
-      }
-      await refetch();
-      closeModal();
-    } catch (error) {
-      setSaveError(error.message);
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function handleDelete(id) {
@@ -138,10 +74,6 @@ export default function PatientsPage() {
     if (piiVisible) return formatDOB(dateStr);
     return '*** **, ****';
   }
-
-  const inputClass =
-    'w-full bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-muted focus:border-accent focus:ring-1 focus:ring-accent outline-none';
-  const labelClass = 'block text-xs uppercase tracking-wider text-muted font-medium mb-1.5';
 
   return (
     <div className="h-full flex flex-col space-y-4 animate-fade-in">
@@ -241,133 +173,8 @@ export default function PatientsPage() {
 
       {/* Add/Edit Modal */}
       <Modal open={modalOpen} onClose={closeModal} title={editing ? 'Edit Patient' : 'Add Patient'} wide>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {phoneEnabled && <div>
-            <label htmlFor="patient-mobile" className={labelClass}>Mobile number (with country code)</label>
-            <input id="patient-mobile" type="tel" maxLength={20} pattern="\+[1-9][0-9]{7,14}" value={form.phone}
-              onChange={event => setField('phone', event.target.value)} className={inputClass} placeholder="+14155550123" />
-            <p className="mt-1 text-xs text-muted">Changing this number updates all existing appointments for this patient and prefills new ones. Replace rather than clear a number while appointments exist.</p>
-          </div>}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>First Name</label>
-              <input
-                type="text"
-                value={form.firstName}
-                onChange={(e) => setField('firstName', e.target.value)}
-                className={inputClass}
-                placeholder="Jane"
-                required
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Last Name</label>
-              <input
-                type="text"
-                value={form.lastName}
-                onChange={(e) => setField('lastName', e.target.value)}
-                className={inputClass}
-                placeholder="Doe"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Date of Birth</label>
-              <input
-                type="date"
-                value={form.dateOfBirth}
-                onChange={(e) => setField('dateOfBirth', e.target.value)}
-                className={inputClass}
-                required
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Relationship</label>
-              <div className="relative">
-                <select
-                  value={form.relationship}
-                  onChange={(e) => setField('relationship', e.target.value)}
-                  className={`${inputClass} custom-select appearance-none pr-8 cursor-pointer`}
-                >
-                  <option value="self">Self</option>
-                  <option value="spouse">Spouse</option>
-                  <option value="child">Child</option>
-                  <option value="other">Other</option>
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Member ID</label>
-              <input
-                type="text"
-                value={form.memberId}
-                onChange={(e) => setField('memberId', e.target.value)}
-                className={inputClass}
-                placeholder="MBR-000000"
-                required
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Group Number</label>
-              <input
-                type="text"
-                value={form.groupNumber}
-                onChange={(e) => setField('groupNumber', e.target.value)}
-                className={inputClass}
-                placeholder="GRP-0000"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Policy Number</label>
-              <input
-                type="text"
-                value={form.policyNumber}
-                onChange={(e) => setField('policyNumber', e.target.value)}
-                className={inputClass}
-                placeholder="POL-000000"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Subscriber Name</label>
-              <input
-                type="text"
-                value={form.subscriberName}
-                onChange={(e) => setField('subscriberName', e.target.value)}
-                className={inputClass}
-                placeholder="Primary subscriber"
-              />
-            </div>
-          </div>
-
-          {/* Actions */}
-          {saveError && <p role="alert" className="text-sm text-danger">{saveError}</p>}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
-            <button
-              type="button"
-              onClick={closeModal}
-              className="px-4 py-2.5 text-sm text-muted hover:text-gray-900 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : editing ? 'Update Patient' : 'Add Patient'}
-            </button>
-          </div>
-        </form>
+        {modalOpen && <PatientEditor key={editing?.id ?? 'new'} patient={editing} phoneEnabled={phoneEnabled}
+          onCancel={closeModal} onSaved={async () => { await refetch(); closeModal(); }} />}
       </Modal>
     </div>
   );

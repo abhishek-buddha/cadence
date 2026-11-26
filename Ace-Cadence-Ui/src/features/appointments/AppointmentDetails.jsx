@@ -5,12 +5,15 @@ import { useLiveQuery } from '../../hooks/useLiveQuery';
 import { useSoftphone } from '../../hooks/useSoftphone';
 import { useAuth } from '../../context/AuthContext';
 import { apiPost } from '../../api/client';
+import { getPatient } from '../../api/masterData';
 import { callToLegacy } from '../../convexCompat/react';
 import LiveCallMonitor from '../../components/LiveCallMonitor';
 import CaseBackHeader from '../../components/case/CaseBackHeader';
 import DetailCard from '../../components/case/DetailCard';
 import CallTranscriptCard from '../../components/case/CallTranscriptCard';
 import StatusBadge from '../../components/StatusBadge';
+import Modal from '../../components/Modal';
+import PatientEditor from '../../components/PatientEditor';
 import AppointmentForm from './AppointmentForm';
 import AppointmentSummary from './AppointmentSummary';
 import useAppointmentPresence from './useAppointmentPresence';
@@ -50,6 +53,7 @@ export default function AppointmentDetails({ variant = 'scheduling' }) {
   const { refetch: refreshRecord } = record;
   const { refetch: refreshHistory } = history;
   const [editing, setEditing] = useState(false);
+  const [editingPatient, setEditingPatient] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const softphone = useSoftphone();
@@ -106,6 +110,8 @@ export default function AppointmentDetails({ variant = 'scheduling' }) {
   return <div className="space-y-4">
     <CaseBackHeader backTo={`/appointments?tab=${variant}`} backLabel="Back to Appointments" title={appointment.patient_name} subtitle={`${variant === 'reminder' ? 'Reminder for ' : ''}${appointment.appointment_type} · ${appointment.provider_name}`} status={appointment.status}
       rightSlot={<div className="flex gap-2 flex-wrap">
+        <button className={actionClass} disabled={busy || !!active || editing || !!editingPatient || history.loading || !!history.error}
+          onClick={() => act(async () => setEditingPatient(await getPatient(appointment.patient_id)))}><Pencil size={16} />Edit patient</button>
         {variant === 'scheduling' ? <>
           <button className={actionClass} disabled={!!active || editing || history.loading || !!history.error} onClick={() => setEditing(true)}><Pencil size={16} />Edit appointment</button>
           <Link className={`${actionClass} bg-accent text-white`} to={`/appointments/reminder/${id}`}><Phone size={16} />Open reminder & call</Link>
@@ -117,6 +123,10 @@ export default function AppointmentDetails({ variant = 'scheduling' }) {
     <div className="flex items-center gap-2 text-sm text-muted"><span>Latest call</span><StatusBadge status={calls[0]?.status || 'not_called'} /></div>
     {(notice || softphone.error) && <p role="alert" className="text-danger text-sm">{notice || softphone.error}</p>}
     {editing && <AppointmentForm record={appointment} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); record.refetch(); }} />}
+    <Modal open={!!editingPatient} onClose={() => setEditingPatient(null)} title="Edit Patient" wide>
+      {editingPatient && <PatientEditor key={editingPatient.id} patient={editingPatient} phoneEnabled
+        onCancel={() => setEditingPatient(null)} onSaved={async () => { await record.refetch(); setEditingPatient(null); }} />}
+    </Modal>
     <AppointmentSummary appointment={appointment} calls={calls} variant={variant} />
     <DetailCard icon={MessageSquare} title="Patient instructions"><p className="text-sm whitespace-pre-wrap">{appointment.instructions || 'No additional instructions.'}</p></DetailCard>
     {appointment.callback_requested_at && <div className="rounded-xl border border-border p-4 bg-white space-y-2"><h2 className="font-semibold">Callback requested</h2><p className="text-sm">{appointment.callback_reason}</p><button disabled={busy} onClick={() => act(() => completeCallback(id))} className={actionClass}>Mark callback complete</button></div>}

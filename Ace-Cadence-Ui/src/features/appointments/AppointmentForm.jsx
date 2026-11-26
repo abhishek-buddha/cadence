@@ -57,6 +57,7 @@ export default function AppointmentForm({ record, onSaved, onCancel }) {
       </label>
       {fields.map(([key, label, type, maxLength]) => <label key={key} className="text-sm font-medium">{label}
         <input required type={type} maxLength={maxLength} value={values[key]} onChange={e => change(key, e.target.value)} className={inputClass} />
+        {key === 'patient_phone' && <span className="block mt-1 text-xs font-normal text-muted">Changing this number also updates Master Data and this patient's other appointments.</span>}
       </label>)}
       <label className="text-sm font-medium">Status
         <select value={values.status} onChange={e => change('status', e.target.value)} className={inputClass}>

@@ -23,7 +23,7 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname));
     const ids = () => page.locator('tbody a').evaluateAll(links => links.map(link => Number(link.href.split('/').pop())));
     const allIds = records.map(record => record.id);
     assert.equal(records.length, 10, 'Curated review fixtures must be loaded');
-    assert.deepEqual((await page.getByRole('columnheader').allTextContents()).slice(0, 4), ['Patient Name', 'Status', 'Call Status', 'Appointment Date/Time']);
+    assert.deepEqual((await page.getByRole('columnheader').allTextContents()).slice(0, 4), ['Patient Name', 'Appointment Status', 'Call Status', 'Appointment Date/Time']);
     const status = await page.getByRole('columnheader', { name: 'Call Status', exact: true }).boundingBox();
     assert(status.x + status.width < 900, 'Both status columns must be visible near the front');
     await page.getByText('2026-12-18 9:00 AM', { exact: true }).waitFor();

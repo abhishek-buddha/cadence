@@ -28,7 +28,7 @@ export default function AppointmentList() {
     Object.values(r).some(v => (typeof v === 'string' || typeof v === 'number') && String(v).toLowerCase().includes(search.toLowerCase())));
   const columns = [
     { key: 'patient_name', label: 'Patient Name', render: r => <Link to={`/appointments/${r.id}`} className="text-accent font-medium hover:underline focus-visible:outline focus-visible:outline-accent">{r.patient_name}</Link> },
-    { key: 'status', label: 'Status', render: r => <StatusBadge status={r.status} /> },
+    { key: 'status', label: 'Appointment Status', render: r => <StatusBadge status={r.status} /> },
     { key: 'last_call_status', label: 'Call Status', render: r => <StatusBadge status={r.last_call_status || 'not_called'} /> },
     { key: 'scheduled_at', label: 'Appointment Date/Time', render: r => <span title={r.timezone}>{appointmentTime(r)}</span> },
     { key: 'provider_name', label: 'Provider' },

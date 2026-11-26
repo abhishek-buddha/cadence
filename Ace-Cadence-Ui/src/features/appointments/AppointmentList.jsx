@@ -12,6 +12,7 @@ import { appointmentTime, callTime, appointmentCallStatus } from './format';
 
 const appointmentOptions = [['scheduled', 'Scheduled'], ['rescheduled', 'Rescheduled'], ['cancelled', 'Cancelled']];
 const callOptions = [['not_called', 'Not Called'], ['completed', 'Completed'], ['no_answer', 'No Answer'], ['failed', 'Failed'], ['callback_needed', 'Callback Needed']];
+const callFilterOptions = [callOptions[0], ['initiating', 'Initiating'], ['ringing', 'Ringing'], ['in_progress', 'In Progress'], ...callOptions.slice(1)];
 
 export default function AppointmentList() {
   const { data, loading, error, refetch } = useLiveQuery(listAppointments, [], 'appointment');
@@ -55,16 +56,13 @@ export default function AppointmentList() {
   ];
   return <div className="h-full flex flex-col space-y-4 animate-fade-in">
     <ListToolbar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search patients, providers, or status" filters={<div className="flex items-center gap-3 flex-wrap">
-      <select aria-label="Booking status" value={bookingStatus} onChange={e => setBookingStatus(e.target.value)} className="rounded-full border border-border-light bg-white py-2 pl-3 pr-8 text-xs text-gray-700 focus:ring-accent">
-        <option value="">All booking tags</option>
-        <option value="scheduled">Scheduled</option><option value="rescheduled">Rescheduled</option><option value="cancelled">Cancelled</option>
+      <select aria-label="Appointment status" value={bookingStatus} onChange={e => setBookingStatus(e.target.value)} className="rounded-full border border-border-light bg-white py-2 pl-3 pr-8 text-xs text-gray-700 focus:ring-accent">
+        <option value="">All appointment statuses</option>
+        {appointmentOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
       <select aria-label="Call status" value={callStatus} onChange={e => setCallStatus(e.target.value)} className="rounded-full border border-border-light bg-white py-2 pl-3 pr-8 text-xs text-gray-700 focus:ring-accent">
-        <option value="">All call tags</option>
-        <option value="not_called">Not Called</option><option value="no_answer">No Answer</option>
-        <option value="initiating">Initiating</option><option value="in_progress">In Progress</option>
-        <option value="completed">Completed</option><option value="failed">Failed</option>
-        <option value="callback_needed">Callback Needed</option>
+        <option value="">All call statuses</option>
+        {callFilterOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
       {filtered && <button className="text-xs text-white underline underline-offset-4 rounded focus-visible:outline focus-visible:outline-white" onClick={() => { setSearch(''); setBookingStatus(''); setCallStatus(''); }}>Clear filters</button>}
     </div>}>

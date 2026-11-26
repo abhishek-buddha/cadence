@@ -31,10 +31,10 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname));
     await page.getByText('2026-11-26 9:14 AM', { exact: true }).waitFor();
     for (const [booking, call, search] of [
       ['scheduled', '', ''], ['rescheduled', '', ''], ['cancelled', '', ''],
-      ['', 'not_called', ''], ['', 'no_answer', ''], ['', 'completed', ''], ['', 'failed', ''], ['', 'callback_needed', ''],
+      ['', 'not_called', ''], ['', 'initiating', ''], ['', 'ringing', ''], ['', 'in_progress', ''], ['', 'no_answer', ''], ['', 'completed', ''], ['', 'failed', ''], ['', 'callback_needed', ''],
       ['rescheduled', 'completed', ''], ['cancelled', 'no_answer', ''], ['scheduled', 'completed', 'Maria'],
     ]) {
-      await page.getByLabel('Booking status', { exact: true }).selectOption(booking);
+      await page.getByLabel('Appointment status', { exact: true }).selectOption(booking);
       await page.getByLabel('Call status', { exact: true }).selectOption(call);
       await page.getByRole('textbox', { name: 'Search patients, providers, or status' }).fill(search);
       const expected = records.filter(r => {

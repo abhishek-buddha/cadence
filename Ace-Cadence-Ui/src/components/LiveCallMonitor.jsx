@@ -198,19 +198,12 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
     });
   }, [effectiveTranscript.length]);
 
-  // Audio player: live monitoring, not archival playback. Keep the scheduled
-  // audio close to now; if packets arrive in bursts, drop stale buffered audio
-  // instead of playing an increasingly delayed backlog.
+  // Keep agent bursts intact and schedule them at playback speed.
   useEffect(() => {
     const FRAME = 320; // 40ms @ 8kHz
-    // Per-direction caps, because the two directions behave differently.
-    // Inbound is a continuous real-time stream, so a backlog means we have
-    // drifted behind the call and should drop to catch up. Outbound arrives in
-    // multi-second bursts (ElevenLabs sends a whole utterance at once), so a
-    // backlog there is normal and will drain on its own -- capping it at 1s
-    // like the inbound side simply decapitated every sentence the agent spoke.
+    // Only the continuous inbound stream needs stale-backlog trimming.
+    // Agent audio arrives ahead of playback; trimming it would remove words.
     const MAX_QUEUE_INBOUND = 8000;   // 1s
-    const MAX_QUEUE_OUTBOUND = 40000; // 5s, comfortably longer than an utterance
     const MAX_LEAD_SECONDS = 0.3;
 
     playIntervalRef.current = setInterval(() => {
@@ -220,30 +213,26 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
       const inbound = inboundQueueRef.current;
       const outbound = outboundQueueRef.current;
 
-      // Drain each direction independently at real time, then sum. Trimming is
-      // per-queue so a backlog on one side never discards the other's audio.
-      for (const [q, cap] of [[inbound, MAX_QUEUE_INBOUND], [outbound, MAX_QUEUE_OUTBOUND]]) {
-        if (q.length > cap) {
-          q.splice(0, q.length - cap);
-          nextPlayTimeRef.current = 0;
-        }
+      if (inbound.length > MAX_QUEUE_INBOUND) {
+        inbound.splice(0, inbound.length - MAX_QUEUE_INBOUND);
       }
-      // Play as soon as EITHER side has a frame: the agent is silent while the
-      // IVR talks and vice versa, so waiting for both would stall constantly.
-      if (inbound.length < FRAME && outbound.length < FRAME) return;
+      const frameLength = Math.min(FRAME, Math.max(inbound.length, outbound.length));
+      if (!frameLength) return;
 
       const now = ctx.currentTime;
-      if (nextPlayTimeRef.current < now || nextPlayTimeRef.current > now + MAX_LEAD_SECONDS) {
+      // Wait for scheduled audio to play; rewinding the clock overlaps words.
+      if (nextPlayTimeRef.current > now + MAX_LEAD_SECONDS) return;
+      if (nextPlayTimeRef.current < now) {
         nextPlayTimeRef.current = now + 0.005;
         // Catch-up trim applies to the continuous stream only. Dropping the
         // agent's buffered utterance here would reintroduce the same bug.
         if (inbound.length > FRAME * 4) inbound.splice(0, inbound.length - FRAME * 4);
       }
 
-      const a = inbound.splice(0, FRAME);
-      const b = outbound.splice(0, FRAME);
-      const raw = new Float32Array(FRAME);
-      for (let i = 0; i < FRAME; i++) {
+      const a = inbound.splice(0, frameLength);
+      const b = outbound.splice(0, frameLength);
+      const raw = new Float32Array(frameLength);
+      for (let i = 0; i < frameLength; i++) {
         // Sum both directions, clamped -- two people talking at once should
         // sound like two people, not like clipping noise.
         const mixed = (a[i] || 0) + (b[i] || 0);
@@ -316,13 +305,11 @@ export default function LiveCallMonitor({ call, insurance, onComplete }) {
             // away -- audible on the payer's phone, inaudible in the monitor.
             const outbound = data.media.track === 'outbound';
             const queue = outbound ? outboundQueueRef.current : inboundQueueRef.current;
-            queue.push(...samples);
+            // A long utterance can exceed JavaScript's argument limit with push(...samples).
+            for (const sample of samples) queue.push(sample);
 
-            // Roughly 2s per direction. Enough to absorb a burst, short enough
-            // that the monitor stays live rather than drifting behind the call.
-            const cap = outbound ? 40000 : 16000;
-            if (queue.length > cap) {
-              queue.splice(0, queue.length - cap);
+            if (!outbound && queue.length > 16000) {
+              queue.splice(0, queue.length - 16000);
             }
           }
         } catch (err) { console.warn('Audio WS parse error:', err); }

@@ -1,29 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Calendar, ChevronDown } from 'lucide-react';
+import { Plus, Calendar } from 'lucide-react';
 import { useLiveQuery } from '../../hooks/useLiveQuery';
 import ListToolbar, { ListToolbarButton } from '../../components/ListToolbar';
 import ListTable from '../../components/case/ListTable';
-import StatusBadge from '../../components/StatusBadge';
 import EmptyState from '../../components/EmptyState';
 import AppointmentForm from './AppointmentForm';
+import StatusPicker from './StatusPicker';
 import { listAppointments, updateAppointmentStatus } from './api';
 import { appointmentTime, callTime, appointmentCallStatus } from './format';
 
 const appointmentOptions = [['scheduled', 'Scheduled'], ['rescheduled', 'Rescheduled'], ['cancelled', 'Cancelled']];
 const callOptions = [['not_called', 'Not Called'], ['completed', 'Completed'], ['no_answer', 'No Answer'], ['failed', 'Failed'], ['callback_needed', 'Callback Needed']];
-
-function StatusPicker({ value, options, label, disabled, onChange }) {
-  return <div className="relative inline-flex items-center gap-1 rounded-full focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-2">
-    <StatusBadge status={value} /><ChevronDown size={12} className="text-muted" aria-hidden="true" />
-    <select aria-label={label} title={disabled ? 'Status cannot be edited while saving or during an active call' : label}
-      value={value} disabled={disabled} onClick={e => e.stopPropagation()} onChange={e => onChange(e.target.value)}
-      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed">
-      {!options.some(([key]) => key === value) && <option value={value} disabled>{value.replaceAll('_', ' ')}</option>}
-      {options.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
-    </select>
-  </div>;
-}
 
 export default function AppointmentList() {
   const { data, loading, error, refetch } = useLiveQuery(listAppointments, [], 'appointment');

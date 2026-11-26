@@ -19,19 +19,12 @@ router = APIRouter(tags=['appointments'])
 _transcribing = set()
 
 
-async def save_transcription(db: AsyncSession, call_id: int, audio: bytes):
-    async with httpx.AsyncClient(timeout=180) as client:
-        response = await client.post('https://api.elevenlabs.io/v1/speech-to-text',
-            headers={'xi-api-key': settings.elevenlabs_api_key},
-            data={'model_id': 'scribe_v2', 'diarize': 'true'},
-            files={'file': ('operator.mp3', audio, 'audio/mpeg')})
-        response.raise_for_status()
-        result = response.json()
+def format_transcription(result, speaker_names=None):
     lines, speaker, words = [], None, []
     for word in result.get('words', []):
         if word.get('type') != 'word':
             continue
-        current = word.get('speaker_id') or 'Speaker'
+        current = speaker_names.get(word.get('channel_index'), 'Unidentified speaker') if speaker_names else word.get('speaker_id') or 'Speaker'
         if speaker is not None and current != speaker:
             lines.append(speaker + ': ' + ' '.join(words))
             words = []
@@ -39,7 +32,21 @@ async def save_transcription(db: AsyncSession, call_id: int, audio: bytes):
         words.append(word.get('text', ''))
     if words:
         lines.append(speaker + ': ' + ' '.join(words))
-    transcript = '\n'.join(lines) or result.get('text')
+    return '\n'.join(lines) or result.get('text')
+
+
+async def save_transcription(db: AsyncSession, call_id: int, audio: bytes, speaker_names=None):
+    options = {'model_id': 'scribe_v2', 'diarize': 'true'}
+    if speaker_names:
+        options.update({'diarize': 'false', 'use_multi_channel': 'true', 'multichannel_output_style': 'combined'})
+    async with httpx.AsyncClient(timeout=180) as client:
+        response = await client.post('https://api.elevenlabs.io/v1/speech-to-text',
+            headers={'xi-api-key': settings.elevenlabs_api_key},
+            data=options,
+            files={'file': ('operator.mp3', audio, 'audio/mpeg')})
+        response.raise_for_status()
+        result = response.json()
+    transcript = format_transcription(result, speaker_names)
     if not transcript:
         raise ValueError('No speech was transcribed')
     await db.execute(text('UPDATE calls SET human_transcript=:value WHERE id=:id'), {'id': call_id, 'value': transcript})
@@ -60,10 +67,20 @@ async def transcribe(call_id: int):
             prefix = f'https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Recordings/'
             if not url.startswith(prefix) or not re.fullmatch(r'RE[0-9a-fA-F]{32}\.mp3', url[len(prefix):]):
                 raise ValueError('Operator recording is not ready')
-            audio = await asyncio.to_thread(_fetch_media, url, {'Authorization': _auth_header(settings.twilio_account_sid, settings.twilio_auth_token)})
+            headers = {'Authorization': _auth_header(settings.twilio_account_sid, settings.twilio_auth_token)}
+            async with httpx.AsyncClient(timeout=30) as client:
+                metadata = await client.get(url.removesuffix('.mp3') + '.json', headers=headers)
+                metadata.raise_for_status()
+                metadata = metadata.json()
+            speaker_names = None
+            if metadata.get('channels') == 2 and metadata.get('source') == 'DialVerb' and metadata.get('call_sid') == call.get('twilio_call_sid'):
+                patient = (await db.execute(text('''SELECT CONCAT(p.first_name,' ',p.last_name) FROM patients p
+                    JOIN appointments a ON a.patient_id=p.id WHERE a.id=:id'''), {'id': call['appointment_id']})).scalar()
+                speaker_names = {0: patient or 'Patient', 1: call.get('assigned_agent_name') or 'Operator'}
+            audio = await asyncio.to_thread(_fetch_media, url + ('?RequestedChannels=2' if speaker_names else ''), headers)
             if not audio or len(audio[0]) >= 64*1024*1024:
                 raise ValueError('Operator recording could not be downloaded')
-            await save_transcription(db, call_id, audio[0])
+            await save_transcription(db, call_id, audio[0], speaker_names)
     except Exception:
         async with AsyncSessionLocal() as db:
             await db.execute(text('UPDATE appointment_calls SET transcription_error=:error WHERE call_id=:id'),

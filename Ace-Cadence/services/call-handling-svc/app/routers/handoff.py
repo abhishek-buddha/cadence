@@ -451,8 +451,13 @@ async def payer_conference_twiml(call_id: int, request: Request, db: AsyncSessio
     # it is declared here (payer leg) only. recordingStatusCallback fires once
     # when the file is ready — see routers/recordings.py.
     recording_callback = f"{base}/twilio-recording-status?callId={call_id}"
+    dial_recording = ''
     if call.get('use_case') == 'appointment':
         recording_callback = f"{base}/appointment-voice/recording?callId={call_id}&token={call['handoff_token']}"
+        # Dial recordings isolate this patient leg on channel 0 and the operator
+        # on channel 1, regardless of conference join order or account settings.
+        dial_recording = f' record="record-from-answer-dual" recordingStatusCallback="{escape(recording_callback)}" recordingStatusCallbackEvent="completed"'
+    conference_recording = '' if dial_recording else f'record="record-from-start" recordingStatusCallback="{escape(recording_callback)}" recordingStatusCallbackEvent="completed"'
     # Tell the rep what just happened. Without this the AI simply stops
     # mid-conversation and the line goes quiet while Twilio moves the leg into
     # the conference, which reads as a dropped call. The operator then has to
@@ -474,15 +479,13 @@ async def payer_conference_twiml(call_id: int, request: Request, db: AsyncSessio
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">Connecting you to a specialist now.</Say>
-  <Dial>
+  <Dial{dial_recording}>
     <Conference startConferenceOnEnter="true" endConferenceOnExit="true"
                 waitUrl="{escape(base)}/twiml-conference-hold" beep="false"
                 statusCallback="{escape(status_callback)}"
                 statusCallbackEvent="start end join leave"
                 statusCallbackMethod="POST"
-                record="record-from-start"
-                recordingStatusCallback="{escape(recording_callback)}"
-                recordingStatusCallbackEvent="completed">{escape(conference_name)}</Conference>
+                {conference_recording}>{escape(conference_name)}</Conference>
   </Dial>
 </Response>"""
     return Response(content=xml, media_type="application/xml")

@@ -138,7 +138,7 @@ export default function AppointmentDetails() {
         onCancel={() => setEditingPatient(null)} onSaved={async () => { await record.refetch(); setEditingPatient(null); }} />}
     </Modal>
     <AppointmentSummary appointment={appointment} />
-    <DetailCard icon={MessageSquare} title="Patient instructions"><p className="text-sm whitespace-pre-wrap">{appointment.instructions || 'No additional instructions.'}</p></DetailCard>
+    <DetailCard icon={MessageSquare} title="Voice agent context"><p className="text-sm text-muted mb-2">Appointment-specific information the voice agent can use and share with the patient.</p><p className="text-sm whitespace-pre-wrap">{appointment.instructions || 'No additional context provided.'}</p></DetailCard>
     {history.error && <p role="alert" className="text-danger">Could not load call history. <button className="underline" onClick={history.refetch}>Retry</button></p>}
     <CallHistory calls={calls} busy={busy} timezone={appointment.timezone} retryTranscript={callId => act(() => apiPost(`/appointments/calls/${callId}/transcribe`))} />
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -64,8 +64,9 @@ export default function AppointmentForm({ record, onSaved, onCancel }) {
           <option value="scheduled">Scheduled</option><option value="rescheduled">Rescheduled</option><option value="cancelled">Cancelled</option>
         </select>
       </label>
-      <label className="text-sm font-medium sm:col-span-2">Patient instructions the voice agent may share
-        <textarea rows={3} maxLength={5000} value={values.instructions} onChange={e => change('instructions', e.target.value)} className={inputClass} />
+      <label className="text-sm font-medium sm:col-span-2">Voice agent context
+        <textarea rows={3} maxLength={5000} aria-describedby="voice-agent-context-help" value={values.instructions} onChange={e => change('instructions', e.target.value)} className={inputClass} />
+        <span id="voice-agent-context-help" className="block mt-1 text-xs font-normal text-muted">Add appointment-specific information for the voice agent to use during the call, such as arrival instructions or documents to bring. The agent may share this with the patient. Save before starting the call.</span>
       </label>
       <label className="text-sm font-medium sm:col-span-2">Internal notes
         <textarea rows={2} maxLength={5000} value={values.notes} onChange={e => change('notes', e.target.value)} className={inputClass} />

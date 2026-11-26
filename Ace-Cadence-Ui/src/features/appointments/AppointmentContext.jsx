@@ -10,7 +10,7 @@ export default function AppointmentContext({ call }) {
     <p className="text-sm">Clinic timezone: {record.timezone}</p>
     <p className="text-sm">{record.provider_name} · {record.location}</p>
     <p className="text-sm">Mobile: {record.patient_phone}</p>
-    {record.instructions && <p className="text-sm whitespace-pre-wrap">{record.instructions}</p>}
+    {record.instructions && <p className="text-sm whitespace-pre-wrap"><strong>Voice agent context:</strong> {record.instructions}</p>}
     {call.handoffReason && <p className="text-sm"><strong>Patient needs help with:</strong> {call.handoffReason}</p>}
     {call.transcript && <details><summary className="cursor-pointer text-sm text-accent">Conversation so far</summary><p className="mt-2 text-sm whitespace-pre-wrap max-h-64 overflow-auto">{call.transcript}</p></details>}
     <Link to={`/appointments/${record.id}`} target="_blank" rel="noreferrer" className="inline-block text-sm text-accent underline">Open appointment in a new tab</Link>

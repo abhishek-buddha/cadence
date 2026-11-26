@@ -46,7 +46,7 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname), 'Use the 
   await page.getByLabel('Appointment date and time').fill('2027-01-20T14:30');
   await page.getByLabel('Clinic timezone').fill('America/New_York');
   await page.getByLabel('Location', { exact: true }).fill('Review location');
-  await page.getByLabel('Patient instructions').fill('Bring your existing paperwork.');
+  await page.getByLabel('Voice agent context').fill('Bring your existing paperwork.');
   await page.getByRole('button', { name: 'Save appointment', exact: true }).click();
   await page.getByText(appointmentType, { exact: true }).waitFor();
   await page.getByRole('row').filter({ hasText: appointmentType }).getByRole('link', { name: 'Review Patient' }).click();

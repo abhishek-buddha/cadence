@@ -54,7 +54,9 @@ export default function ClaimUserRoutingDrawer({ open, onClose }) {
                 </div>
                 {row.activeCall && (
                   <p className="mt-2 text-xs text-gray-600 truncate">
-                    {row.activeCall.insuranceCompany || 'Payer'} ? {row.activeCall.claimNumber || row.activeCall.status || 'active call'}
+                    {row.activeCall.use_case === 'appointment'
+                      ? `${row.activeCall.patientName || 'Patient'} · Appointment · ${label(row.activeCall.status)}`
+                      : `${row.activeCall.insuranceCompany || 'Payer'} · ${row.activeCall.claimNumber || label(row.activeCall.status) || 'active call'}`}
                   </p>
                 )}
               </div>

@@ -8,7 +8,7 @@ import StatusBadge from '../../components/StatusBadge';
 import EmptyState from '../../components/EmptyState';
 import AppointmentForm from './AppointmentForm';
 import { listAppointments } from './api';
-import { appointmentTime, callTime } from './format';
+import { appointmentTime, callTime, appointmentCallStatus } from './format';
 
 export default function AppointmentList() {
   const { data, loading, error, refetch } = useLiveQuery(listAppointments, [], 'appointment');
@@ -24,12 +24,12 @@ export default function AppointmentList() {
   const filtered = search || bookingStatus || callStatus;
   const rows = (data || []).filter(r =>
     (!bookingStatus || r.status === bookingStatus) &&
-    (!callStatus || (r.last_call_status || 'not_called') === callStatus) &&
+    (!callStatus || appointmentCallStatus(r) === callStatus) &&
     Object.values(r).some(v => (typeof v === 'string' || typeof v === 'number') && String(v).toLowerCase().includes(search.toLowerCase())));
   const columns = [
     { key: 'patient_name', label: 'Patient Name', render: r => <Link to={`/appointments/${r.id}`} className="text-accent font-medium hover:underline focus-visible:outline focus-visible:outline-accent">{r.patient_name}</Link> },
     { key: 'status', label: 'Appointment Status', render: r => <StatusBadge status={r.status} /> },
-    { key: 'last_call_status', label: 'Call Status', render: r => <StatusBadge status={r.last_call_status || 'not_called'} /> },
+    { key: 'last_call_status', label: 'Call Status', render: r => <StatusBadge status={appointmentCallStatus(r)} /> },
     { key: 'scheduled_at', label: 'Appointment Date/Time', render: r => <span title={r.timezone}>{appointmentTime(r)}</span> },
     { key: 'provider_name', label: 'Provider' },
     { key: 'location', label: 'Location' },
@@ -39,8 +39,6 @@ export default function AppointmentList() {
     { key: 'call_attempts', label: 'Call Attempts', align: 'center' },
     { key: 'last_attempt', label: 'Last Attempt', render: r => <span title={r.timezone}>{callTime(r.last_attempt, r.timezone)}</span> },
     { key: 'assigned_agent_name', label: 'Assigned To' },
-    { key: 'last_outcome', label: 'Call Outcome', render: r => r.last_outcome?.replaceAll('_', ' ') || (r.call_attempts ? 'No outcome recorded' : 'Not called') },
-    { key: 'callback_requested_at', label: 'Follow-up', render: r => r.callback_requested_at ? <StatusBadge status="callback_needed" /> : '—' },
   ];
   return <div className="h-full flex flex-col space-y-4 animate-fade-in">
     <ListToolbar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search patients, providers, or status" filters={<div className="flex items-center gap-3 flex-wrap">
@@ -53,6 +51,7 @@ export default function AppointmentList() {
         <option value="not_called">Not Called</option><option value="no_answer">No Answer</option>
         <option value="initiating">Initiating</option><option value="in_progress">In Progress</option>
         <option value="completed">Completed</option><option value="failed">Failed</option>
+        <option value="callback_needed">Callback Needed</option>
       </select>
       {filtered && <button className="text-xs text-white underline underline-offset-4 rounded focus-visible:outline focus-visible:outline-white" onClick={() => { setSearch(''); setBookingStatus(''); setCallStatus(''); }}>Clear filters</button>}
     </div>}>

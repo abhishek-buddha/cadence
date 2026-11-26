@@ -16,8 +16,8 @@ import PatientEditor from '../../components/PatientEditor';
 import AppointmentForm from './AppointmentForm';
 import AppointmentSummary from './AppointmentSummary';
 import useAppointmentPresence from './useAppointmentPresence';
-import { callTime } from './format';
-import { getAppointment, getCalls, callPatient, requestTakeover, completeCallback, setPresence } from './api';
+import { callTime, appointmentCallStatus } from './format';
+import { getAppointment, getCalls, callPatient, requestTakeover, setPresence } from './api';
 
 const actionClass = 'inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-accent';
 
@@ -123,7 +123,7 @@ export default function AppointmentDetails() {
           <button className={actionClass} disabled={busy || !!active || editing || !!editingPatient || history.loading || !!history.error} onClick={() => setEditing(true)}><Pencil size={16} />Edit appointment</button>
           <button className={`${actionClass} bg-accent text-white`} disabled={busy || editing || !!editingPatient || !!active || !!wrapUp || appointment.status === 'cancelled' || history.loading || !!history.error} onClick={() => act(() => callPatient(id))}><Phone size={16} />{busy ? 'Working…' : 'Call patient'}</button>
       </div>} />
-    <div className="flex items-center gap-2 text-sm text-muted"><span>Latest call</span><StatusBadge status={calls[0]?.status || 'not_called'} /></div>
+    <div className="flex items-center gap-2 text-sm text-muted"><span>Call status</span><StatusBadge status={appointmentCallStatus({ ...appointment, last_call_status: calls[0]?.status || appointment.last_call_status })} /></div>
     {(notice || softphone.error) && <p role="alert" className="text-danger text-sm">{notice || softphone.error}</p>}
     {active && <section className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-3"><h2 className="font-semibold">Patient call</h2>
@@ -139,7 +139,6 @@ export default function AppointmentDetails() {
     </Modal>
     <AppointmentSummary appointment={appointment} />
     <DetailCard icon={MessageSquare} title="Patient instructions"><p className="text-sm whitespace-pre-wrap">{appointment.instructions || 'No additional instructions.'}</p></DetailCard>
-    {appointment.callback_requested_at && <div className="rounded-xl border border-border p-4 bg-white space-y-2"><h2 className="font-semibold">Callback requested</h2><p className="text-sm">{appointment.callback_reason}</p><button disabled={busy} onClick={() => act(() => completeCallback(id))} className={actionClass}>Mark callback complete</button></div>}
     {history.error && <p role="alert" className="text-danger">Could not load call history. <button className="underline" onClick={history.refetch}>Retry</button></p>}
     <CallHistory calls={calls} busy={busy} timezone={appointment.timezone} retryTranscript={callId => act(() => apiPost(`/appointments/calls/${callId}/transcribe`))} />
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

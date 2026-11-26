@@ -150,15 +150,6 @@ async def update_appointment(appointment_id: int, body: dict, _=Depends(staff), 
     return await save(db, body, appointment_id)
 
 
-@router.post('/appointments/{appointment_id:int}/complete-callback')
-async def complete_callback(appointment_id: int, _=Depends(staff), db: AsyncSession = Depends(get_db)):
-    await appointment(db, appointment_id)
-    await db.execute(text('UPDATE appointments SET callback_requested_at=NULL, callback_reason=NULL WHERE id=:id'), {'id': appointment_id})
-    await db.commit()
-    await publish_invalidation('appointment', appointment_id)
-    return {'ok': True}
-
-
 @router.post('/appointments/operators/presence')
 async def presence(body: dict, user=Depends(staff), db: AsyncSession = Depends(get_db)):
     key = 'appointmentOperator:' + str(user['user_id'])
@@ -434,7 +425,7 @@ async def tool(request: Request, body: dict, db: AsyncSession = Depends(get_db))
         result = await request_operator(db, call, str(args.get('reason') or 'Patient requested assistance')[:500], candidates)
     elif name == 'request_callback':
         reason = str(args.get('reason') or 'Patient requested a callback')[:500]
-        await db.execute(text('UPDATE appointments SET callback_requested_at=COALESCE(callback_requested_at,:now),callback_reason=:reason WHERE id=:id'), {'id': row['id'], 'now': now(), 'reason': reason})
+        await db.execute(text('UPDATE appointments SET callback_requested_at=:now,callback_reason=:reason WHERE id=:id'), {'id': row['id'], 'now': now(), 'reason': reason})
         await db.execute(text("UPDATE calls SET outcome='callback_needed' WHERE id=:id"), {'id': call['id']})
         result = {'status': 'callback_recorded', 'message': 'A callback request is saved. Do not promise a time.'}
     else:

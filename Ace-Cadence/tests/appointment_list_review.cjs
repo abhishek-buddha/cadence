@@ -24,19 +24,23 @@ assert(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname));
     const allIds = records.map(record => record.id);
     assert.equal(records.length, 10, 'Curated review fixtures must be loaded');
     assert.deepEqual((await page.getByRole('columnheader').allTextContents()).slice(0, 4), ['Patient Name', 'Appointment Status', 'Call Status', 'Appointment Date/Time']);
+    assert.equal(await page.getByRole('columnheader', { name: /^(Call Outcome|Follow-up)$/ }).count(), 0);
     const status = await page.getByRole('columnheader', { name: 'Call Status', exact: true }).boundingBox();
     assert(status.x + status.width < 900, 'Both status columns must be visible near the front');
     await page.getByText('2026-12-18 9:00 AM', { exact: true }).waitFor();
     await page.getByText('2026-11-26 9:14 AM', { exact: true }).waitFor();
     for (const [booking, call, search] of [
       ['scheduled', '', ''], ['rescheduled', '', ''], ['cancelled', '', ''],
-      ['', 'not_called', ''], ['', 'no_answer', ''], ['', 'completed', ''], ['', 'failed', ''],
+      ['', 'not_called', ''], ['', 'no_answer', ''], ['', 'completed', ''], ['', 'failed', ''], ['', 'callback_needed', ''],
       ['rescheduled', 'completed', ''], ['cancelled', 'no_answer', ''], ['scheduled', 'completed', 'Maria'],
     ]) {
       await page.getByLabel('Booking status', { exact: true }).selectOption(booking);
       await page.getByLabel('Call status', { exact: true }).selectOption(call);
       await page.getByRole('textbox', { name: 'Search patients, providers, or status' }).fill(search);
-      const expected = records.filter(r => (!booking || r.status === booking) && (!call || (r.last_call_status || 'not_called') === call) && (!search || r.patient_name.includes(search))).map(r => r.id);
+      const expected = records.filter(r => {
+        const displayStatus = ['initiating', 'ringing', 'in_progress'].includes(r.last_call_status) ? r.last_call_status : r.callback_requested_at ? 'callback_needed' : r.last_call_status || 'not_called';
+        return (!booking || r.status === booking) && (!call || displayStatus === call) && (!search || r.patient_name.includes(search));
+      }).map(r => r.id);
       await page.waitForFunction(count => document.querySelectorAll('tbody a').length === count, expected.length);
       assert.deepEqual(await ids(), expected);
       if (!expected.length) assert(await page.getByText('No matching appointments', { exact: true }).isVisible());

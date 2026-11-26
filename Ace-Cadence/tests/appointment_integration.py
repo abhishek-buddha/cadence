@@ -113,7 +113,7 @@ async def main():
         assert (await client.post('/appointment-voice/artifacts',json={**call_body,'transcript':'Agent: Hello\nPatient: Hello'},headers=bridge_headers)).status_code==200
         assert (await client.get(f'/calls/{cid}')).json()['status']=='in_progress', 'Ending AI stream must not end human call'
         assert (await client.post(f'/appointments/calls/{cid}/release')).status_code==200
-        assert (await client.post(f'/appointments/{aid}/complete-callback')).status_code==200
+        assert (await client.get(f'/appointments/{aid}')).json()['callback_requested_at'], 'Accepting a handoff without connecting must not clear the callback'
         path = f'/appointment-voice/status?callId={cid}&token=review-call-token'
         form = {'CallSid':'CA'+'0'*32,'CallStatus':'no-answer','CalledZip':'','ToZip':''}
         assert (await client.post(path,data=form)).status_code==403

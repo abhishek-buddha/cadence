@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
-import { appointmentTime, callTime, patientDate } from '../../Ace-Cadence-Ui/src/features/appointments/format.js';
+import { appointmentTime, callTime, patientDate, appointmentCallStatus } from '../../Ace-Cadence-Ui/src/features/appointments/format.js';
+
+assert.equal(appointmentCallStatus({}), 'not_called');
+assert.equal(appointmentCallStatus({ last_call_status: 'completed' }), 'completed');
+assert.equal(appointmentCallStatus({ last_call_status: 'completed', callback_requested_at: '2026-11-26T10:00:00' }), 'callback_needed');
+assert.equal(appointmentCallStatus({ last_call_status: 'no_answer', callback_requested_at: '2026-11-26T10:00:00' }), 'callback_needed');
+assert.equal(appointmentCallStatus({ last_call_status: 'in_progress', callback_requested_at: '2026-11-26T10:00:00' }), 'in_progress');
+assert.equal(appointmentCallStatus({ last_call_status: 'completed', last_outcome: 'callback_needed', callback_requested_at: null }), 'completed');
 
 assert.equal(patientDate('1971-09-18'), '1971-Sep-18');
 assert.equal(patientDate('2000-01-01'), '2000-Jan-01');

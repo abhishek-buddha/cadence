@@ -440,6 +440,20 @@ async def _close_call(
         # Only when we actually released a *live* handoff — on any other close
         # there is no operator leg to worry about.
         await _hangup_operator_leg(db, call_id)
+    # Appointment-only cleanup; a completed AI call does not fulfil a human callback.
+    use_case = (await db.execute(text('SELECT use_case FROM calls WHERE id=:id'), {'id': call_id})).scalar()
+    if use_case == 'appointment':
+        cleared = await db.execute(text('''UPDATE appointments a
+            JOIN appointment_calls ac ON ac.appointment_id=a.id
+            JOIN calls c ON c.id=ac.call_id
+            SET a.callback_requested_at=NULL,a.callback_reason=NULL
+            WHERE c.id=:id AND c.status='completed' AND c.completed_at IS NOT NULL
+            AND a.callback_requested_at IS NOT NULL
+            AND EXISTS (SELECT 1 FROM call_events e WHERE e.call_id=c.id
+                AND e.type='handoff_connected' AND e.timestamp>=a.callback_requested_at
+                AND e.timestamp<=c.completed_at)'''), {'id': call_id})
+        if cleared.rowcount:
+            await db.execute(text("INSERT INTO call_events(call_id,type,message,timestamp) VALUES (:id,'callback_completed','Callback cleared after a completed human conversation',:now)"), {'id': call_id, 'now': _now()})
     return call_id
 
 

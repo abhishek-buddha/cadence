@@ -52,13 +52,20 @@ only when visits remain and the booking date falls within its inclusive validity
 dates. Rescheduling recalculates this applicability without changing the approval.
 Older clients can omit these fields without erasing saved values.
 
-The reminder follows this order: greeting, named-patient confirmation, doctor and
+The reminder normally covers greeting, named-patient confirmation, doctor and
 appointment details, available estimate (the final amount may vary), applicable
 approval, arrival instructions, and "Is there anything you'd like to check before
 your appointment?" A plain yes leads to "What would you like to know?"; no leads
 to a warm goodbye. It does not proactively advertise rescheduling/cancellation.
+These sentences guide tone; the agent paraphrases, adapts to questions and
+interruptions, and avoids repeating answered questions. Stored facts and booking
+confirmation requirements remain mandatory regardless of conversational wording.
 Missing optional data is omitted, never invented; a question about missing data
 uses the existing human/callback flow. The greeting uses the clinic's local time.
+Use **Voice agent context** for additional factual answers, such as a recorded
+cost breakdown. The agent shares this on request, never calculates missing line
+items from a total, and routes unavailable or conflicting billing information to
+an operator with the patient's specific question as the handoff reason.
 
 Call history shows a **Call issue** explanation beside failed/no-answer attempts
 without needing to expand them. Appointment callbacks retain busy/cancelled/error

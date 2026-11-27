@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { appointmentTime } from './format';
+import AppointmentCoverage from './AppointmentCoverage';
 
 export default function AppointmentContext({ call }) {
   const record = call.appointment;
@@ -9,7 +10,9 @@ export default function AppointmentContext({ call }) {
     <p className="text-sm">{record.appointment_type} · {appointmentTime(record)}</p>
     <p className="text-sm">Clinic timezone: {record.timezone}</p>
     <p className="text-sm">{record.provider_name} · {record.location}</p>
+    {record.doctor_name && <p className="text-sm">Doctor: {record.doctor_name}</p>}
     <p className="text-sm">Mobile: {record.patient_phone}</p>
+    <AppointmentCoverage appointment={record} />
     {record.instructions && <p className="text-sm whitespace-pre-wrap"><strong>Voice agent context:</strong> {record.instructions}</p>}
     {call.handoffReason && <p className="text-sm"><strong>Patient needs help with:</strong> {call.handoffReason}</p>}
     {call.transcript && <details><summary className="cursor-pointer text-sm text-accent">Conversation so far</summary><p className="mt-2 text-sm whitespace-pre-wrap max-h-64 overflow-auto">{call.transcript}</p></details>}

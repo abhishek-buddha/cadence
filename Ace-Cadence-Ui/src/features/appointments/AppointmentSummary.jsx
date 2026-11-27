@@ -2,6 +2,7 @@ import { User, Shield, Stethoscope, CalendarCheck } from 'lucide-react';
 import DetailCard from '../../components/case/DetailCard';
 import InfoRow from '../../components/case/InfoRow';
 import { appointmentTime, patientDate } from './format';
+import AppointmentCoverage from './AppointmentCoverage';
 
 export default function AppointmentSummary({ appointment: a }) {
   const attendance = a.status === 'cancelled' ? 'Not applicable' : a.confirmed_at ? 'Confirmed by patient' : 'Not confirmed';
@@ -16,9 +17,11 @@ export default function AppointmentSummary({ appointment: a }) {
         <InfoRow label="Member ID" value={a.member_id} /><InfoRow label="Group Number" value={a.group_number} />
         <InfoRow label="Policy Number" value={a.policy_number} /><InfoRow label="Subscriber" value={a.subscriber_name} />
         <InfoRow label="Relationship" value={a.relationship} />
+        <AppointmentCoverage appointment={a} />
       </DetailCard>
       <DetailCard icon={Stethoscope} title="Provider & Location">
         <InfoRow label="Provider" value={a.provider_name} /><InfoRow label="Location" value={a.location} />
+        <InfoRow label="Doctor" value={a.doctor_name} />
         <InfoRow label="Appointment Type" value={a.appointment_type} /><InfoRow label="Clinic Phone" value={a.provider_phone} />
       </DetailCard>
       <DetailCard icon={CalendarCheck} title="Appointment Details">

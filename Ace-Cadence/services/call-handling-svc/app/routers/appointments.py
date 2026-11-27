@@ -16,7 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.audit import write_audit_event
 from common.db import get_db
 from common.serialize import row_to_dict, rows_to_dicts
-from ..appointment_rules import validate_appointment, reschedule_time, dob_matches, valid_twilio_signature
+from ..appointment_rules import (validate_appointment, validate_reminder_details, reminder_context,
+                                 REMINDER_FIELDS, reschedule_time, dob_matches, valid_twilio_signature,
+                                 call_failure_reason, twilio_failure_reason)
 from ..config import settings
 from ..invalidate import publish_invalidation
 from ..handoff_states import LIVE_HANDOFF_STATES
@@ -52,6 +54,7 @@ async def appointment(db, appointment_id, lock=False):
     row = row_to_dict((await db.execute(text(_SELECT + ' WHERE a.id=:id' + (' FOR UPDATE OF a' if lock else '')), {'id': appointment_id})).first())
     if row is None:
         raise HTTPException(404, 'Appointment not found')
+    row['reminder_context'] = reminder_context(row)
     return row
 
 
@@ -99,7 +102,7 @@ async def get_appointment(appointment_id: int, _=Depends(staff), db: AsyncSessio
 async def save(db, body, appointment_id=None):
     action = 'update' if appointment_id is not None else 'create'
     try:
-        values = validate_appointment(body)
+        values = validate_appointment({key: value for key, value in body.items() if key not in REMINDER_FIELDS})
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     # Match Master Data's patient-before-appointments lock order for phone sync.
@@ -115,6 +118,13 @@ async def save(db, body, appointment_id=None):
             WHERE ac.appointment_id=:id AND c.completed_at IS NULL AND c.status IN ('initiating','in_progress')'''), {'id': appointment_id})).first()
         if active:
             raise HTTPException(409, 'End the active call before changing appointment details')
+        try:
+            # Older clients omit these fields; validate the merged values without erasing them.
+            merged = {key: body.get(key, previous.get(key)) for key in REMINDER_FIELDS}
+            details = validate_reminder_details(merged)
+            values.update({key: details[key] for key in REMINDER_FIELDS if key in body})
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
         if datetime.fromisoformat(previous['scheduled_at']) != values['scheduled_at'] or previous['timezone'] != values['timezone']:
             values['original_scheduled_at'] = previous['original_scheduled_at'] or previous['scheduled_at']
             values['original_timezone'] = previous['original_timezone'] or previous['timezone']
@@ -127,6 +137,10 @@ async def save(db, body, appointment_id=None):
             values['confirmed_at'] = None
         await db.execute(text('UPDATE appointments SET ' + ', '.join(f'{k}=:{k}' for k in values) + ' WHERE id=:id'), {**values, 'id': appointment_id})
     else:
+        try:
+            values.update(validate_reminder_details(body))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
         result = await db.execute(text('INSERT INTO appointments (' + ','.join(values) + ') VALUES (' + ','.join(':'+k for k in values) + ')'), values)
         appointment_id = result.lastrowid
     if sync_phone:
@@ -202,6 +216,7 @@ async def history(appointment_id: int, _=Depends(staff), db: AsyncSession = Depe
     by_id = {call['id']: call for call in calls}
     for call in calls:
         call['booking_changes'] = []
+        call['failure_reason'] = call_failure_reason(call)
     for event in events:
         by_id[event['call_id']]['booking_changes'].append(event)
     return calls
@@ -237,7 +252,12 @@ async def dial(appointment_id: int, _=Depends(staff), db: AsyncSession = Depends
             _auth_header(settings.twilio_account_sid, settings.twilio_auth_token))
     except urllib.error.HTTPError as exc:
         if 400 <= exc.code < 500:
-            await db.execute(text("UPDATE calls SET status='failed',completed_at=:now,error_message=:error WHERE id=:id"), {'id': call_id, 'now': now(), 'error': f'Twilio rejected the call ({exc.code})'})
+            try:
+                rejection = json.loads(exc.read(8192))
+                reason = twilio_failure_reason(rejection.get('code'), 'failed', rejection.get('message'))
+            except (ValueError, AttributeError):
+                reason = f'The phone service rejected the call (HTTP {exc.code}). Ask an administrator to check the phone service settings.'
+            await db.execute(text("UPDATE calls SET status='failed',completed_at=:now,error_message=:error WHERE id=:id"), {'id': call_id, 'now': now(), 'error': reason})
             await db.commit()
             await publish_invalidation('call', call_id)
         raise HTTPException(502, 'Twilio could not place the call. Check call history and the mobile number.') from exc
@@ -290,6 +310,9 @@ async def status(request: Request, callId: int, token: str, db: AsyncSession = D
     await db.execute(text('UPDATE calls SET twilio_call_sid=:sid WHERE id=:id'), {'sid': sid, 'id': callId})
     value = form.get('CallStatus', [''])[0]
     if value in _FINAL_TWILIO_STATUSES:
+        reason = twilio_failure_reason(form.get('ErrorCode', [None])[0], value)
+        if reason:
+            await db.execute(text('UPDATE calls SET error_message=COALESCE(error_message,:reason) WHERE id=:id'), {'id': callId, 'reason': reason})
         await _close_call(db, call_id=callId, twilio_status_value=value, duration=form.get('CallDuration', [None])[0])
     elif value == 'in-progress':
         await db.execute(text("UPDATE calls SET status='in_progress' WHERE id=:id AND completed_at IS NULL"), {'id': callId})
@@ -306,9 +329,11 @@ async def metadata(request: Request, callId: int, token: str, db: AsyncSession =
     if call.get('handoff_state') in {'accepting', 'connected', 'handoff_ended'}:
         raise HTTPException(409, 'The operator has taken over; the voice agent must stop using tools')
     row = await appointment(db, call['appointment_id'])
+    hour = datetime.now(ZoneInfo(row['timezone'])).hour
+    greeting = 'Good morning' if 5 <= hour < 12 else 'Good afternoon' if 12 <= hour < 17 else 'Good evening'
     # Details are returned only by verify_patient; the model never sees the DOB.
     return {'agent_id': settings.appointment_agent_id,
-            'dynamic_variables': {'patient_name': row['patient_name'], 'practice_name': row['provider_name']}}
+            'dynamic_variables': {'patient_name': row['patient_name'], 'practice_name': row['provider_name'], 'greeting': greeting}}
 
 
 async def operator_candidates(db, user_id=None):
@@ -399,6 +424,7 @@ async def tool(request: Request, body: dict, db: AsyncSession = Depends(get_db))
             return {'verified': False, 'message': 'Do not disclose appointment details to a wrong recipient. Ask whether this is the intended patient; do not ask for date of birth.'}
         await db.execute(text('UPDATE appointment_calls SET identity_verified=TRUE WHERE call_id=:id'), {'id': call['id']})
         result = {'verified': True, 'patient_name': row['patient_name'], 'provider': row['provider_name'],
+                  **row['reminder_context'],
                   'scheduled_at': str(row['scheduled_at']), 'timezone': row['timezone'], 'location': row['location'],
                   'appointment_type': row['appointment_type'], 'instructions': row['instructions'], 'status': row['status'],
                   'current_clinic_time': datetime.now(ZoneInfo(row['timezone'])).isoformat(),
@@ -452,6 +478,7 @@ async def tool(request: Request, body: dict, db: AsyncSession = Depends(get_db))
                 scheduled_at=:scheduled, status='rescheduled', confirmed_at=:now WHERE id=:id'''),
                 {'id': row['id'], 'scheduled': scheduled, 'now': now()})
             result = {'status': 'rescheduled', 'scheduled_at': scheduled.isoformat(), 'timezone': row['timezone'],
+                      **reminder_context({**row, 'scheduled_at': scheduled, 'status': 'rescheduled'}),
                       'message': f"Changed from {row['scheduled_at']} to {scheduled.isoformat()} ({row['timezone']})."}
         else:
             await db.execute(text("UPDATE appointments SET status='cancelled',confirmed_at=NULL WHERE id=:id"), {'id': row['id']})
@@ -478,6 +505,13 @@ async def tool(request: Request, body: dict, db: AsyncSession = Depends(get_db))
 @router.post('/appointment-voice/artifacts')
 async def artifacts(request: Request, body: dict, db: AsyncSession = Depends(get_db)):
     call = await bridge_call(request, db, int(body.get('callId') or 0), str(body.get('token') or ''))
+    failure = {
+        'agent_unavailable': 'The voice agent could not start. Ask an administrator to check the ElevenLabs agent and connection.',
+        'agent_connection_failed': 'The connection to the voice agent was lost. Please try again once the voice service is available.',
+        'stream_start_failed': 'The appointment voice connection could not start. Ask an administrator to check the call bridge and voice service.',
+    }.get(str(body.get('failure_code') or ''))
+    if failure and call.get('handoff_state') not in {'accepting', 'connected', 'handoff_ended'}:
+        await db.execute(text('UPDATE calls SET error_message=COALESCE(error_message,:reason) WHERE id=:id'), {'id': call['id'], 'reason': failure})
     await db.execute(text('''UPDATE calls SET eleven_labs_conversation_id=COALESCE(eleven_labs_conversation_id,:cid),
         transcript=COALESCE(:transcript,transcript) WHERE id=:id'''),
         {'id': call['id'], 'cid': body.get('conversation_id'), 'transcript': body.get('transcript') or None})
@@ -500,6 +534,7 @@ async def enrich_handoff(db, calls):
     for call in calls:
         row = by_id.get(call['id'])
         if row:
+            row['reminder_context'] = reminder_context(row)
             call.update({k: row[k] for k in ('patient_first_name','patient_last_name','patient_dob','provider_name')})
             call['appointment'] = row
     return calls

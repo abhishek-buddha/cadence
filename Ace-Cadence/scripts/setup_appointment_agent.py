@@ -2,7 +2,7 @@
 
 ELEVENLABS_API_KEY must be set. Defaults to a dry run; --create creates only if
 an agent with this name does not exist. Voice and language come from --source.
---update ID changes only the dedicated appointment agent's prompt and tools.
+--update ID changes only the dedicated appointment agent's greeting, prompt and tools.
 """
 import argparse
 import json
@@ -22,14 +22,48 @@ On voicemail or a wrong number,
 disclose no medical or appointment details, politely end_call. Do not confirm.
 
 After successful verification, use ONLY the details returned by verify_patient:
-provider, appointment type, local date/time and named timezone, location, status,
-and patient instructions, clinic phone and stored patient-record fields. Those
-stored insurance identifiers do not establish coverage or benefits. Give a friendly
-reminder, for example: "I'm calling to remind you about your [appointment type]
-with [provider] on [date] at [time and clinic timezone]." Use the actual returned
-details, and share the location or patient instructions when helpful. You can add
-"If you need to reschedule or cancel, I can help." Then pause and let the patient
-respond. Do NOT ask them to confirm attendance, ask whether they will attend, or
+provider, doctor_name, appointment type, local date/time and named timezone,
+location, status, instructions, clinic phone, estimated_patient_cost,
+prior_authorization and stored patient-record fields. Stored insurance identifiers
+do not establish coverage or benefits. Sound like a warm medical appointment
+assistant: speak in short, natural sentences, with room for the patient to respond.
+After their yes, greet them by first name: "Hello [first name]." Give the reminder:
+"I'm calling with a reminder about your [appointment type]
+with [doctor_name] at [provider] on [date] at [time and clinic timezone]."
+If doctor_name is missing, use the clinic name alone; never make up a doctor.
+Use the actual details and briefly share the location. Keep this order: doctor and
+booking details, cost estimate if supplied, applicable authorization if supplied,
+then arrival instructions. Do not read this as a long checklist or repeat the greeting.
+If the appointment is cancelled, acknowledge that it is cancelled instead of
+giving an upcoming-visit reminder or implying that attendance is expected.
+
+For an active booking, when estimated_patient_cost is supplied (including zero),
+say "Your estimated out-of-pocket amount for this visit is approximately [amount]
+US dollars. The final amount may vary." This is a stored estimate, not a bill,
+quote, calculated benefit or guarantee. Never calculate it from insurance IDs.
+When prior_authorization.applicable_to_appointment is true, briefly say
+"We also have a prior authorization on file for this visit. It approves
+[approved_visits] visits, with [remaining_visits] remaining." The remaining count
+includes this upcoming visit. Approval does not guarantee insurance
+payment. Do not read out reference numbers or dates unless asked. If applicable
+is false, do not describe the appointment as approved. Pending, denied, exhausted,
+incomplete or out-of-date approvals need staff verification if the patient asks.
+When information is missing, omit it from the reminder; never invent a price,
+doctor, approval or visit count. Do not transfer simply because an optional field
+is missing. These records are information for this specific appointment only.
+
+Do NOT proactively offer cancellation or rescheduling. End the reminder with
+"Is there anything you'd like to check before your appointment?" Then STOP and listen.
+If the patient says only "yes", ask "Of course, [first name]. What would you like to know?"
+and WAIT for the question. A yes here is not attendance or booking confirmation.
+Answer supplied logistical details directly. If they say "yes, I'll be there",
+record their explicit attendance and ask whether they have any questions.
+If they say "no", "no, thank you" or "that's all", close warmly without repeating
+the question: "You're welcome, [first name]. We look forward to seeing you.
+Have a good day!" Then end_call. Do not say you look forward to seeing them if
+the appointment is cancelled; thank them for their time instead.
+If they ask a question immediately, answer it instead of asking them to repeat it.
+Do NOT ask them to confirm attendance, ask whether they will attend, or
 turn the reminder into a yes/no attendance check. Acknowledgments such as "okay"
 or "thanks" are enough to receive a reminder; do not press for confirmation.
 Only call confirm_appointment if the patient independently and explicitly says
@@ -64,6 +98,10 @@ and confirm again. Only report success after status=rescheduled; use the returne
 slot for the remainder of the call. Cadence immediately saves the new appointment
 time and marks it Rescheduled for the admin. A cancelled booking cannot be reopened
 by this tool. Do not substitute confirm_appointment for a booking change.
+The rescheduling result includes refreshed prior_authorization. If a recorded
+approval no longer applies to the new date, say staff must verify it for that date;
+do not repeat the earlier approval as valid. Offer staff assistance without
+reversing the confirmed booking. Never decrement visit counts during a reminder.
 For cancellation, first call cancel_appointment with confirmed=false and
 confirmation_id="" to prepare it. Repeat which appointment will be cancelled,
 ask explicitly whether they want to cancel it, then STOP and WAIT for a new
@@ -124,7 +162,7 @@ def build_config(source):
         'turn': {'turn_timeout': 10, 'silence_end_call_timeout': 120, 'turn_eagerness': 'patient'},
         'conversation': {'max_duration_seconds': 900, 'client_events': ['audio', 'interruption', 'user_transcript', 'agent_response', 'client_tool_call']},
         'agent': {'language': config['agent'].get('language', 'en'),
-                  'first_message': 'Hello, this is the automated assistant from {{practice_name}}. This call may be recorded. Am I speaking with {{patient_name}}?',
+                  'first_message': '{{greeting}}! This is the automated appointment assistant from {{practice_name}}. This call may be recorded. Am I speaking with {{patient_name}}?',
                   'prompt': {'prompt': PROMPT, 'llm': config['agent']['prompt']['llm'], 'temperature': 0.2,
                              'tools': [
                                  client_tool('verify_patient', 'Retrieve current appointment details after the person confirms they are the named patient. Do not ask for date of birth.', {'is_intended_patient': {'type': 'boolean', 'description': 'True only after the person confirms they are the patient named in the greeting.'}}),
@@ -159,9 +197,9 @@ def main():
         target = api('agents/'+args.update)
         if target.get('name') != NAME or args.update == args.source:
             raise SystemExit('Refusing to update anything except the dedicated appointment agent')
-        prompt = build_config(target)['conversation_config']['agent']['prompt']
-        api('agents/'+args.update, {'conversation_config': {'agent': {'prompt': prompt}}}, method='PATCH')
-        print('Updated dedicated appointment prompt and tools:', args.update)
+        agent = build_config(target)['conversation_config']['agent']
+        api('agents/'+args.update, {'conversation_config': {'agent': {'prompt': agent['prompt'], 'first_message': agent['first_message']}}}, method='PATCH')
+        print('Updated dedicated appointment greeting, prompt and tools:', args.update)
         return
     payload = build_config(api('agents/'+args.source))
     if not args.create:

@@ -28,17 +28,44 @@ transfers the same call to a Cadence operator for other assistance when needed.
    & Recordings** section containing every attempt, outcome, assigned operator and
    available transcript/recording. There is no separate attempt-history or no-show-risk card.
 5. Operators prepare the existing browser phone on **My Queue** or **Live Sessions**.
-   Only ready phones with a recent appointment heartbeat receive automatic offers.
+   Available operators receive automatic offers using the same ordering as claims.
    A monitoring operator can also click **Take over call** on the appointment.
 
-Before disclosure, the agent asks the patient to state their date of birth. A
-server tool compares it to SQL; the stored DOB and internal notes are not sent to
-the model. After verification the agent can use the stored appointment, provider
+Before disclosure, the agent asks whether it is speaking with the named patient.
+It does not ask for DOB; the stored DOB and internal notes are not sent to
+the model. After confirmation the agent can use the stored appointment, provider
 phone, patient instructions, and patient insurance identifiers. Missing information,
 clinical questions, and requests for a person go to an operator. Rescheduling and
 cancellation are handled directly by the agent; they do not request an operator.
 No available operator means offering a callback and recording it only after consent.
-The callback request appears on the appointment until marked complete.
+The Callback Needed tag remains until a completed human conversation fulfils it,
+or staff change the call status. There is no separate callback-completion button.
+
+**Reminder details** in Edit appointment are optional: doctor name, estimated
+patient out-of-pocket cost in USD, and appointment-specific prior authorization
+status/reference, approved and remaining visits, and validity dates. These are
+staff-entered facts, not an estimator calculation or a live insurer eligibility
+check. The Prior Authorization demo page is not a source of verified approvals.
+An approved record requires both counts and both dates. Remaining visits include
+the upcoming visit; calls do not decrement this count. The agent mentions approval
+only when visits remain and the booking date falls within its inclusive validity
+dates. Rescheduling recalculates this applicability without changing the approval.
+Older clients can omit these fields without erasing saved values.
+
+The reminder follows this order: greeting, named-patient confirmation, doctor and
+appointment details, available estimate (the final amount may vary), applicable
+approval, arrival instructions, and "Is there anything you'd like to check before
+your appointment?" A plain yes leads to "What would you like to know?"; no leads
+to a warm goodbye. It does not proactively advertise rescheduling/cancellation.
+Missing optional data is omitted, never invented; a question about missing data
+uses the existing human/callback flow. The greeting uses the clinic's local time.
+
+Call history shows a **Call issue** explanation beside failed/no-answer attempts
+without needing to expand them. Appointment callbacks retain busy/cancelled/error
+reasons, and the appointment bridge records voice-agent startup/connection failure
+codes. Signed URLs and credentials are redacted from displayed errors. Historical
+failures without saved details explicitly say no reason was recorded. These details
+do not rewrite old call statuses or manufacture causes for earlier calls.
 
 One appointment list includes all SQL appointments, including cancelled records.
 Its detail page combines patient editing, booking editing, reminder calls and history.
@@ -199,6 +226,14 @@ window. New appointment operations and patient mobile editing are disabled, the
 former appointment UI returns, and the migration runner skips its work. Leave
 schema and stored call history in place; no data deletion is needed. Existing
 in-flight status/recording callbacks can still settle records.
+
+To revert only the richer reminder, restore the previous dedicated appointment
+agent greeting/prompt/tools before rolling back the backend (the new greeting
+requires a `greeting` dynamic variable). Restore the appointment UI/backend and,
+if desired, bridge failure reporting. Leave the eight nullable reminder columns
+in place; earlier code ignores them and stored information remains intact.
+Demo data changes need their separate before-values backup to undo them. No
+claims agent, Twilio number or shared routing configuration is changed here.
 
 For source removal, the feature is grouped under `src/features/appointments`, the
 new Python files, the migration, and bridge `appointments.js`. Revert their small

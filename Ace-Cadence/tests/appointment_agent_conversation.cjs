@@ -24,7 +24,7 @@ const auth = { Authorization: 'Bearer review-session' };
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => { ws.close(); reject(new Error('Agent timed out at step '+step)); }, 120000);
       function send(text) { patientTurn++; transcript.push('Patient: '+text); ws.send(JSON.stringify({ type: 'user_message', text })); }
-      ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'conversation_initiation_client_data', conversation_config_override: { conversation: { text_only: true } }, dynamic_variables: { patient_name: 'Review Patient', practice_name: 'Review Clinic' } })));
+      ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'conversation_initiation_client_data', conversation_config_override: { conversation: { text_only: true } }, dynamic_variables: { patient_name: 'Review Patient', practice_name: 'Review Clinic', greeting: 'Hello' } })));
       ws.addEventListener('error', reject);
       ws.addEventListener('message', async event => {
         try {
@@ -34,7 +34,7 @@ const auth = { Authorization: 'Bearer review-session' };
             const text = msg.agent_response_event.agent_response;
             transcript.push('Agent: '+text);
             console.log('Agent:', text);
-            if (step === 0) { step = 1; send('Yes, I am Review Patient. My date of birth is February third, nineteen eighty.'); }
+            if (step === 0) { step = 1; send('Yes, I am Review Patient.'); }
             else if (step === 2) { step = 3; send('Please reschedule to February twentieth, twenty twenty-seven, at three forty-five PM in the clinic timezone.'); }
             else if ([3,4].includes(step) && /\?/.test(text)) { assert(/confirm|correct|right|agree|shall|would|does/i.test(text), 'Agent must ask for slot confirmation'); step = 4; send('Yes, I confirm February twentieth, twenty twenty-seven, at three forty-five PM Eastern time. Please change it.'); }
             else if (step === 5 && /rescheduled|changed|updated/i.test(text)) { step = 6; send('I want to cancel my appointment.'); }

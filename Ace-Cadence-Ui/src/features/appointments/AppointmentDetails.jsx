@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Phone, Pencil, MessageSquare, ChevronDown, Mic, FileText } from 'lucide-react';
+import { Phone, Pencil, MessageSquare, ChevronDown, Mic, FileText, AlertCircle } from 'lucide-react';
 import { useLiveQuery } from '../../hooks/useLiveQuery';
 import { useSoftphone } from '../../hooks/useSoftphone';
 import { useAuth } from '../../context/AuthContext';
@@ -30,6 +30,7 @@ function CallHistory({ calls, retryTranscript, busy, timezone }) {
       <div aria-hidden="true" className={`absolute left-1 top-1.5 w-[14px] h-[14px] rounded-full border-2 ${call.status === 'completed' ? 'border-success bg-success/20' : call.status === 'failed' ? 'border-danger bg-danger/20' : 'border-accent bg-accent/20'}`} />
       <details className="group/entry bg-white border border-border rounded-lg overflow-hidden shadow-sm">
       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors focus-visible:outline focus-visible:outline-accent focus-visible:outline-offset-[-2px]">
+        <span className="min-w-0 space-y-2">
         <span className="flex items-center gap-3 flex-wrap">
           <span className="text-sm text-gray-900 font-medium">{callTime(call.started_at, timezone)}</span>
           <span className="text-xs text-muted font-data">Call #{call.id}</span>
@@ -37,11 +38,12 @@ function CallHistory({ calls, retryTranscript, busy, timezone }) {
           {call.outcome && <StatusBadge status={call.outcome} />}
           {call.assigned_agent_name && <span className="text-xs text-muted">Assigned to {call.assigned_agent_name}</span>}
         </span>
+        {call.failure_reason && <span className="flex items-start gap-2 text-sm text-danger"><AlertCircle aria-hidden="true" className="w-4 h-4 mt-0.5 shrink-0" /><span className="break-words"><strong>Call issue: </strong>{call.failure_reason}</span></span>}
+        </span>
         <ChevronDown aria-hidden="true" className="w-4 h-4 text-muted shrink-0 group-open/entry:rotate-180" />
       </summary>
       <div className="border-t border-border px-4 py-3 space-y-4">
         {!!call.booking_changes?.length && <div><h3 className="font-medium text-sm mb-2">Appointment changes</h3><ul className="list-disc pl-5 text-sm space-y-1">{call.booking_changes.map((change, i) => <li key={i}>{change.message}</li>)}</ul></div>}
-        {call.error_message && <p className="text-danger text-sm">{call.error_message}</p>}
         {call.eleven_labs_conversation_id && <div><p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5"><Mic className="w-3 h-3" />Voice agent recording</p><audio controls preload="none" className="h-9 w-full max-w-md" src={`/elevenlabs-recording-media?callId=${call.id}`} /></div>}
         {(call.human_recording_path || call.recording_path) && <div><p className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5"><Mic className="w-3 h-3" />Operator recording</p><audio controls preload="none" className="h-9 w-full max-w-md" src={`/twilio-recording-media?callId=${call.id}`} /></div>}
         <div><h3 className="text-xs text-muted uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5"><FileText className="w-3 h-3" />Voice agent transcript</h3><p className="text-xs text-gray-600 font-data whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed bg-surface rounded-lg p-3 border border-border">{call.transcript || 'No transcript is available yet.'}</p></div>
